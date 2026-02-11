@@ -45,7 +45,12 @@ Verification: `bun run test -- --run [per-story files]` → 605 passed, 0 failed
 
 ---
 
-## 2026-02-11: SSO + 计费集成 Phase 1 — 全部完成
-Implemented lurus-api SSO + billing integration. Added lurus-sso NextAuth provider, login redirect, OAuth callback page, `/api/lurus/*` proxy route, `useBilling()` + `useApiKeys()` hooks. Modified login page with SSO button + local login fallback. Created comprehensive test page (`/test/billing`) with visual UI, curl scripts, and DevTools test methods. JWT auto-refresh every 30min. Cookie-based SSO (Domain=.lurus.cn).
-Verification: `bun run typecheck → 0 errors` | Test page created with auto-test runner, React Query data display, API endpoint reference.
-Status: ✅ Phase 1 Complete (Task #1-9). ⏳ E2E testing pending (needs lurus-api). See `doc/billing-api-test-guide.md`, `doc/sso-test-summary.md`.
+## 2026-02-11: SSO + 计费集成 Phase 1 — Bug Fixes + Deploy
+Fixed 4 critical SSO issues discovered during manual testing:
+1. TENANT_SLUG `gushen`→`lurus` (lurus-api only has `lurus` tenant, gushen is a product not a tenant)
+2. Session endpoint `/api/v1/auth/session`→`/api/v2/auth/session-info` (old endpoint doesn't exist)
+3. Response parsing `data.user`→`data` (session-info returns flat structure, no nested user)
+4. OAuth redirect_url: relative `/dashboard`→full `https://gushen.lurus.cn/auth/callback?callbackUrl=/dashboard`
+Also: register page mock→SSO redirect, callback page added Suspense, Dockerfile added NEXT_PUBLIC_* build args, K8s deployment added SSO env vars + NEXTAUTH_SECRET secret.
+Verification: `bun run typecheck → 0 errors` | `bun run test → 1502 passed, 0 failed`
+Status: 🔧 Deployed to main, ⏳ waiting CI build + ArgoCD sync for E2E verification on gushen.lurus.cn.
