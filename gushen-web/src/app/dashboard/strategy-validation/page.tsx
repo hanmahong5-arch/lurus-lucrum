@@ -11,7 +11,7 @@
  * 增强版：包含请求取消和防重复提交功能
  */
 
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-card";
@@ -31,6 +31,8 @@ import {
   SignalDetails,
   SignalDetailItem,
 } from "@/components/strategy-validation";
+import { DataSourceBadge, mapDataSourceString } from "@/components/ui/data-source-badge";
+import { SimulatedDataBanner } from "@/components/ui/simulated-data-banner";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -49,6 +51,33 @@ interface ValidationResult {
   };
 }
 
+/** Multi-stock API response shape for a single stock result */
+interface MultiStockResult {
+  symbol: string;
+  name: string;
+  signalCount: number;
+  avgReturn: number;
+  winRate: number;
+  totalReturn: number;
+  signals: Array<{
+    date: string;
+    type: string;
+    price: number;
+    return: number;
+  }>;
+}
+
+// =============================================================================
+// HELPERS / 辅助函数
+// =============================================================================
+
+/**
+ * Check if any stock in validation used simulated data
+ */
+function hasSimulatedData(meta: ValidationResult["meta"]): boolean {
+  return mapDataSourceString(meta.dataSource) === "simulated";
+}
+
 // =============================================================================
 // COMPONENT / 组件
 // =============================================================================
@@ -63,6 +92,10 @@ export default function StrategyValidationPage() {
   const [isInitializing, setIsInitializing] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ValidationResult | null>(null);
+
+  // Stock selection state for filtering signal details
+  // 股票选择状态，用于过滤信号详情
+  const [selectedStock, setSelectedStock] = useState<string | null>(null);
 
   // AbortController ref for request cancellation
   // 用于请求取消的AbortController引用
@@ -135,8 +168,7 @@ export default function StrategyValidationPage() {
           setStrategies(FALLBACK_STRATEGIES);
           setSectors(FALLBACK_SECTORS);
         }
-      } catch (err) {
-        console.error("Failed to fetch options:", err);
+      } catch {
         setError("无法加载配置选项，使用默认数据");
         // Use fallback data
         setStrategies(FALLBACK_STRATEGIES);
@@ -185,6 +217,7 @@ export default function StrategyValidationPage() {
 
     setIsLoading(true);
     setError(null);
+    setSelectedStock(null); // Clear stock selection on new validation
 
     try {
       // Determine API endpoint based on selection mode
@@ -232,7 +265,7 @@ export default function StrategyValidationPage() {
         // 处理多股API的响应格式
         setResult({
           summary: data.summary,
-          stockRanking: data.stockResults.map((s: any) => ({
+          stockRanking: data.stockResults.map((s: MultiStockResult) => ({
             symbol: s.symbol,
             name: s.name,
             signalCount: s.signalCount,
@@ -240,8 +273,8 @@ export default function StrategyValidationPage() {
             winRate: s.winRate,
             totalReturn: s.totalReturn,
           })),
-          signalDetails: data.stockResults.flatMap((s: any) =>
-            s.signals.map((signal: any) => ({
+          signalDetails: data.stockResults.flatMap((s: MultiStockResult) =>
+            s.signals.map((signal) => ({
               symbol: s.symbol,
               name: s.name,
               date: signal.date,
@@ -265,14 +298,12 @@ export default function StrategyValidationPage() {
       // Ignore abort errors (user cancelled)
       // 忽略中止错误(用户取消)
       if (err instanceof Error && err.name === "AbortError") {
-        console.log("Request cancelled by user");
         return;
       }
 
       // Only show error if this is the latest request
       // 只有当这是最新请求时才显示错误
       if (requestId === lastRequestIdRef.current) {
-        console.error("Validation error:", err);
         setError(
           err instanceof Error ? err.message : "验证出错 / Validation error",
         );
@@ -310,6 +341,33 @@ export default function StrategyValidationPage() {
       }
     };
   }, []);
+
+  /**
+   * Handle stock selection from StockRanking
+   * 处理来自股票排行榜的股票选择
+   */
+  const handleStockClick = useCallback((symbol: string | null) => {
+    setSelectedStock(symbol);
+    // If a stock is selected, scroll to signal details section
+    if (symbol) {
+      setTimeout(() => {
+        document.getElementById("signal-details-section")?.scrollIntoView({
+          behavior: "smooth",
+          block: "start",
+        });
+      }, 100);
+    }
+  }, []);
+
+  /**
+   * Filtered signal details based on selected stock
+   * 根据选中的股票过滤信号详情
+   */
+  const filteredSignalDetails = useMemo(() => {
+    if (!result?.signalDetails) return [];
+    if (!selectedStock) return result.signalDetails;
+    return result.signalDetails.filter((signal) => signal.symbol === selectedStock);
+  }, [result?.signalDetails, selectedStock]);
 
   /**
    * Export results to JSON
@@ -407,6 +465,11 @@ export default function StrategyValidationPage() {
 
           {/* Right Column - Results */}
           <div className="lg:col-span-2 space-y-6">
+            {/* Simulated Data Warning Banner (AC-5) */}
+            {result?.meta && hasSimulatedData(result.meta) && (
+              <SimulatedDataBanner visible={true} />
+            )}
+
             {/* Result Summary */}
             <ResultSummary
               summary={result?.summary ?? null}
@@ -435,18 +498,26 @@ export default function StrategyValidationPage() {
             {result &&
               result.stockRanking &&
               result.stockRanking.length > 0 && (
-                <StockRanking data={result.stockRanking} />
+                <StockRanking
+                  data={result.stockRanking}
+                  strategyName={result.summary.strategyName}
+                  sectorName={result.summary.sectorName}
+                  onStockClick={handleStockClick}
+                  selectedStock={selectedStock}
+                />
               )}
 
             {/* Signal Details */}
             {result &&
               result.signalDetails &&
               result.signalDetails.length > 0 && (
-                <SignalDetails
-                  data={result.signalDetails}
-                  strategyName={result.summary.strategyName}
-                  sectorName={result.summary.sectorName}
-                />
+                <div id="signal-details-section">
+                  <SignalDetails
+                    data={filteredSignalDetails}
+                    strategyName={result.summary.strategyName}
+                    sectorName={result.summary.sectorName}
+                  />
+                </div>
               )}
 
             {/* Export Button */}
@@ -482,10 +553,14 @@ export default function StrategyValidationPage() {
 
         {/* Execution Info */}
         {result?.meta && (
-          <div className="mt-4 text-center">
+          <div className="mt-4 flex items-center justify-center gap-2">
             <p className="text-xs text-white/30">
               执行时间: {(result.meta.executionTime / 1000).toFixed(2)}s |
-              数据源: {result.meta.dataSource} | 时间戳:{" "}
+              数据源:
+            </p>
+            <DataSourceBadge type={mapDataSourceString(result.meta.dataSource)} />
+            <p className="text-xs text-white/30">
+              | 时间戳:{" "}
               {new Date(result.meta.timestamp).toLocaleString("zh-CN")}
             </p>
           </div>

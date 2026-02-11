@@ -129,7 +129,7 @@ export async function POST(request: NextRequest) {
     let dataFetchAttempts: string[] = [];
 
     // Only fetch real data if symbol is provided and not mock mode
-    if (config.symbol && config.symbol !== "mock") {
+    if (config.symbol && config.symbol !== "mock" && config.symbol !== "") {
       // ====================================================================
       // Priority 1: Try PostgreSQL Database First (数据库优先)
       // ====================================================================

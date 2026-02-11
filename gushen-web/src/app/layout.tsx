@@ -3,6 +3,8 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { ErrorBoundary } from "@/components/error-boundary";
+import { ToastSystem } from "@/components/feedback/toast-system";
+import { StatusBar } from "@/components/layout/status-bar";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -46,13 +48,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="zh" className={`${inter.variable} ${jetbrainsMono.variable}`}>
-      <body className="antialiased bg-background text-foreground">
+      <body className="antialiased bg-background text-foreground md:pb-7">
         <AuthSessionProvider>
           {/* ErrorBoundary component handles logging internally */}
           {/* ErrorBoundary 组件内部处理日志记录 */}
           <ErrorBoundary componentName="App">
             {children}
           </ErrorBoundary>
+          {/* Toast notification system (Story 1.2) */}
+          <ToastSystem />
+          {/* Bottom status bar (Story 1.3) */}
+          <StatusBar />
         </AuthSessionProvider>
       </body>
     </html>

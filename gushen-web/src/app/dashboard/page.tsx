@@ -11,6 +11,7 @@ import { AutoSaveIndicator } from "@/components/strategy-editor/auto-save-indica
 import { DraftHistoryPanel } from "@/components/strategy-editor/draft-history-panel";
 import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-card";
 import { AIStrategyAssistant } from "@/components/strategy-editor/ai-strategy-assistant";
+import { StrategyLogicSummary } from "@/components/strategy-editor/strategy-logic-summary";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
 import { useUserWorkspace } from "@/hooks/use-user-workspace";
@@ -77,8 +78,13 @@ export default function DashboardPage() {
     }));
   }, [generatedCode]);
 
+  // Extract strategy logic summary from user input (MVP: frontend parsing)
+  const logicSummary = useMemo(() => {
+    if (!generatedCode || !strategyInput) return null;
+    return extractLogicSummary(strategyInput, generatedCode, currentParameters);
+  }, [generatedCode, strategyInput, currentParameters]);
+
   // Ref to StrategyInput for focusing after template selection
-  // 用于模板选择后聚焦到输入框
   const strategyInputRef = useRef<HTMLDivElement>(null);
 
   // Ref for backtest panel to trigger rerun
@@ -148,6 +154,53 @@ export default function DashboardPage() {
     };
   }, [hasUnsavedChanges, saveDraft]);
 
+  /**
+   * Persist strategy to database so it appears in validation page
+   * 将策略保存到数据库，使其在验证页面可见
+   */
+  const saveStrategyToDatabase = useCallback(async (
+    strategyName: string,
+    strategyCode: string,
+    description: string,
+    strategyType: string = 'ai_generated',
+  ) => {
+    try {
+      // Parse parameters from code for storage
+      const parseResult = parseStrategyParameters(strategyCode);
+      const parameters = parseResult.parameters.reduce((acc, p) => {
+        acc[p.name] = p.value;
+        return acc;
+      }, {} as Record<string, unknown>);
+
+      const response = await fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'strategy',
+          data: {
+            strategyName,
+            strategyCode,
+            description,
+            parameters,
+            strategyType,
+            isActive: true,
+          },
+        }),
+      });
+
+      if (response.ok) {
+        console.log('[Dashboard] Strategy saved to database successfully');
+      } else {
+        // Non-critical: log but don't block user flow
+        // Save to DB is best-effort; localStorage draft is the primary backup
+        console.warn('[Dashboard] Failed to save strategy to database:', response.status);
+      }
+    } catch (err) {
+      // Non-critical failure - strategy is still available in localStorage drafts
+      console.warn('[Dashboard] Error saving strategy to database:', err);
+    }
+  }, []);
+
   const handleGenerate = useCallback(async (prompt: string) => {
     setGenerating(true);
     updateGeneratedCode("");
@@ -187,6 +240,11 @@ export default function DashboardPage() {
         // ✨ Immediately save draft after code generation
         // 代码生成后立即保存草稿
         setTimeout(() => saveDraft(), 0);
+
+        // ✨ Also persist to database for cross-page access (validation page)
+        // 同时保存到数据库以便跨页面访问（验证页面）
+        const strategyName = extractStrategyName(prompt, data.code);
+        saveStrategyToDatabase(strategyName, data.code, prompt, 'ai_generated');
       } else {
         throw new Error("No code generated");
       }
@@ -200,10 +258,14 @@ export default function DashboardPage() {
       // 如果 API 失败，使用模拟代码作为后备
       const fallbackCode = generateFallbackCode(prompt);
       updateGeneratedCode(fallbackCode);
+
+      // Also save fallback strategy to database
+      const strategyName = extractStrategyName(prompt, fallbackCode);
+      saveStrategyToDatabase(strategyName, fallbackCode, prompt, 'ai_generated');
     } finally {
       setGenerating(false);
     }
-  }, [updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft]);
+  }, [updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase]);
 
   // Handle template selection - fill into input
   // 处理模板选择 - 填充到输入框
@@ -361,8 +423,18 @@ export default function DashboardPage() {
             <DraftHistoryPanel />
           </div>
 
-          {/* Middle column - Code preview with collapse and line highlight */}
-          <div>
+          {/* Middle column - Logic summary + Code preview */}
+          <div className="space-y-4">
+            {/* Strategy Logic Summary - shows after code generation */}
+            {(generatedCode || isGenerating) && (
+              <StrategyLogicSummary
+                conditions={logicSummary?.conditions ?? { buy: "", sell: "", position: "" }}
+                confidence={logicSummary?.confidence ?? "medium"}
+                params={logicSummary?.params ?? {}}
+                code={generatedCode}
+                state={isGenerating ? "loading" : "default"}
+              />
+            )}
             <CodePreview
               code={generatedCode}
               isLoading={isGenerating}
@@ -455,6 +527,24 @@ export default function DashboardPage() {
       </main>
     </div>
   );
+}
+
+/**
+ * Extract a readable strategy name from user prompt and generated code
+ * 从用户提示词和生成代码中提取可读策略名称
+ */
+function extractStrategyName(prompt: string, code: string): string {
+  // Try to extract class name from code
+  const classMatch = code.match(/class\s+(\w+)\s*[\(:]/)
+  if (classMatch?.[1] && classMatch[1] !== 'AIStrategy') {
+    // Convert CamelCase to readable: "DualMovingAverageStrategy" -> "DualMovingAverage"
+    const name = classMatch[1].replace(/Strategy$/, '');
+    return name;
+  }
+
+  // Fall back to first 30 chars of prompt
+  const trimmed = prompt.trim().substring(0, 30);
+  return trimmed || 'AI策略';
 }
 
 /**
@@ -567,4 +657,57 @@ class AIStrategy(CtaTemplate):
 `;
 
   return code;
+}
+
+/**
+ * Extract strategy logic summary from user prompt and generated code (MVP: frontend parsing)
+ * Parses buy/sell conditions and parameters from user's natural language input.
+ */
+function extractLogicSummary(
+  prompt: string,
+  code: string,
+  params: Array<{ name: string; value: unknown }>,
+): {
+  conditions: { buy: string; sell: string; position: string };
+  confidence: "high" | "medium" | "low";
+  params: Record<string, string>;
+} {
+  // Extract buy/sell conditions from prompt using Chinese keyword patterns
+  const lines = prompt.split(/[，,。.；;\n]+/).map((s) => s.trim()).filter(Boolean);
+
+  let buy = "";
+  let sell = "";
+  let position = "";
+
+  for (const line of lines) {
+    const lower = line.toLowerCase();
+    if (!buy && (lower.includes("\u4E70\u5165") || lower.includes("\u505A\u591A") || lower.includes("\u91D1\u53C9") || lower.includes("buy"))) {
+      buy = line;
+    } else if (!sell && (lower.includes("\u5356\u51FA") || lower.includes("\u505A\u7A7A") || lower.includes("\u6B7B\u53C9") || lower.includes("sell") || lower.includes("\u6B62\u635F") || lower.includes("\u6B62\u76C8"))) {
+      sell = line;
+    } else if (!position && (lower.includes("\u4ED3\u4F4D") || lower.includes("\u8D44\u91D1") || lower.includes("position") || lower.includes("\u6BD4\u4F8B"))) {
+      position = line;
+    }
+  }
+
+  // Fallback: use the full prompt split into conditions
+  if (!buy && !sell) {
+    buy = prompt.length > 60 ? prompt.substring(0, 60) + "..." : prompt;
+    sell = "\u672A\u660E\u786E\u6307\u5B9A";
+    position = "\u9ED8\u8BA4\u4ED3\u4F4D\u7BA1\u7406";
+  }
+  if (!sell) sell = "\u672A\u660E\u786E\u6307\u5B9A";
+  if (!position) position = "\u9ED8\u8BA4\u4ED3\u4F4D\u7BA1\u7406";
+
+  // Build params map from parsed parameters
+  const paramMap: Record<string, string> = {};
+  for (const p of params) {
+    paramMap[p.name] = String(p.value);
+  }
+
+  return {
+    conditions: { buy, sell, position },
+    confidence: "medium" as const,
+    params: paramMap,
+  };
 }

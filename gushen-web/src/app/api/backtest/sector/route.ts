@@ -120,8 +120,10 @@ interface StockRankingEntry {
   signalCount: number;
   winRate: number;
   avgReturn: number;
+  totalReturn: number; // Cumulative return / 累计收益
   maxReturn: number;
   minReturn: number;
+  sharpeRatio: number; // Risk-adjusted return / 风险调整后收益
 }
 
 /**
@@ -385,6 +387,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Report partial failures - some stocks may have failed while others succeeded
+    if (klinesResult.statistics.failedCount > 0) {
+      warnings.push(
+        `${klinesResult.statistics.failedCount}/${klinesResult.statistics.totalSymbols} stocks failed to fetch data (tried EastMoney → Sina)`,
+      );
+    }
+
     // 3. Build scan options from request parameters
     const scanOptions: Partial<ScanOptions> = {
       holdingDays: holdingDays ?? 5,
@@ -514,20 +523,30 @@ export async function POST(request: NextRequest) {
         returns.length > 0 ? average(returns) - sectorIndexReturn : 0,
     };
 
-    // Build stock ranking
+    // Build stock ranking with per-stock Sharpe ratio
     const stockRanking: StockRankingEntry[] = stockResults
       .filter((r) => r.totalSignals > 0)
       .sort((a, b) => b.avgReturn - a.avgReturn)
-      .map((r, i) => ({
-        rank: i + 1,
-        symbol: r.symbol,
-        name: r.name,
-        signalCount: r.totalSignals,
-        winRate: r.winRate,
-        avgReturn: r.avgReturn,
-        maxReturn: r.maxReturn,
-        minReturn: r.minReturn,
-      }));
+      .map((r, i) => {
+        // Calculate per-stock Sharpe ratio
+        const stockReturns = r.signals.map((s) => s.returnPct);
+        const stockRiskMetrics = calculateRiskAdjustedReturns(stockReturns);
+        // Calculate total return (sum of all signal returns)
+        const stockTotalReturn = stockReturns.reduce((sum, ret) => sum + ret, 0);
+
+        return {
+          rank: i + 1,
+          symbol: r.symbol,
+          name: r.name,
+          signalCount: r.totalSignals,
+          winRate: r.winRate,
+          avgReturn: r.avgReturn,
+          totalReturn: stockTotalReturn,
+          maxReturn: r.maxReturn,
+          minReturn: r.minReturn,
+          sharpeRatio: stockRiskMetrics.sharpeRatio,
+        };
+      });
 
     // Build return distribution
     const returnDistribution = calculateReturnDistribution(returns).map(

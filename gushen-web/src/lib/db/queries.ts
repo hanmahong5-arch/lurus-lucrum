@@ -211,6 +211,31 @@ export async function getStocksInSector(
 // ============================================================================
 
 /**
+ * Get K-line date range for a stock (earliest and latest available dates)
+ * 获取股票可用K线数据的时间范围
+ */
+export async function getKLineDateRange(
+  symbol: string
+): Promise<{ minDate: string; maxDate: string; count: number } | null> {
+  const stock = await getStockBySymbol(symbol);
+  if (!stock) return null;
+
+  const result = await db
+    .select({
+      minDate: sql<string>`MIN(${klineDaily.date})`,
+      maxDate: sql<string>`MAX(${klineDaily.date})`,
+      count: sql<number>`COUNT(*)::int`,
+    })
+    .from(klineDaily)
+    .where(eq(klineDaily.stockId, stock.id));
+
+  const row = result[0];
+  if (!row || !row.minDate || !row.maxDate || row.count === 0) return null;
+
+  return { minDate: row.minDate, maxDate: row.maxDate, count: row.count };
+}
+
+/**
  * Get K-line data for a stock within date range
  * 获取股票在指定日期范围内的K线数据
  */

@@ -1,0 +1,181 @@
+# generated: 2026-02-04
+# project: lurus-gushen
+# project_key: NOKEY
+# tracking_system: file-system
+# story_location: _bmad-output/implementation-artifacts
+
+# STATUS DEFINITIONS:
+# ==================
+# Epic Status:
+#   - backlog: Epic not yet started
+#   - in-progress: Epic actively being worked on
+#   - done: All stories in epic completed
+#
+# Epic Status Transitions:
+#   - backlog -> in-progress: Automatically when first story is created (via create-story)
+#   - in-progress -> done: Manually when all stories reach 'done' status
+#
+# Story Status:
+#   - backlog: Story only exists in epic file
+#   - ready-for-dev: Story file created in stories folder
+#   - in-progress: Developer actively working on implementation
+#   - review: Implementation complete, ready for review
+#   - done: Story completed
+#
+# Retrospective Status:
+#   - optional: Can be completed but not required
+#   - done: Retrospective has been completed
+#
+# WORKFLOW NOTES:
+# ===============
+# - Epic transitions to 'in-progress' automatically when first story is created
+# - Stories can be worked in parallel if team capacity allows
+# - SM typically creates next story after previous one is 'done' to incorporate learnings
+# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
+#
+# SOURCE LEGEND:
+# ==============
+# - [P] = Primary story from epics.md
+# - [S] = Supplementary story (UX components, additional features)
+
+generated: 2026-02-04
+project: lurus-gushen
+project_key: NOKEY
+tracking_system: file-system
+story_location: _bmad-output/implementation-artifacts
+
+development_status:
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 1: 专业体验基石 (Professional Experience Foundation)
+  # 统一设计令牌、通知反馈、状态栏、空状态引导、工作流导航、金融数据格式化
+  # FRs: 横切基础设施
+  # NFRs: NFR-1.3 (FCP), NFR-2.2 (auto-save), NFR-4.4 (contrast)
+  # ══════════════════════════════════════════════════════════════════
+  epic-1: done
+  1-1-design-token-extension: done               # [P] 设计系统令牌扩展 (score/source/AI/step colors)
+  1-2-toast-notification-system: done            # [P] Toast 通知系统 (sonner, 4 variants)
+  1-3-status-bar: done                           # [P] 底部状态栏 (save/source/step/network)
+  1-4-empty-state-component: done                # [P] 空状态组件 (5 preset scenarios)
+  1-5-workflow-stepper: done                     # [P] 工作流步骤导航 (5 steps, responsive)
+  1-6-financial-data-adapter: done               # [P] 金融数据格式化适配器 (FinancialDisplayData)
+  epic-1-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 2: 可信回测体验 (Trustworthy Backtest Experience)
+  # 评分算法、评分卡、策略摘要、数据源标识、前置检查、进度显示、错误诊断
+  # FRs: FR-2.7
+  # NFRs: NFR-1.1 (backtest <3s), NFR-2.3 (graceful degradation), NFR-2.4 (error codes)
+  # ══════════════════════════════════════════════════════════════════
+  epic-2: in-progress
+  2-1-score-calculator: done                      # [P] 策略评分算法 (S/A/B/C/D, lib/backtest/)
+  2-2-score-card-component: done                   # [P] 策略评分卡组件 (full/compact/mini variants)
+  2-3-strategy-logic-summary: done                 # [P] 策略逻辑摘要组件 (white-language conditions)
+  2-4-data-source-badge-banner: done                 # [P] 数据源标识与模拟数据警告
+  2-5-pre-check-panel: done                        # [P] 回测前置条件检查面板
+  2-6-three-stage-progress: backlog              # [P] 三阶段回测进度
+  2-7-error-diagnosis-card: backlog              # [P] 错误诊断卡 (BT error codes)
+  2-8-real-stock-progressive-disclosure: in-progress  # [P] 真实选股与结果页渐进披露
+  epic-2-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 3: 策略来源与发现 (Strategy Source & Discovery)
+  # 内置模板库、发现页筛选、详情面板、分级入门体验
+  # FRs: FR-1.5
+  # NFRs: NFR-1.3 (FCP), NFR-2.3 (empty state fallback)
+  # ══════════════════════════════════════════════════════════════════
+  epic-3: backlog
+  3-1-builtin-template-library: backlog          # [P] 内置策略模板库 (≥5 templates)
+  3-2-discovery-page-filter: backlog             # [P] 策略发现页面与筛选 (GitHub crawler)
+  3-3-strategy-detail-panel: backlog             # [P] 策略详情面板与快速预览
+  3-4-tiered-onboarding-import: backlog          # [P] 策略导入与分级入门体验 (30s first backtest)
+  epic-3-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 4: 批量验证与专业报告 (Batch Validation & Professional Reports)
+  # 并行回测调研、并行实现、PDF导出、策略对比、回测历史
+  # FRs: FR-2.10, FR-3.6, FR-3.7
+  # NFRs: NFR-1.2 (batch <30s), NFR-1.4 (table render <100ms)
+  # ══════════════════════════════════════════════════════════════════
+  epic-4: backlog
+  4-1-parallel-backtest-spike: backlog           # [P] 并行回测方案 Spike (Web Worker vs NATS)
+  4-2-parallel-batch-backtest: backlog           # [P] 并行批量回测实现 (20 stocks <30s)
+  4-3-pdf-report-export: backlog                 # [P] PDF 报告导出 (ScoreCard + charts)
+  4-4-strategy-comparison-view: backlog          # [P] 策略对比视图 (side-by-side)
+  4-5-backtest-history-list: backlog             # [P] 回测历史列表 (recent 20)
+  epic-4-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 5: AI 副驾驶 (AI Co-pilot)
+  # AI视觉语言、智能问题推荐、一键应用建议、对话历史持久化
+  # FRs: FR-5.6
+  # NFRs: NFR-1.5 (AI response <10s)
+  # ══════════════════════════════════════════════════════════════════
+  epic-5: backlog
+  5-1-ai-visual-language-integration: backlog    # [P] AI 视觉语言与上下文集成 (ai-mark, sidebar)
+  5-2-smart-question-chips: backlog              # [P] 智能推荐问题 (3 context-based chips)
+  5-3-apply-suggestion-button: backlog           # [P] AI 建议一键应用 (params → strategy → re-run)
+  5-4-conversation-persistence-token: backlog    # [P] 对话历史持久化与 Token 管理
+  epic-5-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 6: 工作流效率与版本管理 (Workflow Efficiency & Versioning)
+  # 命令面板、双层Tooltip、缓存标识、版本管理
+  # FRs: FR-1.7
+  # NFRs: NFR-1.6 (cache hit <50ms), NFR-2.5 (workflow recovery)
+  # ══════════════════════════════════════════════════════════════════
+  epic-6: backlog
+  6-1-global-command-palette: backlog            # [P] 全局命令面板 (Cmd+K)
+  6-2-two-layer-tooltip: backlog                 # [P] 双层参数 Tooltip (layman + professional)
+  6-3-cache-badge-workflow-summary: backlog      # [P] 缓存标识与工作流完成报告
+  6-4-strategy-version-management: backlog       # [P] 策略版本管理 (auto-versioning, diff, restore)
+  epic-6-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # Epic 7: 平台成熟与无障碍 (Platform Maturity & Accessibility)
+  # 实时行情、E2E测试、WCAG审计、测试覆盖率
+  # FRs: FR-6.4, FR-6.5
+  # NFRs: NFR-2.1 (99.5% uptime), NFR-4.1-4.4 (WCAG AA), NFR-5.2-5.4 (test coverage)
+  # ══════════════════════════════════════════════════════════════════
+  epic-7: backlog
+  7-1-realtime-market-data: backlog              # [P] 实时行情数据集成 (Cron + incremental update)
+  7-2-e2e-critical-user-journeys: backlog        # [P] E2E 测试关键用户旅程 (Playwright, 4 viewports)
+  7-3-wcag-accessibility-audit: backlog          # [P] WCAG 2.1 AA 无障碍审计与修复
+  7-4-test-coverage-improvement: backlog         # [P] 数据层与组件测试覆盖率提升 (data≥60%, components≥50%)
+  epic-7-retrospective: optional
+
+  # ══════════════════════════════════════════════════════════════════
+  # LEGACY: Completed Features (from previous sprint-status)
+  # ══════════════════════════════════════════════════════════════════
+  # The following items were completed in earlier development phases
+  # and are preserved here for historical reference.
+  # They map to FR requirements but were structured differently.
+  # ══════════════════════════════════════════════════════════════════
+
+  # --- Epic 1 Legacy (Strategy Creation & Intelligent Backtesting) ---
+  legacy-1-1-nl-strategy-ai-generation: done     # FR-1.1, FR-1.2 — AI code gen from Chinese NL
+  legacy-1-2-code-editor-parameter-tuning: done  # FR-1.3, FR-1.4, FR-1.6 — syntax highlight + param editor
+  legacy-1-3-real-stock-target-selection: done     # FR-2.7 — stock search, DB>API>simulated fallback, pinyin, recent, badges
+  legacy-1-4-backtest-engine-financial-precision: done  # FR-2.1~2.6, 2.8~2.9, 2.11~2.12 — Decimal.js, 680+ tests
+  legacy-1-5-backtest-results-dashboard: done    # FR-3.1~3.5, 3.8~3.9 — metrics, equity curve, signals
+
+  # --- Epic 2 Legacy (Multi-Market Strategy Validation) ---
+  legacy-2-1-sector-custom-stock-selection: done # FR-4.1, 4.11~4.13 — sector + custom + AbortController
+  legacy-2-2-stock-ranking-virtual-scroll: done  # FR-4.2~4.4, 4.8, 4.14 — ranking + keyboard + Sharpe
+  legacy-2-3-signal-filtering-detail-view: done  # FR-4.5 — row click → signal filter
+  legacy-2-4-export-accessibility-mobile: done   # FR-4.6~4.7, 4.9~4.10, 4.15 — CSV/JSON + ARIA + mobile
+
+  # --- Epic 3 Legacy (AI-Powered Investment Advisory) ---
+  legacy-3-1-multi-agent-investment-schools: done  # FR-5.1~5.2 — 11 agents + 7 schools
+  legacy-3-2-debate-mode: done                   # FR-5.3 — bull vs bear debate + SSE
+
+  # --- Epic 4 Legacy (Guided Workflow & Workspace Management) ---
+  legacy-4-1-four-step-workflow-session: done    # FR-7.1~7.5, 7.7 — session + cache + hash matching
+  legacy-4-2-workspace-autosave-draft-recovery: done  # Zustand persist + temporal undo/redo
+
+  # --- Epic 5 Legacy (Strategy Discovery & Template Library) ---
+  legacy-5-1-github-crawler-popularity-scoring: done  # FR-8.1~8.2, 8.4~8.6 — crawler + scoring + API
+  legacy-5-2-strategy-format-conversion-import: done  # FR-8.3 — vnpy CtaTemplate converter
+
+  # --- Epic 6 Legacy (Data Pipeline & Market Intelligence) ---
+  legacy-6-1-stock-kline-data-import: done       # FR-6.1~6.3 — metadata + OHLCV + import scripts

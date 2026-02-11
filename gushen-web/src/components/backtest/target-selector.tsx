@@ -8,7 +8,7 @@
  * 支持三种模式：板块、个股和组合
  */
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import {
   Building2,
   LineChart,
@@ -87,6 +87,260 @@ interface StockSearchProps {
 interface PortfolioEditorProps {
   portfolio: PortfolioTarget;
   onChange: (portfolio: PortfolioTarget) => void;
+}
+
+// =============================================================================
+// CONSTANTS / 常量
+// =============================================================================
+
+const STOCK_SEARCH_API = "/api/stocks/search";
+const SEARCH_DEBOUNCE_MS = 300;
+const SEARCH_RESULT_LIMIT = 20;
+const SEARCH_MIN_QUERY_LENGTH = 1;
+
+// =============================================================================
+// STOCK SEARCH HOOK / 股票搜索 Hook
+// =============================================================================
+
+/**
+ * Map exchange name from API to market code used by backtest types.
+ */
+function mapExchangeToMarket(exchange: string, symbol: string): "SH" | "SZ" {
+  const upper = exchange.toUpperCase();
+  if (upper === "SH" || upper === "SSE") return "SH";
+  if (upper === "SZ" || upper === "SZSE") return "SZ";
+  // Beijing Stock Exchange (BJ/BSE, codes 8xx/4xx) not yet supported.
+  // Log warning and infer from symbol prefix as best-effort fallback.
+  console.warn(
+    `[target-selector] Unknown exchange "${exchange}" for symbol "${symbol}", inferring from symbol prefix`
+  );
+  return symbol.startsWith("6") ? "SH" : "SZ";
+}
+
+type MatchType = "exact" | "name" | "pinyin";
+
+interface EnhancedStockResult extends StockTarget {
+  matchType: MatchType;
+  matchIndices: number[];
+}
+
+interface StockSearchGroups {
+  exact: EnhancedStockResult[];
+  name: EnhancedStockResult[];
+  pinyin: EnhancedStockResult[];
+}
+
+interface StockSearchState {
+  results: EnhancedStockResult[];
+  groups: StockSearchGroups;
+  isSearching: boolean;
+  error: string | null;
+}
+
+/**
+ * Debounced stock search hook calling /api/stocks/search.
+ * Handles 300ms debounce, AbortController cancellation, pinyin matching, and result grouping.
+ */
+function useStockSearch(query: string): StockSearchState {
+  const emptyGroups: StockSearchGroups = { exact: [], name: [], pinyin: [] };
+  const [results, setResults] = useState<EnhancedStockResult[]>([]);
+  const [groups, setGroups] = useState<StockSearchGroups>(emptyGroups);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const abortRef = useRef<AbortController>();
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    if (!query || query.length < SEARCH_MIN_QUERY_LENGTH) {
+      setResults([]);
+      setGroups(emptyGroups);
+      setIsSearching(false);
+      setError(null);
+      return;
+    }
+
+    setIsSearching(true);
+    setError(null);
+
+    debounceRef.current = setTimeout(async () => {
+      if (abortRef.current) abortRef.current.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        const res = await fetch(
+          `${STOCK_SEARCH_API}?q=${encodeURIComponent(query)}&limit=${SEARCH_RESULT_LIMIT}&excludeST=false`,
+          { signal: controller.signal },
+        );
+        const data = await res.json();
+
+        if (data.success && data.results) {
+          const mapped: EnhancedStockResult[] = data.results.map(
+            (r: {
+              symbol: string;
+              name: string;
+              exchange: string;
+              matchType?: MatchType;
+              matchIndices?: number[];
+            }) => ({
+              symbol: r.symbol,
+              name: r.name,
+              market: mapExchangeToMarket(r.exchange, r.symbol),
+              matchType: r.matchType || "name",
+              matchIndices: r.matchIndices || [],
+            }),
+          );
+
+          // Group results by match type
+          const grouped: StockSearchGroups = { exact: [], name: [], pinyin: [] };
+          for (const item of mapped) {
+            grouped[item.matchType].push(item);
+          }
+
+          setResults(mapped);
+          setGroups(grouped);
+          setError(null);
+        } else {
+          setResults([]);
+          setGroups(emptyGroups);
+          setError(data.error || "搜索失败");
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") return;
+        setResults([]);
+        setGroups(emptyGroups);
+        setError("网络错误，请重试");
+      } finally {
+        if (!controller.signal.aborted) setIsSearching(false);
+      }
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query]);
+
+  // Cancel in-flight request on unmount
+  useEffect(() => {
+    return () => {
+      if (abortRef.current) abortRef.current.abort();
+    };
+  }, []);
+
+  return { results, groups, isSearching, error };
+}
+
+// =============================================================================
+// HIGHLIGHT COMPONENT / 高亮组件
+// =============================================================================
+
+/**
+ * Render text with matching characters highlighted
+ */
+function HighlightedText({
+  text,
+  matchIndices,
+  className,
+}: {
+  text: string;
+  matchIndices: number[];
+  className?: string;
+}) {
+  if (matchIndices.length === 0) {
+    return <span className={className}>{text}</span>;
+  }
+
+  const indexSet = new Set(matchIndices);
+  const parts: { text: string; highlighted: boolean }[] = [];
+  let current = "";
+  let currentHighlighted = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const isMatch = indexSet.has(i);
+    if (i === 0) {
+      currentHighlighted = isMatch;
+      current = text[i]!;
+    } else if (isMatch === currentHighlighted) {
+      current += text[i]!;
+    } else {
+      parts.push({ text: current, highlighted: currentHighlighted });
+      current = text[i]!;
+      currentHighlighted = isMatch;
+    }
+  }
+  if (current) {
+    parts.push({ text: current, highlighted: currentHighlighted });
+  }
+
+  return (
+    <span className={className}>
+      {parts.map((part, i) =>
+        part.highlighted ? (
+          <span key={i} className="text-primary font-semibold">
+            {part.text}
+          </span>
+        ) : (
+          <span key={i}>{part.text}</span>
+        ),
+      )}
+    </span>
+  );
+}
+
+// =============================================================================
+// RECENT STOCKS HOOK / 最近使用股票 Hook
+// =============================================================================
+
+const RECENT_STOCKS_KEY = "gushen:recent-stocks";
+const RECENT_STOCKS_MAX = 5;
+
+/**
+ * Hook for managing recently selected stocks with localStorage persistence.
+ * Stores up to 5 stocks, most recently used first.
+ */
+function useRecentStocks() {
+  const [recentStocks, setRecentStocks] = useState<StockTarget[]>([]);
+
+  // Load from localStorage on mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(RECENT_STOCKS_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored) as StockTarget[];
+        if (Array.isArray(parsed)) {
+          setRecentStocks(parsed.slice(0, RECENT_STOCKS_MAX));
+        }
+      }
+    } catch {
+      // Ignore parse errors
+    }
+  }, []);
+
+  // Add a stock to recent list (push to front, deduplicate)
+  const addRecent = useCallback((stock: StockTarget) => {
+    if (!stock.symbol) return;
+
+    setRecentStocks((prev) => {
+      const filtered = prev.filter((s) => s.symbol !== stock.symbol);
+      const updated = [
+        { symbol: stock.symbol, name: stock.name, market: stock.market },
+        ...filtered,
+      ].slice(0, RECENT_STOCKS_MAX);
+
+      try {
+        localStorage.setItem(RECENT_STOCKS_KEY, JSON.stringify(updated));
+      } catch {
+        // Ignore storage errors
+      }
+
+      return updated;
+    });
+  }, []);
+
+  return { recentStocks, addRecent };
 }
 
 // =============================================================================
@@ -345,11 +599,11 @@ interface StockModeProps {
 
 function StockMode({ value, onChange }: StockModeProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isSearching, setIsSearching] = useState(false);
-  const [searchResults, setSearchResults] = useState<StockTarget[]>([]);
   const [open, setOpen] = useState(false);
+  const { groups, isSearching, error: searchError, results: searchResults } = useStockSearch(searchQuery);
+  const { recentStocks, addRecent } = useRecentStocks();
 
-  // Common stocks for quick access
+  // Popular stocks for quick access
   const commonStocks: StockTarget[] = useMemo(
     () => [
       { symbol: "600519", name: "贵州茅台", market: "SH" },
@@ -364,38 +618,52 @@ function StockMode({ value, onChange }: StockModeProps) {
     [],
   );
 
-  // Search handler (simplified - in real app would call API)
-  const handleSearch = useCallback(
-    async (query: string) => {
-      if (!query || query.length < 2) {
-        setSearchResults([]);
-        return;
-      }
-
-      setIsSearching(true);
-      // In real implementation, call stock search API
-      // For now, filter common stocks as example
-      await new Promise((resolve) => setTimeout(resolve, 300));
-
-      const lowerQuery = query.toLowerCase();
-      const results = commonStocks.filter(
-        (s) =>
-          s.symbol.includes(query) || s.name.toLowerCase().includes(lowerQuery),
-      );
-      setSearchResults(results);
-      setIsSearching(false);
-    },
-    [commonStocks],
-  );
-
   const handleStockSelect = useCallback(
     (stock: StockTarget) => {
       onChange(stock);
+      addRecent(stock);
       setOpen(false);
       setSearchQuery("");
     },
-    [onChange],
+    [onChange, addRecent],
   );
+
+  /** Render a single search result item with match highlighting */
+  const renderResultItem = useCallback(
+    (stock: EnhancedStockResult) => {
+      // For exact (symbol) matches, highlight the symbol; for name/pinyin, highlight the name
+      const symbolHighlight = stock.matchType === "exact" ? stock.matchIndices : [];
+      const nameHighlight = stock.matchType !== "exact" ? stock.matchIndices : [];
+
+      return (
+        <CommandItem
+          key={stock.symbol}
+          onSelect={() => handleStockSelect(stock)}
+        >
+          <HighlightedText
+            text={stock.symbol}
+            matchIndices={symbolHighlight}
+            className="font-mono"
+          />
+          <HighlightedText
+            text={stock.name}
+            matchIndices={nameHighlight}
+            className="ml-2"
+          />
+          <Badge variant="outline" className="ml-auto">
+            {stock.market}
+          </Badge>
+        </CommandItem>
+      );
+    },
+    [handleStockSelect],
+  );
+
+  const GROUP_LABELS: Record<MatchType, string> = {
+    exact: "精确匹配",
+    name: "名称匹配",
+    pinyin: "拼音匹配",
+  };
 
   return (
     <div className="space-y-4">
@@ -414,21 +682,19 @@ function StockMode({ value, onChange }: StockModeProps) {
               </span>
             ) : (
               <span className="text-muted-foreground">
-                搜索股票代码或名称...
+                搜索股票代码、名称或拼音...
               </span>
             )}
             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
         <PopoverContent className="w-[400px] p-0" align="start">
-          <Command>
+          {/* Disable cmdk built-in filtering — results are API-controlled */}
+          <Command shouldFilter={false}>
             <CommandInput
-              placeholder="输入股票代码或名称..."
+              placeholder="输入代码、名称或拼音首字母..."
               value={searchQuery}
-              onValueChange={(val) => {
-                setSearchQuery(val);
-                handleSearch(val);
-              }}
+              onValueChange={setSearchQuery}
             />
             <CommandList>
               {isSearching ? (
@@ -439,42 +705,60 @@ function StockMode({ value, onChange }: StockModeProps) {
                   </span>
                 </div>
               ) : searchQuery && searchResults.length === 0 ? (
-                <CommandEmpty>未找到匹配的股票</CommandEmpty>
+                <CommandEmpty>{searchError || "未找到匹配的股票"}</CommandEmpty>
               ) : (
                 <>
-                  {searchResults.length > 0 && (
-                    <CommandGroup heading="搜索结果">
-                      {searchResults.map((stock) => (
-                        <CommandItem
-                          key={stock.symbol}
-                          onSelect={() => handleStockSelect(stock)}
-                        >
-                          <span className="font-mono">{stock.symbol}</span>
-                          <span className="ml-2">{stock.name}</span>
-                          <Badge variant="outline" className="ml-auto">
-                            {stock.market}
-                          </Badge>
-                        </CommandItem>
-                      ))}
-                    </CommandGroup>
+                  {/* Grouped search results */}
+                  {(["exact", "name", "pinyin"] as const).map((groupKey) => {
+                    const items = groups[groupKey];
+                    if (items.length === 0) return null;
+                    return (
+                      <CommandGroup key={groupKey} heading={GROUP_LABELS[groupKey]}>
+                        {items.map(renderResultItem)}
+                      </CommandGroup>
+                    );
+                  })}
+                  {/* Show recent + popular stocks when no search query */}
+                  {!searchQuery && (
+                    <>
+                      {recentStocks.length > 0 && (
+                        <CommandGroup heading="最近使用">
+                          {recentStocks.map((stock) => (
+                            <CommandItem
+                              key={`recent-${stock.symbol}`}
+                              onSelect={() => handleStockSelect(stock)}
+                            >
+                              <span className="font-mono">{stock.symbol}</span>
+                              <span className="ml-2">{stock.name}</span>
+                              <Badge variant="outline" className="ml-auto">
+                                {stock.market}
+                              </Badge>
+                              {value?.symbol === stock.symbol && (
+                                <Check className="ml-2 h-4 w-4" />
+                              )}
+                            </CommandItem>
+                          ))}
+                        </CommandGroup>
+                      )}
+                      <CommandGroup heading="热门股票">
+                        {commonStocks.map((stock) => (
+                          <CommandItem
+                            key={stock.symbol}
+                            onSelect={() => handleStockSelect(stock)}
+                          >
+                            <span className="font-mono">{stock.symbol}</span>
+                            <span className="ml-2">{stock.name}</span>
+                            <Badge variant="outline" className="ml-auto">
+                              {stock.market}
+                            </Badge>
+                            {value?.symbol === stock.symbol && (
+                              <Check className="ml-2 h-4 w-4" />
+                            )}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </>
                   )}
-                  <CommandGroup heading="热门股票">
-                    {commonStocks.map((stock) => (
-                      <CommandItem
-                        key={stock.symbol}
-                        onSelect={() => handleStockSelect(stock)}
-                      >
-                        <span className="font-mono">{stock.symbol}</span>
-                        <span className="ml-2">{stock.name}</span>
-                        <Badge variant="outline" className="ml-auto">
-                          {stock.market}
-                        </Badge>
-                        {value?.symbol === stock.symbol && (
-                          <Check className="ml-2 h-4 w-4" />
-                        )}
-                      </CommandItem>
-                    ))}
-                  </CommandGroup>
                 </>
               )}
             </CommandList>
@@ -514,7 +798,7 @@ function StockMode({ value, onChange }: StockModeProps) {
               variant={value?.symbol === stock.symbol ? "primary" : "outline"}
               size="sm"
               className="text-xs"
-              onClick={() => onChange(stock)}
+              onClick={() => handleStockSelect(stock)}
             >
               {stock.name}
             </Button>
@@ -537,9 +821,10 @@ interface PortfolioModeProps {
 function PortfolioMode({ value, onChange }: PortfolioModeProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [portfolioName, setPortfolioName] = useState(value?.name || "我的组合");
+  const { results: apiResults, isSearching, error: searchError } = useStockSearch(searchQuery);
 
-  // Common stocks for adding
-  const availableStocks: StockTarget[] = useMemo(
+  // Popular stocks for quick access when not searching
+  const popularStocks: StockTarget[] = useMemo(
     () => [
       { symbol: "600519", name: "贵州茅台", market: "SH" },
       { symbol: "000858", name: "五粮液", market: "SZ" },
@@ -586,14 +871,8 @@ function PortfolioMode({ value, onChange }: PortfolioModeProps) {
     [stocks, onChange],
   );
 
-  const filteredStocks = useMemo(() => {
-    if (!searchQuery) return availableStocks;
-    const query = searchQuery.toLowerCase();
-    return availableStocks.filter(
-      (s) =>
-        s.symbol.includes(searchQuery) || s.name.toLowerCase().includes(query),
-    );
-  }, [searchQuery, availableStocks]);
+  // Show API results when searching, popular stocks otherwise
+  const displayStocks = searchQuery ? apiResults : popularStocks;
 
   return (
     <div className="space-y-4">
@@ -647,34 +926,43 @@ function PortfolioMode({ value, onChange }: PortfolioModeProps) {
         <div className="relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="搜索股票..."
+            placeholder="搜索股票代码或名称..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 pr-9"
           />
+          {isSearching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
+          )}
         </div>
-        <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto">
-          {filteredStocks.map((stock) => {
-            const isAdded = stocks.some((s) => s.symbol === stock.symbol);
-            return (
-              <Button
-                key={stock.symbol}
-                variant={isAdded ? "secondary" : "outline"}
-                size="sm"
-                className="text-xs"
-                disabled={isAdded}
-                onClick={() => handleAddStock(stock)}
-              >
-                {isAdded ? (
-                  <Check className="h-3 w-3 mr-1" />
-                ) : (
-                  <Plus className="h-3 w-3 mr-1" />
-                )}
-                {stock.name}
-              </Button>
-            );
-          })}
-        </div>
+        {searchQuery && !isSearching && displayStocks.length === 0 ? (
+          <div className="text-sm text-muted-foreground text-center py-4">
+            {searchError || "未找到匹配的股票"}
+          </div>
+        ) : (
+          <div className="grid grid-cols-5 gap-2 max-h-40 overflow-y-auto">
+            {displayStocks.map((stock) => {
+              const isAdded = stocks.some((s) => s.symbol === stock.symbol);
+              return (
+                <Button
+                  key={stock.symbol}
+                  variant={isAdded ? "secondary" : "outline"}
+                  size="sm"
+                  className="text-xs"
+                  disabled={isAdded}
+                  onClick={() => handleAddStock(stock)}
+                >
+                  {isAdded ? (
+                    <Check className="h-3 w-3 mr-1" />
+                  ) : (
+                    <Plus className="h-3 w-3 mr-1" />
+                  )}
+                  {stock.name}
+                </Button>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

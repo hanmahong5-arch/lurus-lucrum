@@ -1,0 +1,138 @@
+# ============================================
+# AI-QTRD Web Frontend Deployment (STAGING)
+# Next.js Application for Gushen
+# Managed by ArgoCD for GitOps deployment
+#
+# Staging-specific changes from production:
+#   - Namespace: ai-qtrd-staging (isolated from prod)
+#   - Image tag: staging (not latest)
+#   - Node: master node (cloud-ubuntu-1-16c32g) for cost efficiency
+#   - Resources: halved requests/limits compared to production
+#   - Redis: db 3 on staging-namespaced service (separate from prod db 0)
+#   - API URL: points to staging API service
+#   - STAGING env flag: enabled
+#   - Probes: slightly longer initial delays for shared-node tolerance
+# ============================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-qtrd-web-staging
+  namespace: ai-qtrd-staging
+  labels:
+    app: ai-qtrd-web-staging
+    component: frontend
+    environment: staging
+    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/component: web
+    app.kubernetes.io/managed-by: argocd
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ai-qtrd-web-staging
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: ai-qtrd-web-staging
+        component: frontend
+        environment: staging
+    spec:
+      # Schedule on master node (cloud-ubuntu-1-16c32g) — has headroom for staging workloads
+      nodeSelector:
+        kubernetes.io/hostname: cloud-ubuntu-1-16c32g
+
+      containers:
+        - name: web
+          # Staging image tag — built from staging branch, not latest
+          image: ghcr.io/hanmahong5-arch/gushen-web:staging
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 3000
+              name: http
+
+          env:
+            - name: NODE_ENV
+              value: "production"
+            - name: PORT
+              value: "3000"
+            - name: HOSTNAME
+              value: "0.0.0.0"
+            # Staging flag for conditional behavior in application code
+            - name: STAGING
+              value: "true"
+
+            # API proxy configuration — points to staging API service
+            - name: API_URL
+              value: "http://ai-qtrd-api-staging:8000"
+
+            # Redis configuration — isolated db 3 on staging-namespaced Redis
+            - name: REDIS_ENABLED
+              value: "true"
+            - name: REDIS_HOST
+              value: "redis-service.ai-qtrd-staging.svc.cluster.local"
+            - name: REDIS_PORT
+              value: "6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ai-qtrd-staging-secrets
+                  key: REDIS_PASSWORD
+            - name: REDIS_DB
+              value: "3"
+
+          # Lower resource allocation — staging does not need production-level capacity
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi
+
+          # Liveness probe — slightly longer initialDelaySeconds (15s vs 10s prod)
+          # to account for shared master node resource contention
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 15
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 3
+
+          # Readiness probe — slightly longer initialDelaySeconds (10s vs 5s prod)
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+      restartPolicy: Always
+---
+# Web Service (ClusterIP for internal access) — staging variant
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-qtrd-web-staging
+  namespace: ai-qtrd-staging
+  labels:
+    app: ai-qtrd-web-staging
+    component: frontend
+    environment: staging
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 3000
+      targetPort: 3000
+      protocol: TCP
+  selector:
+    app: ai-qtrd-web-staging

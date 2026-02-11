@@ -18,6 +18,47 @@ import userEvent from '@testing-library/user-event';
 import { BacktestPanel } from '../backtest-panel';
 import type { BacktestResult, BacktestTrade, DetailedTrade } from '@/lib/backtest/types';
 
+// Mock TargetSelector to allow stock pre-selection via onChange callback
+let targetSelectorOnChange: ((target: any) => void) | null = null;
+vi.mock('@/components/backtest/target-selector', () => ({
+  TargetSelector: ({ onChange, value }: any) => {
+    targetSelectorOnChange = onChange;
+    return (
+      <div data-testid="target-selector">
+        <span>{value?.stock?.symbol || 'no-stock'}</span>
+        <button
+          data-testid="select-stock-btn"
+          onClick={() =>
+            onChange({
+              mode: 'stock',
+              stock: { symbol: '600519', name: '贵州茅台', market: 'SH' },
+            })
+          }
+        >
+          Select Stock
+        </button>
+      </div>
+    );
+  },
+}));
+
+// Mock DataSourceBadge and SimulatedDataBanner (no-op in tests)
+vi.mock('@/components/ui/data-source-badge', () => ({
+  DataSourceBadge: () => null,
+  mapDataSourceString: (provider: string) => provider === 'database' ? 'db' : 'api',
+}));
+vi.mock('@/components/ui/simulated-data-banner', () => ({
+  SimulatedDataBanner: () => null,
+}));
+
+// Mock Tooltip components (used for run button disabled tooltip)
+vi.mock('@/components/ui/tooltip', () => ({
+  TooltipProvider: ({ children }: any) => <>{children}</>,
+  Tooltip: ({ children }: any) => <>{children}</>,
+  TooltipTrigger: ({ children, asChild }: any) => <>{children}</>,
+  TooltipContent: ({ children }: any) => <span data-testid="tooltip-content">{children}</span>,
+}));
+
 // Mock fetch API
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -165,24 +206,79 @@ function createDetailedTrades(count: number): DetailedTrade[] {
 describe('BacktestPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetch.mockResolvedValue({
-      json: () => Promise.resolve({ success: true, data: createMockResult() }),
+    targetSelectorOnChange = null;
+    // Default mock handles both date-range and backtest API calls
+    mockFetch.mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/stocks/date-range')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              success: true,
+              data: {
+                symbol: '600519',
+                minDate: '2020-01-02',
+                maxDate: '2025-12-31',
+                dataPoints: 1450,
+              },
+            }),
+        });
+      }
+      // Default: backtest API response
+      return Promise.resolve({
+        json: () => Promise.resolve({ success: true, data: createMockResult() }),
+      });
     });
   });
+
+  /**
+   * Helper: select a stock via the mocked TargetSelector.
+   * Opens the config panel first (TargetSelector is only visible when config panel is open),
+   * then clicks the mock stock selection button.
+   * This sets effectiveSymbol to '600519' so the run button becomes enabled.
+   */
+  async function selectStock() {
+    // Open config panel to reveal TargetSelector
+    await userEvent.click(screen.getByText('设置'));
+    // Click the mock stock selection button
+    const selectBtn = screen.getByTestId('select-stock-btn');
+    await userEvent.click(selectBtn);
+    // Wait for the date-range fetch to complete
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/stocks/date-range'),
+      );
+    });
+  }
 
   // ===========================================================================
   // 1. Empty/Running/Error States
   // ===========================================================================
   describe('Component States', () => {
-    it('renders empty state when no result', () => {
+    it('renders empty state with stock prompt when no stock selected', () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      expect(screen.getByText('点击"运行回测"开始测试策略')).toBeInTheDocument();
+      // No stock selected → shows "请先选择回测标的"
+      expect(screen.getByText('请先选择回测标的')).toBeInTheDocument();
       expect(screen.getByText('运行回测')).toBeInTheDocument();
+    });
+
+    it('renders empty state with run prompt when stock is selected', async () => {
+      render(<BacktestPanel strategyCode="const strategy = {};" />);
+
+      await selectStock();
+
+      expect(screen.getByText('点击「运行回测」开始测试策略')).toBeInTheDocument();
     });
 
     it('disables run button when no strategy code', () => {
       render(<BacktestPanel strategyCode="" />);
+
+      const runButton = screen.getByText('运行回测');
+      expect(runButton.closest('button')).toBeDisabled();
+    });
+
+    it('disables run button when no stock selected', () => {
+      render(<BacktestPanel strategyCode="const strategy = {};" />);
 
       const runButton = screen.getByText('运行回测');
       expect(runButton.closest('button')).toBeDisabled();
@@ -193,16 +289,27 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" isRunning={true} />
       );
 
-      expect(screen.getByText('回测中...')).toBeInTheDocument();
+      expect(screen.getByText('运行中...')).toBeInTheDocument();
       expect(screen.getByText('正在运行回测...')).toBeInTheDocument();
     });
 
     it('shows error message when set', async () => {
-      mockFetch.mockResolvedValueOnce({
-        json: () => Promise.resolve({ success: false, error: 'Backtest failed' }),
-      });
-
       render(<BacktestPanel strategyCode="const strategy = {};" />);
+
+      // Must select a stock first so run button is enabled
+      await selectStock();
+
+      // Now override fetch for the backtest call
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/stocks/date-range')) {
+          return Promise.resolve({
+            json: () => Promise.resolve({ success: true, data: { minDate: '2020-01-02', maxDate: '2025-12-31', dataPoints: 1450 } }),
+          });
+        }
+        return Promise.resolve({
+          json: () => Promise.resolve({ success: false, error: 'Backtest failed' }),
+        });
+      });
 
       // Click run button
       await userEvent.click(screen.getByText('运行回测'));
@@ -250,7 +357,9 @@ describe('BacktestPanel', () => {
       );
 
       expect(screen.getByText('MACD Strategy')).toBeInTheDocument();
-      expect(screen.getByText('MACD + EMA')).toBeInTheDocument();
+      // Indicators rendered as individual badges
+      expect(screen.getByText('MACD')).toBeInTheDocument();
+      expect(screen.getByText('EMA')).toBeInTheDocument();
     });
 
     it('shows detailed stats when expanded', async () => {
@@ -261,9 +370,9 @@ describe('BacktestPanel', () => {
       );
 
       // Click details button
-      await userEvent.click(screen.getByText('详情'));
+      await userEvent.click(screen.getByText('查看详情'));
 
-      expect(screen.getByText('详细统计 / Detailed Stats')).toBeInTheDocument();
+      expect(screen.getByText('详细统计')).toBeInTheDocument();
       expect(screen.getByText('盈利因子')).toBeInTheDocument();
       expect(screen.getByText('1.65')).toBeInTheDocument();
     });
@@ -283,8 +392,8 @@ describe('BacktestPanel', () => {
       // Click trades button
       await userEvent.click(screen.getByText('交易记录'));
 
-      expect(screen.getByText('交易记录 / Trade History')).toBeInTheDocument();
-      expect(screen.getByText('共 2 笔交易（最近20笔）')).toBeInTheDocument();
+      expect(screen.getByText('Trade History')).toBeInTheDocument();
+      expect(screen.getByText('共 2 笔（最近20笔）')).toBeInTheDocument();
     });
 
     it('handles empty trades array', async () => {
@@ -294,7 +403,7 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      // Click trades button
+      // Click trades toggle button (use getByText since only one exists before expansion)
       await userEvent.click(screen.getByText('交易记录'));
 
       // Empty trades should show either empty message or not crash
@@ -312,11 +421,11 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      // Click trades button - should not crash
+      // Click trades toggle button - should not crash (only one exists before expansion)
       await userEvent.click(screen.getByText('交易记录'));
 
       // Should not show trades section when null
-      expect(screen.queryByText('交易记录 / Trade History')).not.toBeInTheDocument();
+      expect(screen.queryByText('Trade History')).not.toBeInTheDocument();
     });
 
     it('stress test: handles 100+ trades', async () => {
@@ -327,11 +436,11 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      // Click trades button
+      // Click trades toggle button (only one exists before expansion)
       await userEvent.click(screen.getByText('交易记录'));
 
       // Should show limited trades (last 20)
-      expect(screen.getByText('共 150 笔交易（最近20笔）')).toBeInTheDocument();
+      expect(screen.getByText('共 150 笔（最近20笔）')).toBeInTheDocument();
     });
 
     it('renders detailed trades with EnhancedTradeCard', async () => {
@@ -462,6 +571,9 @@ describe('BacktestPanel', () => {
         />
       );
 
+      // Must select a stock first so run button is enabled
+      await selectStock();
+
       await userEvent.click(screen.getByText('运行回测'));
 
       expect(onBacktestStart).toHaveBeenCalledTimes(1);
@@ -481,11 +593,14 @@ describe('BacktestPanel', () => {
         />
       );
 
+      // Must select a stock first so run button is enabled
+      await selectStock();
+
       await userEvent.click(screen.getByText('运行回测'));
 
       expect(onRunBacktest).toHaveBeenCalledWith(
         expect.objectContaining({
-          symbol: '模拟数据',
+          symbol: '',
           initialCapital: 100000,
           timeframe: '1d',
         })
@@ -500,16 +615,18 @@ describe('BacktestPanel', () => {
     it('shows config panel when settings clicked', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('⚙️ 设置'));
+      await userEvent.click(screen.getByText('设置'));
 
-      expect(screen.getByText('时间颗粒度 / Timeframe')).toBeInTheDocument();
-      expect(screen.getByText('初始资金 / Capital')).toBeInTheDocument();
+      expect(screen.getByText('时间颗粒度')).toBeInTheDocument();
+      expect(screen.getByText('Timeframe')).toBeInTheDocument();
+      expect(screen.getByText('初始资金')).toBeInTheDocument();
+      expect(screen.getByText('Capital')).toBeInTheDocument();
     });
 
     it('changes timeframe', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('⚙️ 设置'));
+      await userEvent.click(screen.getByText('设置'));
 
       const select = screen.getByRole('combobox');
       await userEvent.selectOptions(select, '1w');
@@ -520,7 +637,7 @@ describe('BacktestPanel', () => {
     it('updates initial capital', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('⚙️ 设置'));
+      await userEvent.click(screen.getByText('设置'));
 
       const capitalInput = screen.getByDisplayValue('100000');
       // Need to use tripleClick to select all before typing
@@ -533,12 +650,11 @@ describe('BacktestPanel', () => {
     it('sets preset period', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('⚙️ 设置'));
+      await userEvent.click(screen.getByText('设置'));
       await userEvent.click(screen.getByText('3个月'));
 
       // Component should handle preset period without crashing
-      // Date inputs may use type="date" which doesn't have textbox role
-      const settingsPanel = screen.getByText('时间颗粒度 / Timeframe');
+      const settingsPanel = screen.getByText('时间颗粒度');
       expect(settingsPanel).toBeInTheDocument();
     });
   });
@@ -558,7 +674,7 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      await userEvent.click(screen.getByText('导出'));
+      await userEvent.click(screen.getByText('导出报告'));
 
       expect(global.URL.createObjectURL).toHaveBeenCalled();
       expect(mockAppendChild).toHaveBeenCalled();
@@ -573,7 +689,7 @@ describe('BacktestPanel', () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
       // Export button should not be visible when no result
-      expect(screen.queryByText('导出')).not.toBeInTheDocument();
+      expect(screen.queryByText('导出报告')).not.toBeInTheDocument();
     });
   });
 
@@ -582,9 +698,20 @@ describe('BacktestPanel', () => {
   // ===========================================================================
   describe('API Error Handling', () => {
     it('handles network error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
-
       render(<BacktestPanel strategyCode="const strategy = {};" />);
+
+      // Must select a stock first so run button is enabled
+      await selectStock();
+
+      // Now override fetch: date-range still works, backtest call rejects
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/stocks/date-range')) {
+          return Promise.resolve({
+            json: () => Promise.resolve({ success: true, data: { minDate: '2020-01-02', maxDate: '2025-12-31', dataPoints: 1450 } }),
+          });
+        }
+        return Promise.reject(new Error('Network error'));
+      });
 
       await userEvent.click(screen.getByText('运行回测'));
 
@@ -594,17 +721,27 @@ describe('BacktestPanel', () => {
     });
 
     it('handles malformed API response', async () => {
-      mockFetch.mockResolvedValueOnce({
-        json: () => Promise.resolve(null),
-      });
-
       render(<BacktestPanel strategyCode="const strategy = {};" />);
+
+      // Must select a stock first so run button is enabled
+      await selectStock();
+
+      // Now override fetch: date-range still works, backtest returns null
+      mockFetch.mockImplementation((url: string) => {
+        if (typeof url === 'string' && url.includes('/api/stocks/date-range')) {
+          return Promise.resolve({
+            json: () => Promise.resolve({ success: true, data: { minDate: '2020-01-02', maxDate: '2025-12-31', dataPoints: 1450 } }),
+          });
+        }
+        return Promise.resolve({
+          json: () => Promise.resolve(null),
+        });
+      });
 
       await userEvent.click(screen.getByText('运行回测'));
 
       // Component should handle null response gracefully
       await waitFor(() => {
-        // May show error message or fail silently
         const body = document.body;
         expect(body).toBeInTheDocument();
       });

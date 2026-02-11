@@ -12,12 +12,19 @@
 
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { EnhancedTradeCard } from "./enhanced-trade-card";
 import { BacktestBasisPanel } from "./backtest-basis-panel";
-import type { BacktestResult, DetailedTrade } from "@/lib/backtest/types";
+import type { BacktestResult, DetailedTrade, BacktestTarget } from "@/lib/backtest/types";
+import { TargetSelector } from "@/components/backtest/target-selector";
+import { DataSourceBadge, mapDataSourceString, type DataSourceType } from "@/components/ui/data-source-badge";
+import { SimulatedDataBanner } from "@/components/ui/simulated-data-banner";
+import { ScoreCard } from "@/components/backtest/score-card";
+import { PreCheckPanel, usePreCheckConditions } from "@/components/backtest/pre-check-panel";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { calculateScore } from "@/lib/backtest/score";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -93,6 +100,17 @@ const PRESET_PERIODS = [
 // HELPER FUNCTIONS / 辅助函数
 // =============================================================================
 
+/**
+ * Map DataSourceInfo object to badge type.
+ * Uses shared mapDataSourceString for provider-level mapping,
+ * with type-level shortcuts for "real" and "simulated".
+ */
+function mapDataSourceType(info: DataSourceInfo): DataSourceType {
+  if (info.type === "real") return "db";
+  if (info.type === "simulated") return "simulated";
+  return mapDataSourceString(info.provider);
+}
+
 function getDefaultDates(days: number = 365): {
   startDate: string;
   endDate: string;
@@ -126,7 +144,7 @@ export function BacktestPanel({
   // Config state
   const defaultDates = getDefaultDates(365);
   const [config, setConfig] = useState<BacktestConfig>({
-    symbol: "模拟数据",
+    symbol: "",
     initialCapital: 100000,
     commission: 0.0003,
     slippage: 0.001,
@@ -134,6 +152,68 @@ export function BacktestPanel({
     endDate: defaultDates.endDate,
     timeframe: "1d",
   });
+
+  // Target selector state
+  const [backtestTarget, setBacktestTarget] = useState<BacktestTarget>({ mode: "stock" });
+
+  // Derive symbol from target selection
+  const effectiveSymbol = useMemo(() => {
+    if (backtestTarget.mode === "stock" && backtestTarget.stock?.symbol) {
+      return backtestTarget.stock.symbol;
+    }
+    if (backtestTarget.mode === "sector" && backtestTarget.sector?.code) {
+      return backtestTarget.sector.code;
+    }
+    return ""; // No default - user must select a stock
+  }, [backtestTarget]);
+
+  // Data range state (fetched from DB when stock is selected)
+  const [dateRange, setDateRange] = useState<{
+    minDate: string;
+    maxDate: string;
+    dataPoints: number;
+  } | null>(null);
+
+  // Fetch date range when stock selection changes
+  useEffect(() => {
+    if (!effectiveSymbol || backtestTarget.mode !== "stock") {
+      setDateRange(null);
+      return;
+    }
+
+    let cancelled = false;
+    const fetchRange = async () => {
+      try {
+        const res = await fetch(
+          `/api/stocks/date-range?symbol=${encodeURIComponent(effectiveSymbol)}`,
+        );
+        const data = await res.json();
+        if (!cancelled && data.success && data.data) {
+          setDateRange(data.data);
+          // Auto-constrain dates to available range
+          setConfig((prev) => ({
+            ...prev,
+            startDate:
+              prev.startDate < data.data.minDate
+                ? data.data.minDate
+                : prev.startDate,
+            endDate:
+              prev.endDate > data.data.maxDate
+                ? data.data.maxDate
+                : prev.endDate,
+          }));
+        } else if (!cancelled) {
+          setDateRange(null);
+        }
+      } catch {
+        if (!cancelled) setDateRange(null);
+      }
+    };
+    fetchRange();
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSymbol, backtestTarget.mode]);
 
   // UI state
   const [showConfig, setShowConfig] = useState(false);
@@ -146,6 +226,111 @@ export function BacktestPanel({
 
   const displayResult = externalResult ?? result;
   const running = externalIsRunning || isRunning;
+
+  // PreCheck: evaluate prerequisite conditions
+  const preCheckItems = usePreCheckConditions({
+    strategyCode,
+    symbol: effectiveSymbol,
+    startDate: config.startDate,
+    endDate: config.endDate,
+    initialCapital: config.initialCapital,
+  });
+  const hasBlocker = preCheckItems.some((item) => item.status === "block");
+  const allReady = preCheckItems.every((item) => item.status === "ready");
+
+  // Refs for focus-field navigation
+  const targetSelectorRef = useRef<HTMLDivElement>(null);
+  const dateRangeRef = useRef<HTMLDivElement>(null);
+  const capitalRef = useRef<HTMLInputElement>(null);
+
+  const handleFocusField = useCallback((field: string) => {
+    switch (field) {
+      case "strategy":
+        // Strategy input is in parent component; open config and scroll up
+        setShowConfig(true);
+        break;
+      case "target":
+        setShowConfig(true);
+        requestAnimationFrame(() => targetSelectorRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+        break;
+      case "dateRange":
+        setShowConfig(true);
+        requestAnimationFrame(() => dateRangeRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+        break;
+      case "capital":
+        setShowConfig(true);
+        requestAnimationFrame(() => capitalRef.current?.focus());
+        break;
+    }
+  }, []);
+
+  // ScoreCard: compute strategy score from backtest result
+  const scoreCardRef = useRef<HTMLDivElement>(null);
+  const strategyScore = useMemo(() => {
+    if (!displayResult) return null;
+    try {
+      // Map BacktestResult → BacktestSummary for calculateScore.
+      // Fields not available in BacktestResult are derived or zeroed.
+      // NOTE: volatility, calmarRatio, finalCapital etc. are not in
+      // BacktestResult — they only exist in BacktestSummary. When the
+      // backtest engine returns full summary data, this mapping should
+      // be updated to pass real values for more accurate scoring.
+      const winningTrades = Math.round(
+        displayResult.totalTrades * (displayResult.winRate / 100)
+      );
+      return calculateScore({
+        startDate: displayResult.config.startDate,
+        endDate: displayResult.config.endDate,
+        tradingDays: displayResult.backtestMeta?.timeRange?.tradingDays ?? 0,
+        executionTime: displayResult.executionTime,
+        initialCapital: displayResult.config.initialCapital,
+        finalCapital: 0, // Not in BacktestResult
+        peakCapital: 0, // Not in BacktestResult
+        troughCapital: 0, // Not in BacktestResult
+        totalReturn: displayResult.totalReturn,
+        annualizedReturn: displayResult.annualizedReturn,
+        monthlyReturn: 0, // Not in BacktestResult
+        dailyReturn: 0, // Not in BacktestResult
+        maxDrawdown: displayResult.maxDrawdown,
+        maxDrawdownDuration: 0, // Not in BacktestResult
+        volatility: 0, // Not in BacktestResult — impacts risk dimension scoring
+        sharpeRatio: displayResult.sharpeRatio,
+        sortinoRatio: displayResult.sortinoRatio,
+        calmarRatio: 0, // Not in BacktestResult
+        totalTrades: displayResult.totalTrades,
+        winningTrades,
+        losingTrades: displayResult.totalTrades - winningTrades,
+        winRate: displayResult.winRate,
+        profitFactor: displayResult.profitFactor,
+        avgWin: displayResult.avgWin,
+        avgLoss: displayResult.avgLoss,
+        avgWinLossRatio:
+          displayResult.avgLoss !== 0
+            ? displayResult.avgWin / displayResult.avgLoss
+            : 0,
+        maxConsecutiveWins: displayResult.maxConsecutiveWins,
+        maxConsecutiveLosses: displayResult.maxConsecutiveLosses,
+        avgHoldingPeriod: displayResult.avgHoldingPeriod,
+        maxSingleWin: displayResult.maxSingleWin,
+        maxSingleWinDate: "", // Not in BacktestResult
+        maxSingleLoss: displayResult.maxSingleLoss,
+        maxSingleLossDate: "", // Not in BacktestResult
+        totalCommission: 0, // Not in BacktestResult
+        totalSlippage: 0, // Not in BacktestResult
+        totalTradingCost: 0, // Not in BacktestResult
+        tradingCostPercent: 0, // Not in BacktestResult
+      });
+    } catch {
+      return null;
+    }
+  }, [displayResult]);
+
+  // Auto-focus ScoreCard when backtest completes
+  useEffect(() => {
+    if (strategyScore && scoreCardRef.current) {
+      scoreCardRef.current.focus();
+    }
+  }, [strategyScore]);
 
   /**
    * Set date range from preset
@@ -163,10 +348,8 @@ export function BacktestPanel({
    * Run backtest
    */
   const handleRunBacktest = useCallback(async () => {
-    if (!strategyCode) {
-      setError("请先生成策略代码 / Please generate strategy code first");
-      return;
-    }
+    // Guard: PreCheckPanel's hasBlocker disables the button, but defend against programmatic calls
+    if (hasBlocker) return;
 
     setIsRunning(true);
     setError(null);
@@ -184,7 +367,7 @@ export function BacktestPanel({
             strategyCode,
             config: {
               ...config,
-              symbol: config.symbol === "模拟数据" ? "mock" : config.symbol,
+              symbol: effectiveSymbol,
             },
           }),
         });
@@ -209,7 +392,7 @@ export function BacktestPanel({
       setIsRunning(false);
       onBacktestEnd?.();
     }
-  }, [strategyCode, config, onRunBacktest, onBacktestStart, onBacktestEnd]);
+  }, [hasBlocker, strategyCode, config, effectiveSymbol, onRunBacktest, onBacktestStart, onBacktestEnd]);
 
   /**
    * Export backtest report
@@ -298,34 +481,105 @@ export function BacktestPanel({
             </svg>
             设置
           </Button>
-          <button
-            onClick={handleRunBacktest}
-            disabled={running || !strategyCode}
-            className={cn(
-              "btn-primary px-4 py-1.5 text-sm font-medium rounded-lg flex items-center gap-2",
-              "disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-primary"
-            )}
-          >
-            {running ? (
-              <>
-                <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                <span className="font-mono">运行中...</span>
-              </>
-            ) : (
-              <>
-                <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                </svg>
-                运行回测
-              </>
-            )}
-          </button>
+          <TooltipProvider delayDuration={300}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  onClick={handleRunBacktest}
+                  disabled={running || hasBlocker}
+                  className={cn(
+                    "btn-primary px-4 py-1.5 text-sm font-medium rounded-lg flex items-center gap-2",
+                    "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary",
+                    allReady && !running && "glow-active"
+                  )}
+                >
+                  {running ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      <span className="font-mono">运行中...</span>
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                        <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                      </svg>
+                      运行回测
+                    </>
+                  )}
+                </button>
+              </TooltipTrigger>
+              {hasBlocker && (
+                <TooltipContent>
+                  <p>请先完成所有必要配置</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
         </div>
       </div>
+
+      {/* Simulated Data Warning Banner */}
+      <SimulatedDataBanner
+        visible={dataSourceInfo?.type === "simulated"}
+        onSwitchToReal={() => setShowConfig(true)}
+      />
+
+      {/* PreCheck Panel / 前置条件检查面板 */}
+      {!displayResult && (
+        <PreCheckPanel
+          items={preCheckItems}
+          onFocusField={handleFocusField}
+          className="mx-4 mt-3"
+        />
+      )}
 
       {/* Config Panel / 配置面板 */}
       {showConfig && (
         <div className="p-4 bg-void/50 border-b border-white/5 space-y-4">
+          {/* Target Selector / 标的选择 */}
+          <div ref={targetSelectorRef}>
+            <label className="block text-xs text-neutral-400 mb-2 font-medium">
+              回测标的
+              <span className="text-neutral-600 ml-1">Target</span>
+              {effectiveSymbol && (
+                <>
+                  <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-profit/20 text-profit rounded">
+                    {effectiveSymbol}
+                  </span>
+                  {dataSourceInfo && (
+                    <DataSourceBadge
+                      type={mapDataSourceType(dataSourceInfo)}
+                      detail={dataSourceInfo.reason}
+                      className="ml-1.5"
+                    />
+                  )}
+                </>
+              )}
+              {!effectiveSymbol && (
+                <span className="ml-2 px-1.5 py-0.5 text-[10px] bg-amber-500/20 text-amber-400 rounded">
+                  未选择
+                </span>
+              )}
+            </label>
+            <TargetSelector
+              value={backtestTarget}
+              onChange={setBacktestTarget}
+              className="bg-surface/50 rounded-lg border border-white/5 p-3"
+            />
+            {/* Data range display */}
+            {dateRange && (
+              <div className="mt-2 px-3 py-1.5 bg-source-db/10 rounded-md flex items-center gap-2 text-xs">
+                <span className="w-1.5 h-1.5 rounded-full bg-source-db shrink-0" />
+                <span className="text-source-db font-medium">
+                  数据范围: {dateRange.minDate} ~ {dateRange.maxDate}
+                </span>
+                <span className="text-neutral-500">
+                  ({dateRange.dataPoints.toLocaleString()} 条)
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-2 gap-4">
             {/* Timeframe / 时间颗粒度 */}
             <div>
@@ -364,6 +618,7 @@ export function BacktestPanel({
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">¥</span>
                 <input
+                  ref={capitalRef}
                   type="number"
                   value={config.initialCapital}
                   onChange={(e) =>
@@ -379,7 +634,7 @@ export function BacktestPanel({
           </div>
 
           {/* Date Range / 回测区间 */}
-          <div>
+          <div ref={dateRangeRef}>
             <label className="block text-xs text-neutral-400 mb-2 font-medium">
               回测区间
               <span className="text-neutral-600 ml-1">Date Range</span>
@@ -399,6 +654,8 @@ export function BacktestPanel({
               <input
                 type="date"
                 value={config.startDate}
+                min={dateRange?.minDate}
+                max={dateRange?.maxDate}
                 onChange={(e) =>
                   setConfig((prev) => ({ ...prev, startDate: e.target.value }))
                 }
@@ -407,6 +664,8 @@ export function BacktestPanel({
               <input
                 type="date"
                 value={config.endDate}
+                min={dateRange?.minDate}
+                max={dateRange?.maxDate}
                 onChange={(e) =>
                   setConfig((prev) => ({ ...prev, endDate: e.target.value }))
                 }
@@ -542,8 +801,24 @@ export function BacktestPanel({
               className="mb-4"
             />
 
+            {/* Strategy ScoreCard - Primary result display */}
+            {strategyScore && (
+              <ScoreCard
+                ref={scoreCardRef}
+                score={strategyScore}
+                variant="full"
+                onExpandDetails={() => {
+                  // Scroll to detailed metrics below
+                  const metricsGrid = document.querySelector("[data-metrics-grid]");
+                  metricsGrid?.scrollIntoView({ behavior: "smooth" });
+                }}
+                onExport={handleExport}
+                className="mb-4"
+              />
+            )}
+
             {/* Main Metrics Grid / 核心指标网格 */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3" data-metrics-grid>
               <MetricCard
                 label="总收益率"
                 labelEn="Total Return"
@@ -812,12 +1087,25 @@ export function BacktestPanel({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
               </svg>
             </div>
-            <p className="text-neutral-400 text-sm mb-1">
-              点击「运行回测」开始测试策略
-            </p>
-            <p className="text-neutral-600 text-xs">
-              Click Run Backtest to test your strategy
-            </p>
+            {!effectiveSymbol ? (
+              <>
+                <p className="text-amber-400 text-sm mb-1 font-medium">
+                  请先选择回测标的
+                </p>
+                <p className="text-neutral-600 text-xs">
+                  Please select a stock target before running backtest
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-neutral-400 text-sm mb-1">
+                  点击「运行回测」开始测试策略
+                </p>
+                <p className="text-neutral-600 text-xs">
+                  Click Run Backtest to test your strategy
+                </p>
+              </>
+            )}
           </div>
         )}
       </div>

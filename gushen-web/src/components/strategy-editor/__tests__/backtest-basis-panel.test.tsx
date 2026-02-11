@@ -172,8 +172,9 @@ describe('BacktestBasisPanel', () => {
 
       render(<BacktestBasisPanel result={result} />);
 
-      expect(screen.getByText('回测依据 | Backtest Basis')).toBeInTheDocument();
-      expect(screen.getByText('测试标的:')).toBeInTheDocument();
+      expect(screen.getByText('回测依据')).toBeInTheDocument();
+      expect(screen.getByText('Backtest Basis')).toBeInTheDocument();
+      expect(screen.getByText('测试标的')).toBeInTheDocument();
       expect(screen.getByText('600519')).toBeInTheDocument();
     });
 

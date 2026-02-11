@@ -1,0 +1,9 @@
+# Staging namespace for AI-QTRD (GuShen) application
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ai-qtrd-staging
+  labels:
+    app.kubernetes.io/name: ai-qtrd-staging
+    app.kubernetes.io/part-of: lurus
+    environment: staging

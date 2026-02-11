@@ -101,6 +101,53 @@ const config: Config = {
         // Legacy compatibility
         background: "#09090b",
         border: "#27272a",
+
+        // ============================================
+        // GUSHEN EXTENDED DESIGN TOKENS
+        // ============================================
+
+        // Score Colors - 策略评分色 (AC-1)
+        "score-s": "rgb(var(--gushen-color-score-s) / <alpha-value>)",
+        "score-a": "rgb(var(--gushen-color-score-a) / <alpha-value>)",
+        "score-b": "rgb(var(--gushen-color-score-b) / <alpha-value>)",
+        "score-c": "rgb(var(--gushen-color-score-c) / <alpha-value>)",
+        "score-d": "rgb(var(--gushen-color-score-d) / <alpha-value>)",
+
+        // Data Source Colors - 数据源标识色 (AC-2)
+        "source-db": "rgb(var(--gushen-color-source-db) / <alpha-value>)",
+        "source-api": "rgb(var(--gushen-color-source-api) / <alpha-value>)",
+        "source-sim": "rgb(var(--gushen-color-source-sim) / <alpha-value>)",
+
+        // Banner Colors - 横幅警告色
+        "banner-warn": "rgb(var(--gushen-color-banner-warn) / <alpha-value>)",
+
+        // AI Visual Language - AI 视觉语言令牌 (AC-3)
+        ai: "rgb(var(--gushen-color-ai) / <alpha-value>)",
+        "ai-bg": "rgb(var(--gushen-bg-ai) / 0.10)",
+        "ai-border": "rgb(var(--gushen-border-ai) / 0.20)",
+
+        // Workflow Step Colors - 工作流步骤色 (AC-4)
+        "step-active": "rgb(var(--gushen-color-step-active) / <alpha-value>)",
+        "step-done": "rgb(var(--gushen-color-step-done) / <alpha-value>)",
+        "step-pending": "rgb(var(--gushen-color-step-pending) / <alpha-value>)",
+
+        // Status Light Colors - 状态灯色 (AC-5)
+        "status-ready": "rgb(var(--gushen-color-status-ready) / <alpha-value>)",
+        "status-warn": "rgb(var(--gushen-color-status-warn) / <alpha-value>)",
+        "status-block": "rgb(var(--gushen-color-status-block) / <alpha-value>)",
+
+        // Chart Extension Colors - 图表扩展色 (AC-7)
+        "chart-benchmark": "rgb(var(--gushen-color-chart-benchmark) / <alpha-value>)",
+        "chart-signal": "rgb(var(--gushen-color-chart-signal) / <alpha-value>)",
+      },
+
+      // ============================================
+      // BACKGROUND COLORS EXTENSION (AC-6)
+      // ============================================
+      backgroundColor: {
+        // Surface Level Extension - 背景层级扩展
+        "surface-elevated": "rgb(var(--gushen-bg-surface-elevated) / <alpha-value>)",
+        "surface-modal": "rgb(var(--gushen-bg-surface-modal) / <alpha-value>)",
       },
 
       // ============================================
@@ -115,9 +162,9 @@ const config: Config = {
         data: ["JetBrains Mono", "Fira Code", "monospace"],
       },
       fontSize: {
-        // Data-specific sizes
+        // Data-specific sizes (AC-8: data-sm adjusted to 13px for better readability)
         "data-xs": ["0.6875rem", { lineHeight: "1rem", letterSpacing: "0.02em" }],
-        "data-sm": ["0.75rem", { lineHeight: "1.25rem", letterSpacing: "0.01em" }],
+        "data-sm": ["0.8125rem", { lineHeight: "1.25rem", letterSpacing: "0.01em" }], // 13px (was 12px)
         "data-base": ["0.875rem", { lineHeight: "1.5rem", letterSpacing: "0" }],
         "data-lg": ["1rem", { lineHeight: "1.75rem", letterSpacing: "-0.01em" }],
         "data-xl": ["1.25rem", { lineHeight: "2rem", letterSpacing: "-0.02em" }],
@@ -127,6 +174,8 @@ const config: Config = {
         "stat-md": ["2rem", { lineHeight: "1", letterSpacing: "-0.02em" }],
         "stat-lg": ["2.5rem", { lineHeight: "1", letterSpacing: "-0.03em" }],
         "stat-xl": ["3rem", { lineHeight: "1", letterSpacing: "-0.03em" }],
+        // Display - Large score/hero numbers (AC-8)
+        display: ["clamp(2rem, 5vw, 3rem)", { lineHeight: "1.1", fontWeight: "700" }],
       },
 
       // ============================================
@@ -187,6 +236,8 @@ const config: Config = {
         // Glow animations
         glow: "glow 2s ease-in-out infinite alternate",
         "glow-pulse": "glow-pulse 1.5s ease-in-out infinite",
+        // AI pulse animation (AC-3)
+        "ai-pulse": "ai-pulse 1.5s ease-in-out infinite",
         // Loading/Processing
         "thinking-dot": "thinking-dot 1.4s infinite ease-in-out both",
         "data-stream": "data-stream 0.8s ease-in-out infinite",
@@ -223,6 +274,17 @@ const config: Config = {
         "glow-pulse": {
           "0%, 100%": { opacity: "0.6" },
           "50%": { opacity: "1" },
+        },
+        // AI pulse animation keyframes (AC-3)
+        "ai-pulse": {
+          "0%, 100%": {
+            opacity: "0.7",
+            borderColor: "rgb(var(--gushen-border-ai) / 0.20)",
+          },
+          "50%": {
+            opacity: "1",
+            borderColor: "rgb(var(--gushen-border-ai) / 0.40)",
+          },
         },
         // Thinking/Processing animation
         "thinking-dot": {
@@ -389,6 +451,21 @@ const config: Config = {
         },
         ".text-glow-loss": {
           textShadow: "0 0 10px rgb(var(--color-loss-neon) / 0.5)",
+        },
+        // AI Mark utility class (AC-3)
+        ".ai-mark": {
+          borderLeft: "3px solid rgb(var(--gushen-color-ai))",
+          backgroundColor: "rgb(var(--gushen-bg-ai) / 0.10)",
+          paddingLeft: theme("spacing.3"),
+          color: "rgb(var(--gushen-color-ai))",
+        },
+        // AI Mark with pulse animation
+        ".ai-mark-pulse": {
+          borderLeft: "3px solid rgb(var(--gushen-color-ai))",
+          backgroundColor: "rgb(var(--gushen-bg-ai) / 0.10)",
+          paddingLeft: theme("spacing.3"),
+          color: "rgb(var(--gushen-color-ai))",
+          animation: "ai-pulse 1.5s ease-in-out infinite",
         },
       });
 

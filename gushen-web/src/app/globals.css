@@ -59,6 +59,49 @@
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
   --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
 
+  /* ============================================
+     GUSHEN EXTENDED DESIGN TOKENS
+     评分、数据源、AI、工作流、状态灯、背景层级、图表扩展
+     ============================================ */
+
+  /* Score Colors - 策略评分色 (AC-1) */
+  --gushen-color-score-s: 251 191 36;      /* #fbbf24 - 金色，卓越策略 */
+  --gushen-color-score-a: 34 211 238;      /* #22d3ee - 青色，优秀策略 */
+  --gushen-color-score-b: 59 130 246;      /* #3b82f6 - 蓝色，良好策略 */
+  --gushen-color-score-c: 107 114 128;     /* #6b7280 - 灰色，一般策略 */
+  --gushen-color-score-d: 251 146 60;      /* #fb923c - 橙色，需改进策略 */
+
+  /* Data Source Colors - 数据源标识色 (AC-2) */
+  --gushen-color-source-db: 59 130 246;    /* #3b82f6 - 蓝色，真实数据库数据 */
+  --gushen-color-source-api: 234 179 8;    /* #eab308 - 黄色，实时 API 数据 */
+  --gushen-color-source-sim: 107 114 128;  /* #6b7280 - 灰色，模拟数据 */
+
+  /* Banner Colors - 横幅警告色 */
+  --gushen-color-banner-warn: 234 179 8;   /* #eab308 - 黄色，模拟数据等警告横幅 */
+
+  /* AI Visual Language - AI 视觉语言令牌 (AC-3) */
+  --gushen-color-ai: 167 139 250;          /* #a78bfa - 紫色，AI 标记色 */
+  --gushen-bg-ai: 167 139 250;             /* 用于 rgb(var() / 0.10) */
+  --gushen-border-ai: 167 139 250;         /* 用于 rgb(var() / 0.20) */
+
+  /* Workflow Step Colors - 工作流步骤色 (AC-4) */
+  --gushen-color-step-active: 59 130 246;  /* #3b82f6 - 蓝色，当前活跃步骤 */
+  --gushen-color-step-done: 34 197 94;     /* #22c55e - 绿色，已完成步骤 */
+  --gushen-color-step-pending: 100 116 139; /* #64748b - 深灰，待执行步骤 (WCAG fix: #4b5563 failed 3:1 contrast) */
+
+  /* Status Light Colors - 状态灯色 (AC-5) */
+  --gushen-color-status-ready: 34 197 94;  /* #22c55e - 绿灯，就绪 */
+  --gushen-color-status-warn: 234 179 8;   /* #eab308 - 黄灯，警告 */
+  --gushen-color-status-block: 239 68 68;  /* #ef4444 - 红灯，阻断 */
+
+  /* Surface Level Extension - 背景层级扩展 (AC-6) */
+  --gushen-bg-surface-elevated: 31 31 35;  /* #1f1f23 - Level 2，内嵌卡片 */
+  --gushen-bg-surface-modal: 45 45 51;     /* #2d2d33 - Level 4，Modal/Dialog */
+
+  /* Chart Extension Colors - 图表扩展色 (AC-7) */
+  --gushen-color-chart-benchmark: 107 114 128;  /* #6b7280 - 灰色，CSI 300 等基准 */
+  --gushen-color-chart-signal: 167 139 250;     /* #a78bfa - 紫色，买卖信号标记 */
+
   /* Transitions */
   --transition-fast: 100ms;
   --transition-normal: 200ms;
@@ -255,11 +298,11 @@ a:hover {
 
   /* Profit/Loss text colors with semantic meaning */
   .text-profit {
-    color: rgb(var(--color-profit));
+    color: rgb(var(--color-profit, 239 68 68));
   }
 
   .text-loss {
-    color: rgb(var(--color-loss));
+    color: rgb(var(--color-loss, 34 197 94));
   }
 
   .text-profit-neon {
@@ -795,6 +838,90 @@ a:hover {
   .animate-fade-in {
     animation: fade-in 0.2s ease-out;
   }
+}
+
+/* ============================================
+   TOAST NOTIFICATION STYLES (Story 1.2)
+   ============================================ */
+
+/* Base toast styling */
+.toast-base {
+  background-color: rgb(var(--gushen-bg-surface-elevated));
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Left border accent for variants */
+.toast-base::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+}
+
+/* Success variant - green left border */
+.toast-success::before {
+  background-color: rgb(var(--gushen-color-step-done));
+}
+
+/* Warning variant - yellow left border */
+.toast-warning::before {
+  background-color: rgb(var(--gushen-color-status-warn));
+}
+
+/* Error variant - red left border */
+.toast-error::before {
+  background-color: rgb(var(--gushen-color-status-block));
+}
+
+/* Info variant - blue left border */
+.toast-info::before {
+  background-color: var(--primary);
+}
+
+/* Toast animations */
+[data-sonner-toaster] [data-sonner-toast] {
+  animation: toast-slide-in 150ms ease-out;
+}
+
+[data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
+  animation: toast-fade-out 150ms ease-out forwards;
+}
+
+@keyframes toast-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes toast-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  [data-sonner-toaster] [data-sonner-toast],
+  [data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
+    animation: none;
+  }
+}
+
+/* Toast container z-index (Level 3: Toast 通知浮层) */
+[data-sonner-toaster] {
+  z-index: 40 !important;
 }
 
 /* ============================================

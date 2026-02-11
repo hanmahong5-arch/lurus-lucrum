@@ -395,3 +395,14 @@ bun run test -- src/lib/backtest     # Run tests in specific directory
 ---
 
 **Last Updated**: 2026-01-22
+
+---
+
+## BMAD Integration
+
+Subsystem of **lurus-gushen**. BMAD artifacts in parent service dir.
+
+- PRD: `../_bmad-output/planning-artifacts/prd.md`
+- Architecture: `../_bmad-output/planning-artifacts/architecture.md`
+- Epics: `../_bmad-output/planning-artifacts/epics.md`
+- Sprint Status: `../_bmad-output/implementation-artifacts/sprint-status.yaml`
