@@ -3,88 +3,24 @@
 /**
  * Registration Page
  *
- * User registration page for GuShen platform.
- * Creates new accounts with email/password.
+ * Redirects to Lurus SSO for account creation.
+ * Zitadel supports registration within the OAuth login flow.
  */
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { Mail, Lock, User, AlertCircle, Loader2, CheckCircle } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { RiskDisclaimer, RiskAgreementCheckbox } from "@/components/auth";
+import { redirectToLurusLogin } from "@/lib/auth/login-redirect";
+import { useState } from "react";
 
 export default function RegisterPage() {
-  const router = useRouter();
-
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState("");
-  const [success, setSuccess] = useState(false);
-  // Risk agreement state - user must agree to investment risks before registration
-  // 风险声明同意状态 - 用户必须同意投资风险才能注册
   const [agreedToRisk, setAgreedToRisk] = useState(false);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    setErrorMessage("");
-
-    // Validate risk agreement before proceeding
-    // 验证风险声明同意状态
-    if (!agreedToRisk) {
-      setErrorMessage("请先阅读并同意投资风险提示");
-      setIsLoading(false);
-      return;
-    }
-
-    // Validation
-    if (password !== confirmPassword) {
-      setErrorMessage("两次输入的密码不一致");
-      setIsLoading(false);
-      return;
-    }
-
-    if (password.length < 6) {
-      setErrorMessage("密码长度至少为6位");
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      // TODO: Implement actual registration API
-      // For now, show success message and redirect to login
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-
-      setSuccess(true);
-      setTimeout(() => {
-        router.push("/auth/login");
-      }, 2000);
-    } catch (err) {
-      setErrorMessage("注册失败，请重试");
-    } finally {
-      setIsLoading(false);
-    }
+  const handleRegister = () => {
+    // Zitadel login page supports registration — same SSO flow
+    redirectToLurusLogin("/dashboard");
   };
-
-  if (success) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
-        <div className="w-full max-w-md text-center">
-          <div className="bg-slate-800/50 backdrop-blur-sm border border-slate-700 rounded-2xl p-8">
-            <div className="w-16 h-16 bg-green-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-8 h-8 text-green-500" />
-            </div>
-            <h2 className="text-xl font-semibold text-white mb-2">注册成功！</h2>
-            <p className="text-slate-400 mb-4">正在跳转到登录页面...</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center p-4">
@@ -105,142 +41,34 @@ export default function RegisterPage() {
             创建新账户
           </h2>
 
-          {/* Error Message */}
-          {errorMessage && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-400 text-sm">
-              <AlertCircle className="w-4 h-4 flex-shrink-0" />
-              <span>{errorMessage}</span>
-            </div>
-          )}
+          <p className="text-slate-400 text-sm mb-6 text-center">
+            通过 Lurus 统一账户体系注册，享受跨产品服务
+          </p>
 
-          {/* Register Form */}
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Name Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                姓名
-              </label>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="您的姓名"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
+          {/* Risk Disclaimer */}
+          <RiskDisclaimer compact className="mb-4" />
 
-            {/* Email Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                邮箱地址
-              </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="your@email.com"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
+          {/* Risk Agreement Checkbox */}
+          <RiskAgreementCheckbox
+            checked={agreedToRisk}
+            onChange={setAgreedToRisk}
+            className="mb-6"
+          />
 
-            {/* Password Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                密码
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="至少6位字符"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-                  required
-                  disabled={isLoading}
-                  minLength={6}
-                />
-              </div>
-            </div>
+          {/* SSO Register Button */}
+          <Button
+            type="button"
+            onClick={handleRegister}
+            className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold text-base shadow-lg shadow-amber-500/20 transition-all"
+            disabled={!agreedToRisk}
+          >
+            <LogIn className="w-5 h-5 mr-2" />
+            注册 Lurus 账户
+          </Button>
 
-            {/* Confirm Password Input */}
-            <div>
-              <label className="block text-sm font-medium text-slate-300 mb-2">
-                确认密码
-              </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  placeholder="再次输入密码"
-                  className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            {/* Risk Disclaimer - Investment risk warning */}
-            {/* 风险声明 - 投资风险提示 */}
-            <RiskDisclaimer compact className="mt-2" />
-
-            {/* Risk Agreement Checkbox */}
-            {/* 风险协议同意复选框 */}
-            <RiskAgreementCheckbox
-              checked={agreedToRisk}
-              onChange={setAgreedToRisk}
-              disabled={isLoading}
-              className="mt-3"
-            />
-
-            {/* Terms */}
-            <div className="flex items-start gap-2 mt-3">
-              <input
-                type="checkbox"
-                id="terms"
-                className="mt-1 rounded border-slate-600 bg-slate-700/50 text-amber-500 focus:ring-amber-500/50"
-                required
-              />
-              <label htmlFor="terms" className="text-sm text-slate-400">
-                我已阅读并同意{" "}
-                <a href="#" className="text-amber-500 hover:text-amber-400">
-                  服务条款
-                </a>{" "}
-                和{" "}
-                <a href="#" className="text-amber-500 hover:text-amber-400">
-                  隐私政策
-                </a>
-              </label>
-            </div>
-
-            {/* Submit Button */}
-            <Button
-              type="submit"
-              className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-slate-900 font-semibold mt-4"
-              disabled={isLoading || !agreedToRisk}
-            >
-              {isLoading ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  注册中...
-                </>
-              ) : (
-                "创建账户"
-              )}
-            </Button>
-          </form>
+          <p className="text-center text-xs text-slate-500 mt-3">
+            点击后将跳转到 Lurus 统一登录页面完成注册
+          </p>
 
           {/* Login Link */}
           <p className="mt-6 text-center text-sm text-slate-400">

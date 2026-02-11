@@ -10,7 +10,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 
 const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const TENANT_SLUG = process.env.TENANT_SLUG || "gushen";
+const TENANT_SLUG = process.env.TENANT_SLUG || "lurus";
 
 /**
  * GET handler
