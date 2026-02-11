@@ -54,3 +54,10 @@ Fixed 4 critical SSO issues discovered during manual testing:
 Also: register page mock→SSO redirect, callback page added Suspense, Dockerfile added NEXT_PUBLIC_* build args, K8s deployment added SSO env vars + NEXTAUTH_SECRET secret.
 Verification: `bun run typecheck → 0 errors` | `bun run test → 1502 passed, 0 failed`
 Status: 🔧 Deployed to main, ⏳ waiting CI build + ArgoCD sync for E2E verification on gushen.lurus.cn.
+
+---
+
+## 2026-02-11: K8s Deployment — gushen-web Ingress + SSO Env Vars
+Created Ingress (gushen.lurus.cn → ai-qtrd-web:3000) + SSL certificate. Updated running deployment with missing SSO env vars (LURUS_API_URL, TENANT_SLUG, NEXTAUTH_URL). Pod rolled out successfully (Next.js Ready in 201ms).
+Verification: `kubectl -n ai-qtrd get ingress → Load Balancer IPs assigned (80, 443)` | `curl http://10.43.116.107:3000 → HTTP 200 OK (24682 bytes)`
+Status: ✅ K8s config complete, ⏳ external HTTPS access blocked (external load balancer 43.226.46.164 needs gushen.lurus.cn routing rule). Internal cluster tests pass, HTTP routing works (308 redirect), TLS cert valid. Detailed report: `k8s-deployment-update-gushen-2026-02-11.md`.

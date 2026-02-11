@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-qtrd-web-ingress
+  namespace: ai-qtrd
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts:
+        - gushen.lurus.cn
+      secretName: gushen-lurus-cn-tls
+  rules:
+    - host: gushen.lurus.cn
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: ai-qtrd-web
+                port:
+                  number: 3000
