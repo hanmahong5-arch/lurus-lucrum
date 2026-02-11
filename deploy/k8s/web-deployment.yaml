@@ -53,6 +53,19 @@ spec:
             - name: API_URL
               value: "http://ai-qtrd-api:8000"
 
+            # Lurus SSO integration
+            - name: LURUS_API_URL
+              value: "https://api.lurus.cn"
+            - name: TENANT_SLUG
+              value: "lurus"
+            - name: NEXTAUTH_URL
+              value: "https://gushen.lurus.cn"
+            - name: NEXTAUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: ai-qtrd-secrets
+                  key: NEXTAUTH_SECRET
+
             # Redis configuration
             - name: REDIS_ENABLED
               value: "true"
