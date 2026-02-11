@@ -42,3 +42,10 @@ Full adversarial code review of all done stories. 605 tests across 12 stories, 0
 
 **Cross-cutting action items:** (1) `git add` all untracked new files across all stories, (2) integrate unused components into actual pages (EmptyState, WorkflowStepper, FinancialValue).
 Verification: `bun run test -- --run [per-story files]` → 605 passed, 0 failed across all 12 stories.
+
+---
+
+## 2026-02-11: SSO + 计费集成 Phase 1 — 全部完成
+Implemented lurus-api SSO + billing integration. Added lurus-sso NextAuth provider, login redirect, OAuth callback page, `/api/lurus/*` proxy route, `useBilling()` + `useApiKeys()` hooks. Modified login page with SSO button + local login fallback. Created comprehensive test page (`/test/billing`) with visual UI, curl scripts, and DevTools test methods. JWT auto-refresh every 30min. Cookie-based SSO (Domain=.lurus.cn).
+Verification: `bun run typecheck → 0 errors` | Test page created with auto-test runner, React Query data display, API endpoint reference.
+Status: ✅ Phase 1 Complete (Task #1-9). ⏳ E2E testing pending (needs lurus-api). See `doc/billing-api-test-guide.md`, `doc/sso-test-summary.md`.

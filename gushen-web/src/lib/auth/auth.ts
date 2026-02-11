@@ -32,10 +32,60 @@ const DEMO_USERS = [
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Credentials Provider - Email/Password login
+    // Lurus SSO Provider - Primary authentication method
+    CredentialsProvider({
+      id: "lurus-sso",
+      name: "Lurus SSO",
+      credentials: {
+        sessionCheck: { label: "Session Check", type: "text" },
+      },
+      async authorize(credentials, req) {
+        const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
+        const cookies = req.headers?.cookie || "";
+
+        try {
+          // Call lurus-api to verify session (with Cookie)
+          const response = await fetch(`${LURUS_API_URL}/api/v1/auth/session`, {
+            method: "GET",
+            credentials: "include",
+            headers: {
+              "Cookie": cookies,
+              "Accept": "application/json",
+            },
+          });
+
+          if (!response.ok) {
+            console.log("Lurus SSO: Session validation failed", response.status);
+            return null;
+          }
+
+          const sessionData = await response.json();
+
+          if (!sessionData.success || !sessionData.data?.user) {
+            console.log("Lurus SSO: Invalid session data structure");
+            return null;
+          }
+
+          const user = sessionData.data.user;
+
+          return {
+            id: user.id.toString(),
+            email: user.email,
+            name: user.username || user.email,
+            lurusUserId: user.id,
+            role: "free", // Default role, can be enhanced with actual role from lurus-api
+          };
+        } catch (error) {
+          console.error("Lurus SSO: Error validating session", error);
+          return null;
+        }
+      },
+    }),
+
+    // Credentials Provider - Email/Password login (Fallback for local development)
     CredentialsProvider({
       id: "credentials",
-      name: "Email",
+      name: "Local Account",
       credentials: {
         email: { label: "Email", type: "email", placeholder: "your@email.com" },
         password: { label: "Password", type: "password" },
@@ -105,18 +155,56 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger }) {
       if (user) {
         token.id = user.id;
         token.role = (user as any).role || "free";
+        token.lurusUserId = (user as any).lurusUserId;
+        token.email = user.email;
+        token.lastRefresh = Date.now();
       }
+
+      // Periodically refresh session from lurus-api (every 30 minutes)
+      if (trigger === "update" || !token.lastRefresh) {
+        const now = Date.now();
+        const lastRefresh = (token.lastRefresh as number) || 0;
+
+        if (now - lastRefresh > 30 * 60 * 1000) {
+          const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
+
+          try {
+            const response = await fetch(`${LURUS_API_URL}/api/v1/auth/session`, {
+              credentials: "include",
+              headers: {
+                "Accept": "application/json",
+              },
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              if (data.success && data.data?.user) {
+                token.lurusUserId = data.data.user.id;
+                token.email = data.data.user.email;
+                token.lastRefresh = now;
+              }
+            }
+          } catch (err) {
+            console.error("Failed to refresh session from lurus-api:", err);
+          }
+        }
+      }
+
       return token;
     },
 
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id;
+        (session.user as any).id = token.id || token.lurusUserId;
         (session.user as any).role = token.role;
+        (session.user as any).lurusUserId = token.lurusUserId;
+        if (token.email) {
+          session.user.email = token.email as string;
+        }
       }
       return session;
     },
@@ -137,11 +225,13 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role: "free" | "standard" | "premium";
+      lurusUserId?: number;
     };
   }
 
   interface User {
     role?: string;
+    lurusUserId?: number;
   }
 }
 
@@ -149,5 +239,7 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: string;
+    lurusUserId?: number;
+    lastRefresh?: number;
   }
 }
