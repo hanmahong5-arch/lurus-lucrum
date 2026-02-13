@@ -40,8 +40,8 @@ spec:
 
       containers:
         - name: web
-          image: ghcr.io/hanmahong5-arch/gushen-web:latest
-          imagePullPolicy: Always
+          image: ghcr.io/hanmahong5-arch/gushen-web:sso-fix
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
               name: http
