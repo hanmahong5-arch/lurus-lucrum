@@ -10,3 +10,6 @@ export { TargetSelector } from "./target-selector";
 export { ResultDashboard } from "./result-dashboard";
 export { DiagnosticPanel } from "./diagnostic-panel";
 export { SensitivityAnalysis } from "./sensitivity-analysis";
+export { ProgressiveDisclosure } from "./progressive-disclosure";
+export { NextStepGuide } from "./next-step-guide";
+export { AiInsightPlaceholder } from "./ai-insight-placeholder";

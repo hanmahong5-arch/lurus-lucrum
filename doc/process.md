@@ -61,3 +61,12 @@ Status: 🔧 Deployed to main, ⏳ waiting CI build + ArgoCD sync for E2E verifi
 Created Ingress (gushen.lurus.cn → ai-qtrd-web:3000) + SSL certificate. Updated running deployment with missing SSO env vars (LURUS_API_URL, TENANT_SLUG, NEXTAUTH_URL). Pod rolled out successfully (Next.js Ready in 201ms).
 Verification: `kubectl -n ai-qtrd get ingress → Load Balancer IPs assigned (80, 443)` | `curl http://10.43.116.107:3000 → HTTP 200 OK (24682 bytes)`
 Status: ✅ K8s config complete, ⏳ external HTTPS access blocked (external load balancer 43.226.46.164 needs gushen.lurus.cn routing rule). Internal cluster tests pass, HTTP routing works (308 redirect), TLS cert valid. Detailed report: `k8s-deployment-update-gushen-2026-02-11.md`.
+
+---
+
+## 2026-02-13: SSO Phase 1 — Docker Image Deploy to K8s
+CI/CD pipeline builds but doesn't push images to GHCR. Built Docker image locally on master (100.98.57.55) with `--provenance=false` to avoid OCI index format incompatibility with K3s containerd CRI.
+Key fix: K3s uses `/run/k3s/containerd/containerd.sock` not `/run/containerd/containerd.sock` — must specify `--address` when using nerdctl/ctr to load images into K3s.
+Also fixed: billing test page prerender error (split into server wrapper + client component), disabled ArgoCD auto-sync during manual deploy then re-enabled.
+Verification: `curl https://gushen.lurus.cn/ → 200` | `/api/lurus/billing/plans → {"success":false,"error":"未授权"}` (401, not 404) | `/api/auth/providers → ["lurus-sso","credentials"]`
+Status: ✅ SSO routes deployed. ⏳ E2E SSO login flow pending manual verification.

@@ -67,15 +67,15 @@ development_status:
   # FRs: FR-2.7
   # NFRs: NFR-1.1 (backtest <3s), NFR-2.3 (graceful degradation), NFR-2.4 (error codes)
   # ══════════════════════════════════════════════════════════════════
-  epic-2: in-progress
+  epic-2: done
   2-1-score-calculator: done                      # [P] 策略评分算法 (S/A/B/C/D, lib/backtest/)
   2-2-score-card-component: done                   # [P] 策略评分卡组件 (full/compact/mini variants)
   2-3-strategy-logic-summary: done                 # [P] 策略逻辑摘要组件 (white-language conditions)
   2-4-data-source-badge-banner: done                 # [P] 数据源标识与模拟数据警告
   2-5-pre-check-panel: done                        # [P] 回测前置条件检查面板
-  2-6-three-stage-progress: backlog              # [P] 三阶段回测进度
-  2-7-error-diagnosis-card: backlog              # [P] 错误诊断卡 (BT error codes)
-  2-8-real-stock-progressive-disclosure: in-progress  # [P] 真实选股与结果页渐进披露
+  2-6-three-stage-progress: done                  # [P] 三阶段回测进度
+  2-7-error-diagnosis-card: done                  # [P] 错误诊断卡 (BT error codes)
+  2-8-real-stock-progressive-disclosure: done           # [P] 真实选股与结果页渐进披露
   epic-2-retrospective: optional
 
   # ══════════════════════════════════════════════════════════════════
@@ -84,8 +84,8 @@ development_status:
   # FRs: FR-1.5
   # NFRs: NFR-1.3 (FCP), NFR-2.3 (empty state fallback)
   # ══════════════════════════════════════════════════════════════════
-  epic-3: backlog
-  3-1-builtin-template-library: backlog          # [P] 内置策略模板库 (≥5 templates)
+  epic-3: in-progress
+  3-1-builtin-template-library: done              # [P] 内置策略模板库 (≥5 templates)
   3-2-discovery-page-filter: backlog             # [P] 策略发现页面与筛选 (GitHub crawler)
   3-3-strategy-detail-panel: backlog             # [P] 策略详情面板与快速预览
   3-4-tiered-onboarding-import: backlog          # [P] 策略导入与分级入门体验 (30s first backtest)

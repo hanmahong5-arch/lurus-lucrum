@@ -1722,6 +1722,20 @@ import { practitionerStrategies } from "./practitioner";
 export { academicStrategies } from "./academic";
 export { practitionerStrategies } from "./practitioner";
 
+// Builtin templates for quick-start (Story 3.1 / FR-1.5)
+export {
+  BUILTIN_TEMPLATES,
+  DIFFICULTY_CONFIG,
+  getBuiltinTemplateById,
+  getBuiltinTemplatesByDifficulty,
+  getBuiltinTemplateIds,
+} from "./builtin-templates";
+export type {
+  BuiltinTemplate,
+  DifficultyLevel,
+  DifficultyDisplayConfig,
+} from "./builtin-templates";
+
 // =============================================================================
 // HELPER FUNCTIONS / 辅助函数
 // =============================================================================
