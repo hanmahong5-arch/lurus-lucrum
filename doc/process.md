@@ -70,3 +70,19 @@ Key fix: K3s uses `/run/k3s/containerd/containerd.sock` not `/run/containerd/con
 Also fixed: billing test page prerender error (split into server wrapper + client component), disabled ArgoCD auto-sync during manual deploy then re-enabled.
 Verification: `curl https://gushen.lurus.cn/ → 200` | `/api/lurus/billing/plans → {"success":false,"error":"未授权"}` (401, not 404) | `/api/auth/providers → ["lurus-sso","credentials"]`
 Status: ✅ SSO routes deployed. ⏳ E2E SSO login flow pending manual verification.
+
+---
+
+## 2026-02-13: Story 3-3 -- Strategy Detail Panel & Quick Preview
+Implemented StrategyDetailPanel (Radix Dialog side panel, 40% desktop / full-screen mobile), QuickPreviewResult, useStrategyDetail hook, useQuickPreview hook. Integrated into DiscoveryPageContent.
+New files: strategy-detail-panel.tsx, quick-preview-result.tsx, use-strategy-detail.ts, use-quick-preview.ts + 2 test files.
+Verification: bun run typecheck -> 0 errors | bun run test discovery -> 5 files, 59 passed (26 new)
+Status: Done. sprint-status.yaml updated (3-3: done).
+
+---
+
+## 2026-02-14: Story 7-4 -- Test Coverage Improvement
+Added 6 test files (134 tests) for untested lib/ modules: utils, strategy/parameter-parser, comparison/metric-diff, comparison/winner-resolver, risk/risk-manager, trading/kline-validator.
+Verification: `bun run test -- --run → 2439 passed, 2 failed (pre-existing in accessibility/, unrelated to 7-4)`
+Remaining: 2 pre-existing failures in color-contrast.test.ts and live-region.test.ts (Story 7-3 scope).
+Status: Done. sprint-status.yaml updated (7-4: done).

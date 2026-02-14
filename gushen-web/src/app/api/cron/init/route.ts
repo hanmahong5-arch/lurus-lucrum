@@ -26,6 +26,11 @@ export async function GET() {
           enabled: process.env.NODE_ENV === 'production',
           schedule: '15:30 CST (Mon-Fri)',
         },
+        incrementalUpdater: {
+          enabled: process.env.NODE_ENV === 'production',
+          schedule: '18:00 CST (Mon-Fri)',
+          description: 'Incremental K-line data update for all active stocks',
+        },
       },
       timestamp: new Date().toISOString(),
     });

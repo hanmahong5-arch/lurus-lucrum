@@ -27,3 +27,9 @@ export type { StockRankingItem } from "./stock-ranking";
 
 export { SignalDetails } from "./signal-details";
 export type { SignalDetailItem, SignalStatusType } from "./signal-details";
+
+export { BatchProgressBar } from "./batch-progress-bar";
+export type { BatchProgressBarProps, BatchStatus } from "./batch-progress-bar";
+
+export { FailureAnalysisPanel } from "./failure-analysis-panel";
+export type { FailureAnalysisPanelProps } from "./failure-analysis-panel";

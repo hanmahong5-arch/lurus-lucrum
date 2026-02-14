@@ -13,6 +13,8 @@ import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-c
 import { AIStrategyAssistant } from "@/components/strategy-editor/ai-strategy-assistant";
 import { StrategyLogicSummary } from "@/components/strategy-editor/strategy-logic-summary";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { TieredDemoSelector } from "@/components/onboarding";
+import { useOnboardingImport } from "@/hooks/use-onboarding-import";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
 import { useUserWorkspace } from "@/hooks/use-user-workspace";
 import {
@@ -54,6 +56,15 @@ export default function DashboardPage() {
   // Local error state (not persisted)
   // 本地错误状态（不持久化）
   const [error, setError] = useState<string | null>(null);
+
+  // Onboarding import hook for tiered demo flows (Story 3.4)
+  const {
+    fillAndRunSimple,
+    fillIntermediate,
+    fillAdvanced,
+    isAutoRunning,
+    autoRunError,
+  } = useOnboardingImport();
 
   // Code-parameter linkage state / 代码-参数联动状态
   const [focusedLine, setFocusedLine] = useState<number | null>(null);
@@ -387,6 +398,17 @@ export default function DashboardPage() {
 
         {/* Strategy Guide Card (Phase 4 UX enhancement) */}
         <StrategyGuideCard currentStep={currentWorkflowStep} className="mb-6" />
+n        {/* Tiered onboarding demo selector - shown when no code exists (Story 3.4) */}
+        {!generatedCode && !isGenerating && (
+          <TieredDemoSelector
+            onSimple={fillAndRunSimple}
+            onIntermediate={fillIntermediate}
+            onAdvanced={fillAdvanced}
+            isAutoRunning={isAutoRunning}
+            autoRunError={autoRunError}
+            className="mb-6"
+          />
+        )}
 
         {/* Error message */}
         {error && (

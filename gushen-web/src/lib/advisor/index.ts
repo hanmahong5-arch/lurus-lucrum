@@ -183,6 +183,38 @@ export {
 } from "./reaction/debate-engine";
 
 // ============================================================================
+// Token Tracker Exports
+// ============================================================================
+
+export {
+  estimateMessageTokens,
+  computeBudgetUsage,
+  getUsageLevel,
+  isNearExhaustion,
+  isExhausted,
+  formatTokenCount,
+  CONVERSATION_TOKEN_BUDGET,
+  TOKEN_WARNING_THRESHOLD,
+  TOKEN_EXHAUSTION_THRESHOLD,
+  type TokenMessage,
+  type BudgetUsage,
+  type UsageLevel,
+} from "./token-tracker";
+
+// ============================================================================
+// Conversation Store Exports
+// ============================================================================
+
+export {
+  useConversationStore,
+  MAX_SESSIONS,
+  type ConversationMessage,
+  type ConversationSession,
+  type SessionContext,
+  type SessionSummary,
+} from "./conversation-store";
+
+// ============================================================================
 // Utility Functions for UI
 // ============================================================================
 

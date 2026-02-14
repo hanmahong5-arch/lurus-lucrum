@@ -911,11 +911,48 @@ a:hover {
   }
 }
 
-/* Reduced motion preference */
+/* ============================================
+   ACCESSIBILITY: REDUCED MOTION
+   (WCAG 2.1 SC 2.3.3 / NFR-4.1)
+   Disable all animations and transitions when
+   the user prefers reduced motion.
+   ============================================ */
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
   [data-sonner-toaster] [data-sonner-toast],
   [data-sonner-toaster] [data-sonner-toast][data-removed="true"] {
     animation: none;
+  }
+
+  /* Disable AI pulse animation for motion-sensitive users */
+  .ai-mark-pulse,
+  .animate-ai-pulse {
+    animation: none;
+  }
+
+  /* Replace shimmer/pulse loading animations with static text */
+  .animate-pulse {
+    animation: none !important;
+    opacity: 0.6 !important;
+  }
+
+  .animate-pulse-profit,
+  .animate-pulse-loss {
+    animation: none !important;
+  }
+
+  /* Replace skeleton shimmer with static placeholder */
+  [data-loading="true"],
+  [aria-busy="true"] {
+    animation: none !important;
   }
 }
 
@@ -1003,4 +1040,82 @@ a:hover {
     color: #ef4444 !important;
     fill: #ef4444 !important;
   }
+}
+
+/* ============================================
+   ACCESSIBILITY: FORCED COLORS (HIGH CONTRAST)
+   (WCAG 2.1 SC 1.4.11 / NFR-4.4)
+   Provide visible borders when the OS is in
+   forced-colors / high-contrast mode.
+   ============================================ */
+@media (forced-colors: active) {
+  .glass-panel,
+  .card-elevated {
+    border: 2px solid CanvasText !important;
+  }
+
+  .btn-primary,
+  button[data-variant="primary"],
+  [role="button"] {
+    border: 2px solid ButtonText !important;
+  }
+
+  .btn-tactile {
+    border: 2px solid ButtonText !important;
+  }
+
+  /* Ensure focus indicators are visible in high contrast mode */
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  /* Ensure badges and status indicators are distinguishable */
+  .badge,
+  [data-source-badge] {
+    border: 1px solid CanvasText !important;
+  }
+
+  /* Ensure progress bars are visible */
+  [role="progressbar"] {
+    border: 1px solid CanvasText !important;
+  }
+
+  [role="progressbar"] > * {
+    background: Highlight !important;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY: FOCUS INDICATORS
+   (WCAG 2.1 SC 2.4.7 / NFR-4.2)
+   Clear, visible focus indicators for all
+   keyboard-navigable elements.
+   ============================================ */
+
+/* Global focus-visible styles for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Remove default outline for mouse users */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Enhanced focus ring for interactive elements */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
 }

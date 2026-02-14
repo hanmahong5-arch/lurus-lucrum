@@ -10,13 +10,14 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { getDailyUpdater, UpdateOptions } from '@/lib/cron/daily-updater';
+import { runIncrementalUpdate } from '@/lib/cron/incremental-updater';
 
 // ============================================================================
 // Types
 // ============================================================================
 
 interface UpdateRequest {
-  updateType?: 'daily' | 'full' | 'partial';
+  updateType?: 'daily' | 'full' | 'partial' | 'incremental';
   date?: string;              // YYYY-MM-DD
   symbols?: string[];         // Specific symbols to update
   force?: boolean;            // Force update even if data exists
@@ -30,7 +31,33 @@ export async function POST(request: NextRequest) {
   try {
     const body: UpdateRequest = await request.json();
 
-    // Get updater instance
+    // Handle incremental update (new code path)
+    if (body.updateType === 'incremental') {
+      console.log('[API] Starting incremental data update');
+
+      const result = await runIncrementalUpdate({
+        symbols: body.symbols,
+        force: body.force ?? false,
+      });
+
+      return NextResponse.json({
+        success: result.success,
+        message: result.success
+          ? `Incremental update completed: ${result.stocksUpdated}/${result.stocksChecked} stocks updated`
+          : `Incremental update completed with errors: ${result.failedSymbols.length} stocks failed`,
+        stats: {
+          stocksChecked: result.stocksChecked,
+          stocksUpdated: result.stocksUpdated,
+          recordsInserted: result.recordsInserted,
+          recordsFailed: result.recordsFailed,
+          duration: result.durationMs,
+        },
+        failedSymbols: result.failedSymbols,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Existing update logic (daily/full/partial)
     const updater = getDailyUpdater();
 
     // Check if already running
@@ -66,10 +93,9 @@ export async function POST(request: NextRequest) {
     };
 
     // Start update asynchronously
-    // Note: We return immediately and let the update run in background
     console.log('[API] Starting data update:', options);
 
-    // Run update (this will take time, but we'll return immediately)
+    // Run update
     const result = await updater.runUpdate(options);
 
     return NextResponse.json({

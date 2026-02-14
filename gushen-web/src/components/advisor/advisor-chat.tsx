@@ -14,7 +14,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 
 // Import new Agentic components
@@ -22,6 +21,21 @@ import { PhilosophySelector } from "./philosophy-selector";
 import { CompactModeSelector, ModeBadge } from "./mode-selector";
 import { MasterAgentPreview, MasterQuote } from "./master-agent-cards";
 import { DebateView } from "./debate-view";
+import { SmartQuestionChips } from "./smart-question-chips";
+import { ApplySuggestionButton } from "./apply-suggestion-button";
+import { TokenBudgetIndicator } from "./token-budget-indicator";
+import { ConversationHistory } from "./conversation-history";
+import type { QuestionContext } from "@/lib/advisor/question-generator";
+import { parseSuggestions } from "@/lib/advisor/suggestion-parser";
+
+// Import conversation persistence and token tracking
+import { useConversationStore } from "@/lib/advisor/conversation-store";
+import {
+  computeBudgetUsage,
+  isNearExhaustion,
+  CONVERSATION_TOKEN_BUDGET,
+} from "@/lib/advisor/token-tracker";
+import { showToast } from "@/lib/toast";
 
 // Import types and utilities
 import type {
@@ -149,6 +163,8 @@ interface AdvisorChatProps {
   className?: string;
   defaultMode?: ChatMode;
   initialContext?: Partial<AdvisorContext>;
+  /** Question context for SmartQuestionChips (from backtest results) */
+  questionContext?: QuestionContext | null;
 }
 
 /**
@@ -159,6 +175,7 @@ export function AdvisorChat({
   className,
   defaultMode = "quick",
   initialContext,
+  questionContext,
 }: AdvisorChatProps) {
   // State management
   const [messages, setMessages] = useState<Message[]>([]);
@@ -172,9 +189,15 @@ export function AdvisorChat({
   );
   const [error, setError] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
   const [debateSession, setDebateSession] = useState<DebateSession | null>(
     null,
   );
+
+  // Conversation persistence
+  const conversationStore = useConversationStore();
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const warningFiredRef = useRef(false);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -182,6 +205,37 @@ export function AdvisorChat({
 
   // Get master agent summaries for display
   const masterAgents = getMasterAgentSummaries();
+
+  // Token budget tracking
+  const tokenMessages = messages.map((m) => ({
+    role: m.role,
+    content: m.content,
+  }));
+  const budgetUsage = computeBudgetUsage(tokenMessages, CONVERSATION_TOKEN_BUDGET);
+
+  // Initialize conversation session on mount
+  useEffect(() => {
+    if (!sessionId) {
+      const newId = conversationStore.createSession({
+        mode,
+      });
+      setSessionId(newId);
+    }
+    // Only run on mount
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Warn when token usage approaches limit
+  useEffect(() => {
+    if (
+      isNearExhaustion(budgetUsage.percentage) &&
+      !warningFiredRef.current &&
+      messages.length > 0
+    ) {
+      warningFiredRef.current = true;
+      showToast.warning("上下文即将满，建议开启新对话");
+    }
+  }, [budgetUsage.percentage, messages.length]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -246,6 +300,16 @@ export function AdvisorChat({
     setError(null);
     setIsLoading(true);
 
+    // Persist user message to conversation store
+    if (sessionId) {
+      conversationStore.addMessage(sessionId, {
+        id: userMessage.id,
+        role: userMessage.role,
+        content: userMessage.content,
+        timestamp: userMessage.timestamp.getTime(),
+      });
+    }
+
     try {
       // Build history for API (last 10 messages)
       const history = messages.slice(-10).map((m) => ({
@@ -296,6 +360,16 @@ export function AdvisorChat({
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
+
+        // Persist assistant message to conversation store
+        if (sessionId) {
+          conversationStore.addMessage(sessionId, {
+            id: assistantMessage.id,
+            role: assistantMessage.role,
+            content: assistantMessage.content,
+            timestamp: assistantMessage.timestamp.getTime(),
+          });
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to get response");
@@ -303,7 +377,7 @@ export function AdvisorChat({
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, messages, mode, advisorContext]);
+  }, [input, isLoading, messages, mode, advisorContext, sessionId, conversationStore]);
 
   // Handle debate mode requests
   const handleDebateRequest = async (
@@ -495,12 +569,111 @@ export function AdvisorChat({
     }
   };
 
-  // Clear chat history
+  // Clear chat history and start a new conversation session
   const clearChat = () => {
     setMessages([]);
     setDebateSession(null);
     setError(null);
+    warningFiredRef.current = false;
+
+    // Create a new session for fresh conversation
+    const newId = conversationStore.createSession({ mode });
+    setSessionId(newId);
   };
+
+  // Handle closing the history panel (may have triggered a restore via the store)
+  const handleHistoryClose = useCallback(() => {
+    // Check if a different session was activated via restore
+    const activeSession = conversationStore.getActiveSession();
+    if (activeSession && activeSession.id !== sessionId) {
+      // Restore messages from the newly activated session
+      const restoredMessages: Message[] = activeSession.messages.map((m) => ({
+        id: m.id,
+        role: m.role,
+        content: m.content,
+        timestamp: new Date(m.timestamp),
+      }));
+      setMessages(restoredMessages);
+      setSessionId(activeSession.id);
+      setDebateSession(null);
+      setError(null);
+      warningFiredRef.current = false;
+    }
+    setShowHistory(false);
+  }, [conversationStore, sessionId]);
+
+  // Handle smart question chip click: auto-fill and send
+  const handleSmartQuestionSelect = useCallback(
+    (questionText: string) => {
+      if (isLoading) return;
+      setInput(questionText);
+      // Auto-send after a short delay to allow state update
+      setTimeout(() => {
+        const userMessage: Message = {
+          id: generateId(),
+          role: "user",
+          content: questionText,
+          timestamp: new Date(),
+        };
+        setMessages((prev) => [...prev, userMessage]);
+        setError(null);
+        setIsLoading(true);
+
+        // Build history for API
+        const history = messages.slice(-10).map((m) => ({
+          role: m.role as "user" | "assistant",
+          content: m.content,
+        }));
+
+        fetch("/api/advisor/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            message: questionText,
+            history,
+            mode,
+            advisorContext,
+          }),
+        })
+          .then(async (response) => {
+            if (!response.ok) {
+              const errorData = await response.json().catch(() => ({}));
+              throw new Error(
+                errorData.error || `Server error: ${response.status}`
+              );
+            }
+            return response.json();
+          })
+          .then((data) => {
+            const assistantMessage: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: data.response,
+              timestamp: new Date(),
+              metadata: {
+                ...data.metadata,
+                agentId: advisorContext.masterAgent,
+                agentName: advisorContext.masterAgent
+                  ? getMasterAgentById(advisorContext.masterAgent)?.name
+                  : undefined,
+              },
+            };
+            setMessages((prev) => [...prev, assistantMessage]);
+          })
+          .catch((err) => {
+            setError(
+              err instanceof Error ? err.message : "Failed to get response"
+            );
+            console.error("Advisor chat error:", err);
+          })
+          .finally(() => {
+            setIsLoading(false);
+            setInput("");
+          });
+      }, 0);
+    },
+    [isLoading, messages, mode, advisorContext]
+  );
 
   // Get context summary for display
   const contextSummaryObj = getContextSummary(advisorContext);
@@ -521,6 +694,31 @@ export function AdvisorChat({
             selectedMode={mode}
             onModeChange={handleModeChange}
           />
+          {/* History Toggle */}
+          <button
+            onClick={() => setShowHistory(!showHistory)}
+            className={cn(
+              "p-2 rounded-lg transition-colors",
+              showHistory
+                ? "bg-[#f5a623] text-[#0f1117]"
+                : "bg-[#1a1f36] text-gray-400 hover:text-white",
+            )}
+            title="对话历史"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </button>
           {/* Settings Toggle */}
           <button
             onClick={() => setShowSettings(!showSettings)}
@@ -554,6 +752,26 @@ export function AdvisorChat({
           </button>
         </div>
       </div>
+
+      {/* Token Budget Indicator */}
+      {messages.length > 0 && (
+        <div className="px-4 py-2 border-b border-[#1a1f36]">
+          <TokenBudgetIndicator
+            used={budgetUsage.used}
+            total={budgetUsage.total}
+            compact
+          />
+        </div>
+      )}
+
+      {/* Conversation History Panel */}
+      {showHistory && (
+        <div className="border-b border-[#1a1f36]">
+          <ConversationHistory
+            onClose={handleHistoryClose}
+          />
+        </div>
+      )}
 
       {/* Settings Panel (collapsible) */}
       {showSettings && (
@@ -596,14 +814,22 @@ export function AdvisorChat({
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
         {/* Welcome message if no messages */}
         {messages.length === 0 && (
-          <WelcomeMessage
-            onSuggestionClick={setInput}
-            masterAgent={
-              advisorContext.masterAgent
-                ? getMasterAgentById(advisorContext.masterAgent)
-                : undefined
-            }
-          />
+          <>
+            <WelcomeMessage
+              onSuggestionClick={setInput}
+              masterAgent={
+                advisorContext.masterAgent
+                  ? getMasterAgentById(advisorContext.masterAgent)
+                  : undefined
+              }
+            />
+            {/* Smart question chips based on backtest context */}
+            <SmartQuestionChips
+              context={questionContext}
+              onQuestionSelect={handleSmartQuestionSelect}
+              showFallback={false}
+            />
+          </>
         )}
 
         {/* Message list */}
@@ -770,9 +996,13 @@ function WelcomeMessage({
 
 /**
  * Message Bubble Component
+ * Renders AI parameter suggestions inline when detected in assistant messages.
  */
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === "user";
+
+  // Parse suggestions from assistant messages
+  const suggestions = !isUser ? parseSuggestions(message.content) : [];
 
   return (
     <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
@@ -793,6 +1023,18 @@ function MessageBubble({ message }: { message: Message }) {
         <div className="prose prose-invert prose-sm max-w-none">
           <FormattedContent content={message.content} />
         </div>
+
+        {/* Actionable suggestions (only for assistant messages with structured suggestions) */}
+        {suggestions.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {suggestions.map((suggestion) => (
+              <ApplySuggestionButton
+                key={suggestion.id}
+                suggestion={suggestion}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Metadata */}
         {message.metadata?.responseTime && (

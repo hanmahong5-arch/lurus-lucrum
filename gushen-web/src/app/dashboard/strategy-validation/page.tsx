@@ -32,6 +32,10 @@ import {
   SignalDetailItem,
 } from "@/components/strategy-validation";
 import { DataSourceBadge, mapDataSourceString } from "@/components/ui/data-source-badge";
+import { BatchProgressBar } from "@/components/strategy-validation/batch-progress-bar";
+import { FailureAnalysisPanel } from "@/components/strategy-validation/failure-analysis-panel";
+import { useBatchBacktest } from "@/hooks/use-batch-backtest";
+import type { BatchBacktestRequest } from "@/lib/backtest/parallel/batch-backtest-types";
 import { SimulatedDataBanner } from "@/components/ui/simulated-data-banner";
 
 // =============================================================================
@@ -96,6 +100,9 @@ export default function StrategyValidationPage() {
   // Stock selection state for filtering signal details
   // 股票选择状态，用于过滤信号详情
   const [selectedStock, setSelectedStock] = useState<string | null>(null);
+
+  // Parallel batch backtest hook
+  const batch = useBatchBacktest();
 
   // AbortController ref for request cancellation
   // 用于请求取消的AbortController引用
@@ -450,7 +457,30 @@ export default function StrategyValidationPage() {
           </div>
         )}
 
-        {/* Main Content Grid */}
+        {/* Batch Progress Bar */}
+                {batch.status !== "idle" && (
+                  <div className="mb-6">
+                    <BatchProgressBar
+                      status={batch.status}
+                      completed={batch.completed}
+                      total={batch.total}
+                      failed={batch.failed}
+                      elapsedMs={batch.elapsedMs}
+                      currentItem={batch.currentItem}
+                      onCancel={batch.cancelBatch}
+                    />
+                    {batch.result?.isAnomalyMode && batch.result.failureBreakdown.length > 0 && (
+                      <FailureAnalysisPanel
+                        breakdowns={batch.result.failureBreakdown}
+                        totalStocks={batch.result.summary.totalStocks}
+                        failedStocks={batch.result.summary.failedStocks}
+                        className="mt-4"
+                      />
+                    )}
+                  </div>
+                )}
+        
+                {/* Main Content Grid */}
         <div className="grid lg:grid-cols-3 gap-6">
           {/* Left Column - Configuration */}
           <div className="lg:col-span-1">

@@ -17,6 +17,7 @@
 import { ReactNode } from 'react';
 import { useUserWorkspace } from '@/hooks/use-user-workspace';
 import { DashboardHeader } from './dashboard-header';
+import { MAIN_CONTENT_ID } from '@/lib/accessibility/skip-link';
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -93,7 +94,7 @@ export function DashboardLayout({
       <DashboardHeader />
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main id={MAIN_CONTENT_ID} className="max-w-7xl mx-auto px-6 py-8" role="main">
         {/* Optional Page Title */}
         {title && (
           <div className="mb-8">

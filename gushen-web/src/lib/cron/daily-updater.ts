@@ -11,6 +11,7 @@ import type { ScheduledTask } from 'node-cron';
 import { db, pool } from '@/lib/db';
 import { stocks, klineDaily, dataUpdateLog } from '@/lib/db/schema';
 import { eq, and, gte } from 'drizzle-orm';
+import { runIncrementalUpdate } from './incremental-updater';
 
 // ============================================================================
 // Types
@@ -128,10 +129,11 @@ async function fetchKLineFromAPI(
 
 export class DailyDataUpdater {
   private job: ScheduledTask | null = null;
+  private incrementalJob: ScheduledTask | null = null;
   private isRunning: boolean = false;
 
   /**
-   * Start the cron job
+   * Start the cron jobs
    * 启动定时任务
    */
   start() {
@@ -161,10 +163,51 @@ export class DailyDataUpdater {
     );
 
     console.log('[DailyUpdater] Daily update job scheduled at 15:30 CST (Mon-Fri)');
+
+    // Incremental update at 18:00 CST (after settlement, data fully available)
+    this.incrementalJob = cron.schedule(
+      '0 18 * * 1-5',
+      async () => {
+        console.log('[DailyUpdater] Incremental update cron triggered at', new Date().toISOString());
+
+        if (!isTradingDay()) {
+          console.log('[DailyUpdater] Not a trading day, skipping incremental update');
+          return;
+        }
+
+        try {
+          const result = await runIncrementalUpdate({
+            batchSize: 50,
+            batchDelayMs: 1000,
+          });
+
+          console.log(
+            JSON.stringify({
+              event: 'incremental_cron_complete',
+              success: result.success,
+              stocksUpdated: result.stocksUpdated,
+              recordsInserted: result.recordsInserted,
+              failedSymbols: result.failedSymbols.length,
+              durationMs: result.durationMs,
+            }),
+          );
+        } catch (error) {
+          console.error(
+            '[DailyUpdater] Incremental update cron failed:',
+            error instanceof Error ? error.message : String(error),
+          );
+        }
+      },
+      {
+        timezone: 'Asia/Shanghai',
+      }
+    );
+
+    console.log('[DailyUpdater] Incremental update job scheduled at 18:00 CST (Mon-Fri)');
   }
 
   /**
-   * Stop the cron job
+   * Stop the cron jobs
    * 停止定时任务
    */
   stop() {
@@ -172,6 +215,11 @@ export class DailyDataUpdater {
       this.job.stop();
       this.job = null;
       console.log('[DailyUpdater] Job stopped');
+    }
+    if (this.incrementalJob) {
+      this.incrementalJob.stop();
+      this.incrementalJob = null;
+      console.log('[DailyUpdater] Incremental job stopped');
     }
   }
 

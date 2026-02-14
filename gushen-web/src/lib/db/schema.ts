@@ -754,6 +754,47 @@ export const workflowStepCache = pgTable(
 );
 
 // ============================================================================
+// Strategy Version Management Tables (策略版本管理)
+// ============================================================================
+
+/**
+ * Strategy versions table - Tracks every code/parameter change
+ * 策略版本表 - 跟踪每次代码/参数变更
+ *
+ * Each save creates a new version record. Provides full audit trail
+ * for parameter tuning and code iteration history.
+ */
+export const strategyVersions = pgTable(
+  'strategy_versions',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** User who created this version / 创建此版本的用户 */
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Reference to parent strategy / 父策略引用 */
+    strategyHistoryId: integer('strategy_history_id')
+      .references(() => strategyHistory.id, { onDelete: 'cascade' }),
+    /** Strategy code snapshot / 策略代码快照 */
+    code: text('code').notNull(),
+    /** Parameters as JSON / 参数JSON */
+    params: jsonb('params').notNull(),
+    /** Auto-generated or manual description / 变更描述 */
+    description: varchar('description', { length: 500 }),
+    /** Score snapshot if available / 评分快照 */
+    score: jsonb('score'),
+    /** Version sequence number / 版本序号 */
+    versionNumber: integer('version_number').default(1).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('idx_strategy_versions_user').on(table.userId),
+    strategyIdx: index('idx_strategy_versions_strategy').on(table.strategyHistoryId),
+    createdIdx: index('idx_strategy_versions_created').on(table.createdAt),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -817,3 +858,7 @@ export type NewUserWorkflowSession = typeof userWorkflowSessions.$inferInsert;
 
 export type WorkflowStepCache = typeof workflowStepCache.$inferSelect;
 export type NewWorkflowStepCache = typeof workflowStepCache.$inferInsert;
+
+// Strategy version types
+export type StrategyVersion = typeof strategyVersions.$inferSelect;
+export type NewStrategyVersion = typeof strategyVersions.$inferInsert;

@@ -25,7 +25,9 @@ import {
   type CrossParameterValidationResult,
 } from "@/lib/strategy/parameter-parser";
 import { ParameterInfoDialog } from "./parameter-info-dialog";
-import { hasEnhancedInfo } from "@/lib/strategy/enhanced-parameter-info";
+import { hasEnhancedInfo, getEnhancedInfo } from "@/lib/strategy/enhanced-parameter-info";
+import { TwoLayerTooltip } from "@/components/ui/two-layer-tooltip";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 // =============================================================================
 // COMPONENT PROPS / 组件属性
@@ -231,6 +233,7 @@ export function ParameterEditor({
   }
 
   return (
+    <TooltipProvider delayDuration={300}>
     <div className="bg-surface/80 backdrop-blur-xl border border-border rounded-xl overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-primary/50 border-b border-border">
@@ -459,6 +462,7 @@ export function ParameterEditor({
         </div>
       </div>
     </div>
+    </TooltipProvider>
   );
 }
 
@@ -489,6 +493,9 @@ function ParameterInput({
   // State for parameter info dialog (Phase 3 UX enhancement)
   const [showInfo, setShowInfo] = useState(false);
   const hasInfo = hasEnhancedInfo(name);
+
+  // Retrieve enhanced info for two-layer tooltip (layman + professional)
+  const enhancedInfo = useMemo(() => hasInfo ? getEnhancedInfo(name) : null, [hasInfo, name]);
 
   // Handle focus event - trigger line highlight in code preview
   // 处理焦点事件 - 触发代码预览中的行高亮
@@ -565,13 +572,31 @@ function ParameterInput({
           {isModified && (
             <span className="w-1.5 h-1.5 rounded-full bg-accent" />
           )}
-          {/* Info icon button (Phase 3 UX enhancement) */}
-          {hasInfo && (
+          {/* Two-layer tooltip: hover for layman, click for professional */}
+          {hasInfo && enhancedInfo && (
+            <TwoLayerTooltip
+              layman={enhancedInfo.meaning}
+              professional={enhancedInfo.mechanism}
+            >
+              <button
+                type="button"
+                onClick={() => setShowInfo(true)}
+                className="text-white/30 hover:text-white/60 transition-colors p-0.5"
+                aria-label={`Parameter info: ${displayName}`}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+            </TwoLayerTooltip>
+          )}
+          {/* Fallback info icon for parameters without enhanced info */}
+          {hasInfo && !enhancedInfo && (
             <button
               type="button"
               onClick={() => setShowInfo(true)}
               className="text-white/30 hover:text-white/60 transition-colors p-0.5"
-              title="查看参数详细说明"
+              aria-label={`Parameter info: ${displayName}`}
             >
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
