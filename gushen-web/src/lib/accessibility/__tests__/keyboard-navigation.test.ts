@@ -54,9 +54,9 @@ describe('KeyboardNavigation', () => {
       controller.init();
 
       const items = container.querySelectorAll('.item');
-      expect(items[0].getAttribute('tabindex')).toBe('0');
-      expect(items[1].getAttribute('tabindex')).toBe('-1');
-      expect(items[2].getAttribute('tabindex')).toBe('-1');
+      expect(items[0]!.getAttribute('tabindex')).toBe('0');
+      expect(items[1]!.getAttribute('tabindex')).toBe('-1');
+      expect(items[2]!.getAttribute('tabindex')).toBe('-1');
 
       controller.destroy();
     });
@@ -83,8 +83,8 @@ describe('KeyboardNavigation', () => {
       expect(controller.getCurrentIndex()).toBe(2);
 
       const items = container.querySelectorAll('.item');
-      expect(items[2].getAttribute('tabindex')).toBe('0');
-      expect(items[0].getAttribute('tabindex')).toBe('-1');
+      expect(items[2]!.getAttribute('tabindex')).toBe('0');
+      expect(items[0]!.getAttribute('tabindex')).toBe('-1');
 
       controller.destroy();
     });

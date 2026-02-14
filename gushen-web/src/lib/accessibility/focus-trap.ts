@@ -116,8 +116,8 @@ export function createFocusTrap(
       return;
     }
 
-    const firstFocusable = focusableElements[0];
-    const lastFocusable = focusableElements[focusableElements.length - 1];
+    const firstFocusable = focusableElements[0]!;
+    const lastFocusable = focusableElements[focusableElements.length - 1]!;
     const activeElement = document.activeElement as HTMLElement;
 
     if (event.shiftKey) {
@@ -150,7 +150,7 @@ export function createFocusTrap(
       if (initialFocus) {
         initialFocus.focus();
       } else if (focusableElements.length > 0) {
-        focusableElements[0].focus();
+        focusableElements[0]!.focus();
       } else {
         // If no focusable elements, make container focusable
         container.setAttribute('tabindex', '-1');
@@ -189,7 +189,7 @@ export function createFocusTrap(
 export function focusFirstElement(container: HTMLElement): boolean {
   const elements = getFocusableElements(container);
   if (elements.length > 0) {
-    elements[0].focus();
+    elements[0]!.focus();
     return true;
   }
   return false;
@@ -204,7 +204,7 @@ export function focusFirstElement(container: HTMLElement): boolean {
 export function focusLastElement(container: HTMLElement): boolean {
   const elements = getFocusableElements(container);
   if (elements.length > 0) {
-    elements[elements.length - 1].focus();
+    elements[elements.length - 1]!.focus();
     return true;
   }
   return false;

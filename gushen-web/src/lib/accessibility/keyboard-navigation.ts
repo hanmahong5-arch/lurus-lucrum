@@ -109,8 +109,9 @@ export function createRovingTabindex(
     currentIndex = safeIndex;
 
     updateTabindex(items, currentIndex);
-    items[currentIndex].focus();
-    onFocusChange?.(items[currentIndex], currentIndex);
+    const currentItem = items[currentIndex]!;
+    currentItem.focus();
+    onFocusChange?.(currentItem, currentIndex);
   }
 
   function moveFocus(direction: -1 | 1): void {
@@ -141,14 +142,14 @@ export function createRovingTabindex(
       currentIndex = targetIndex;
     }
 
-    const prevKeys =
+    const prevKeys: KeyName[] =
       orientation === 'horizontal'
         ? [KEYS.ARROW_LEFT]
         : orientation === 'vertical'
         ? [KEYS.ARROW_UP]
         : [KEYS.ARROW_UP, KEYS.ARROW_LEFT];
 
-    const nextKeys =
+    const nextKeys: KeyName[] =
       orientation === 'horizontal'
         ? [KEYS.ARROW_RIGHT]
         : orientation === 'vertical'
@@ -169,7 +170,8 @@ export function createRovingTabindex(
       focusItem(items.length - 1);
     } else if (event.key === KEYS.ENTER || event.key === KEYS.SPACE) {
       event.preventDefault();
-      onActivate?.(items[currentIndex], currentIndex);
+      const activeItem = items[currentIndex];
+      if (activeItem) onActivate?.(activeItem, currentIndex);
     }
   }
 

@@ -108,7 +108,7 @@ describe('RiskManager', () => {
   describe('getLimits', () => {
     it('should return a copy of limits', () => {
       const rm = new RiskManager(MODERATE_LIMITS);
-      const limits = rm.getLimits();
+      const limits = rm.getLimits() as unknown as Record<string, unknown>;
       limits.maxPositionValue = 999;
       // Original should not be affected
       expect(rm.getLimits().maxPositionValue).toBe(MODERATE_LIMITS.maxPositionValue);
