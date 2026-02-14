@@ -105,9 +105,12 @@ export function checkContrast(foreground: RGBColor, background: RGBColor): Contr
 export function hexToRgb(hex: string): RGBColor | null {
   const cleaned = hex.replace(/^#/, '');
   if (cleaned.length === 3) {
-    const r = parseInt(cleaned[0] + cleaned[0], 16);
-    const g = parseInt(cleaned[1] + cleaned[1], 16);
-    const b = parseInt(cleaned[2] + cleaned[2], 16);
+    const c0 = cleaned.charAt(0);
+    const c1 = cleaned.charAt(1);
+    const c2 = cleaned.charAt(2);
+    const r = parseInt(c0 + c0, 16);
+    const g = parseInt(c1 + c1, 16);
+    const b = parseInt(c2 + c2, 16);
     if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
     return [r, g, b];
   }
