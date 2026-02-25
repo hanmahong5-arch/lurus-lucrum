@@ -1,18 +1,17 @@
 /**
  * NextAuth.js Configuration
  *
- * Authentication for GuShen platform via Lurus SSO (Zitadel).
- * Primary: lurus-sso provider (cookie-based session from api.lurus.cn)
+ * Authentication for GuShen platform via Zitadel OIDC.
+ * Primary: ZitadelProvider (direct OIDC/PKCE integration)
  * Fallback: local credentials provider (demo accounts, dev only)
  */
 
 import { NextAuthOptions } from "next-auth";
+import ZitadelProvider from "next-auth/providers/zitadel";
 import CredentialsProvider from "next-auth/providers/credentials";
 import { compare } from "bcryptjs";
 
-const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const SESSION_ENDPOINT = `${LURUS_API_URL}/api/v2/auth/session-info`;
-const SESSION_REFRESH_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+const ZITADEL_ISSUER = process.env.ZITADEL_ISSUER || "https://auth.lurus.cn";
 
 // Demo accounts for local development only
 const DEMO_USERS = [
@@ -35,60 +34,32 @@ const DEMO_USERS = [
 ];
 
 /**
- * Call lurus-api session-info endpoint to verify a session cookie.
- * Returns user data or null if session is invalid.
+ * Extract role from Zitadel profile claims.
+ * Zitadel encodes project roles under: urn:zitadel:iam:org:project:roles
  */
-async function verifyLurusSession(cookies: string) {
-  const response = await fetch(SESSION_ENDPOINT, {
-    method: "GET",
-    headers: {
-      "Cookie": cookies,
-      "Accept": "application/json",
-    },
-  });
+function extractZitadelRole(
+  profile: Record<string, unknown> | undefined,
+): "free" | "standard" | "premium" {
+  if (!profile) return "free";
 
-  if (!response.ok) return null;
+  // Zitadel role claims key (configured per-project in Zitadel console)
+  const rolesClaim = "urn:zitadel:iam:org:project:roles";
+  const roles = profile[rolesClaim] as Record<string, unknown> | undefined;
 
-  const body = await response.json();
+  if (!roles) return "free";
 
-  // Response shape: { success: true, data: { id, username, display_name, role, status, ... } }
-  if (!body.success || !body.data) return null;
-
-  return body.data;
+  if ("premium" in roles) return "premium";
+  if ("standard" in roles) return "standard";
+  return "free";
 }
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    // Lurus SSO — verifies .lurus.cn session cookie via api.lurus.cn
-    CredentialsProvider({
-      id: "lurus-sso",
-      name: "Lurus SSO",
-      credentials: {
-        sessionCheck: { label: "Session Check", type: "text" },
-      },
-      async authorize(_credentials, req) {
-        const cookies = req.headers?.cookie || "";
-
-        try {
-          const userData = await verifyLurusSession(cookies);
-
-          if (!userData) {
-            console.log("Lurus SSO: session verification failed");
-            return null;
-          }
-
-          return {
-            id: userData.id.toString(),
-            email: userData.email || "",
-            name: userData.display_name || userData.username,
-            lurusUserId: userData.id,
-            role: "free",
-          };
-        } catch (error) {
-          console.error("Lurus SSO: error verifying session:", error);
-          return null;
-        }
-      },
+    // Zitadel OIDC — direct OIDC integration, PKCE if no client secret
+    ZitadelProvider({
+      issuer: ZITADEL_ISSUER,
+      clientId: process.env.ZITADEL_CLIENT_ID!,
+      clientSecret: process.env.ZITADEL_CLIENT_SECRET ?? "",
     }),
 
     // Local credentials — demo accounts for development
@@ -105,7 +76,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         const user = DEMO_USERS.find(
-          (u) => u.email.toLowerCase() === credentials.email.toLowerCase()
+          (u) => u.email.toLowerCase() === credentials.email.toLowerCase(),
         );
 
         if (!user) {
@@ -142,28 +113,27 @@ export const authOptions: NextAuthOptions = {
   },
 
   callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
+    async jwt({ token, user, account, profile }) {
+      // Initial sign-in: populate token from user and provider profile
+      if (user && account) {
         token.id = user.id;
-        token.role = (user as any).role || "free";
-        token.lurusUserId = (user as any).lurusUserId;
-        token.email = user.email;
-        token.lastRefresh = Date.now();
-      }
+        token.email = user.email ?? token.email;
+        token.name = user.name ?? token.name;
 
-      // Periodic refresh — re-validate session every 30 minutes
-      const now = Date.now();
-      const lastRefresh = (token.lastRefresh as number) || 0;
-
-      if (token.lurusUserId && now - lastRefresh > SESSION_REFRESH_INTERVAL_MS) {
-        try {
-          // Server-side refresh cannot forward browser cookies,
-          // so we just update the timestamp to avoid repeated attempts.
-          // Full re-auth happens on next browser request via middleware.
-          token.lastRefresh = now;
-        } catch (err) {
-          console.error("Failed to refresh session:", err);
+        if (account.provider === "zitadel") {
+          // Map Zitadel profile fields: sub, email, name, preferred_username
+          const zitadelProfile = profile as Record<string, unknown> | undefined;
+          token.sub = (zitadelProfile?.sub as string | undefined) ?? user.id;
+          token.role = extractZitadelRole(zitadelProfile);
+        } else {
+          // credentials provider
+          token.role = (user as { role?: string }).role ?? "free";
         }
+      } else if (user) {
+        // credentials-only sign-in path
+        token.id = user.id;
+        token.role = (user as { role?: string }).role ?? "free";
+        token.email = user.email ?? token.email;
       }
 
       return token;
@@ -171,14 +141,21 @@ export const authOptions: NextAuthOptions = {
 
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.id || token.lurusUserId;
-        (session.user as any).role = token.role;
-        (session.user as any).lurusUserId = token.lurusUserId;
+        (session.user as { id: string }).id = (token.id ?? token.sub) as string;
+        (session.user as { role: string }).role =
+          (token.role as string) ?? "free";
         if (token.email) {
           session.user.email = token.email as string;
         }
       }
       return session;
+    },
+
+    async redirect({ url, baseUrl }) {
+      // Redirect to dashboard after sign-in unless a specific callbackUrl is given
+      if (url.startsWith(baseUrl)) return url;
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      return `${baseUrl}/dashboard`;
     },
   },
 
@@ -196,13 +173,11 @@ declare module "next-auth" {
       email?: string | null;
       image?: string | null;
       role: "free" | "standard" | "premium";
-      lurusUserId?: number;
     };
   }
 
   interface User {
     role?: string;
-    lurusUserId?: number;
   }
 }
 
@@ -210,7 +185,5 @@ declare module "next-auth/jwt" {
   interface JWT {
     id: string;
     role: string;
-    lurusUserId?: number;
-    lastRefresh?: number;
   }
 }

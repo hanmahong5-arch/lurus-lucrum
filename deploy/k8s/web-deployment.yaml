@@ -57,11 +57,17 @@ spec:
             - name: API_URL
               value: "http://ai-qtrd-api:8000"
 
-            # Lurus SSO integration
+            # Lurus integration
             - name: LURUS_API_URL
               value: "https://api.lurus.cn"
             - name: TENANT_SLUG
               value: "lurus"
+            - name: NEXT_PUBLIC_LURUS_API_URL
+              value: "https://api.lurus.cn"
+            - name: NEXT_PUBLIC_TENANT_SLUG
+              value: "lurus"
+
+            # NextAuth.js + Zitadel OIDC
             - name: NEXTAUTH_URL
               value: "https://gushen.lurus.cn"
             - name: NEXTAUTH_SECRET
@@ -69,6 +75,12 @@ spec:
                 secretKeyRef:
                   name: ai-qtrd-secrets
                   key: NEXTAUTH_SECRET
+            - name: ZITADEL_ISSUER
+              value: "https://auth.lurus.cn"
+            - name: ZITADEL_CLIENT_ID
+              value: "358400000000065537@lurus-api"
+            - name: ZITADEL_CLIENT_SECRET
+              value: ""
 
             # Redis configuration
             - name: REDIS_ENABLED

@@ -4,7 +4,8 @@
  * Login Page
  *
  * User authentication page for GuShen platform.
- * Supports email/password login with future OIDC integration.
+ * Primary flow: Zitadel OIDC via signIn("zitadel")
+ * Fallback: local credentials for demo/development
  */
 
 import { useState, Suspense } from "react";
@@ -14,7 +15,6 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Mail, Lock, AlertCircle, Loader2, LogIn } from "lucide-react";
 import { RiskDisclaimer, RiskAgreementCheckbox } from "@/components/auth";
-import { redirectToLurusLogin } from "@/lib/auth/login-redirect";
 
 function LoginForm() {
   const router = useRouter();
@@ -30,11 +30,21 @@ function LoginForm() {
   const [showResetSuccess, setShowResetSuccess] = useState(resetSuccess);
   const [showLocalLogin, setShowLocalLogin] = useState(false);
   // Risk agreement state - user must agree to investment risks before login
-  // 风险声明同意状态 - 用户必须同意投资风险才能登录
   const [agreedToRisk, setAgreedToRisk] = useState(false);
 
-  const handleSSOLogin = () => {
-    redirectToLurusLogin(callbackUrl);
+  const handleSSOLogin = async () => {
+    if (!agreedToRisk) {
+      setErrorMessage("请先阅读并同意投资风险提示");
+      return;
+    }
+    setIsLoading(true);
+    setErrorMessage("");
+    try {
+      await signIn("zitadel", { callbackUrl });
+    } catch {
+      setErrorMessage("跳转登录页失败，请重试");
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -42,8 +52,6 @@ function LoginForm() {
     setIsLoading(true);
     setErrorMessage("");
 
-    // Validate risk agreement before proceeding
-    // 验证风险声明同意状态
     if (!agreedToRisk) {
       setErrorMessage("请先阅读并同意投资风险提示");
       setIsLoading(false);
@@ -64,7 +72,7 @@ function LoginForm() {
         router.push(callbackUrl);
         router.refresh();
       }
-    } catch (err) {
+    } catch {
       setErrorMessage("登录失败，请重试");
     } finally {
       setIsLoading(false);
@@ -94,14 +102,35 @@ function LoginForm() {
         </div>
       )}
 
+      {/* Risk Disclaimer - visible always, controls login button state */}
+      <RiskDisclaimer compact className="mb-4" />
+
+      {/* Risk Agreement Checkbox - controls both SSO and local login */}
+      <RiskAgreementCheckbox
+        checked={agreedToRisk}
+        onChange={setAgreedToRisk}
+        disabled={isLoading}
+        className="mb-5"
+      />
+
       {/* Primary SSO Login Button */}
       <Button
         type="button"
         onClick={handleSSOLogin}
-        className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold text-base shadow-lg shadow-amber-500/20 transition-all"
+        disabled={isLoading || !agreedToRisk}
+        className="w-full py-4 bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-slate-900 font-semibold text-base shadow-lg shadow-amber-500/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <LogIn className="w-5 h-5 mr-2" />
-        使用 Lurus 账户登录
+        {isLoading ? (
+          <>
+            <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+            跳转中...
+          </>
+        ) : (
+          <>
+            <LogIn className="w-5 h-5 mr-2" />
+            使用 Lurus 账户登录
+          </>
+        )}
       </Button>
 
       <p className="text-center text-xs text-slate-500 mt-2">
@@ -129,65 +158,55 @@ function LoginForm() {
 
       {/* Local Login Form (Collapsible) */}
       {showLocalLogin && (
-        <form onSubmit={handleSubmit} className="space-y-4 mt-4 p-4 bg-slate-700/20 rounded-lg border border-slate-600/50">
-        {/* Email Input */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">
-            邮箱地址
-          </label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="your@email.com"
-              className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-              required
-              disabled={isLoading}
-            />
-          </div>
-        </div>
-
-        {/* Password Input */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm font-medium text-slate-300">
-              密码
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-4 mt-4 p-4 bg-slate-700/20 rounded-lg border border-slate-600/50"
+        >
+          {/* Email Input */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              邮箱地址
             </label>
-            <Link
-              href="/auth/forgot-password"
-              className="text-xs text-amber-500 hover:text-amber-400 transition"
-            >
-              忘记密码？
-            </Link>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="your@email.com"
+                className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
+                required
+                disabled={isLoading}
+              />
+            </div>
           </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-            <input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="••••••••"
-              className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
-              required
-              disabled={isLoading}
-            />
+
+          {/* Password Input */}
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <label className="block text-sm font-medium text-slate-300">
+                密码
+              </label>
+              <Link
+                href="/auth/forgot-password"
+                className="text-xs text-amber-500 hover:text-amber-400 transition"
+              >
+                忘记密码？
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-10 pr-4 py-3 bg-slate-700/50 border border-slate-600 rounded-lg text-white placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-amber-500/50 focus:border-amber-500 transition"
+                required
+                disabled={isLoading}
+              />
+            </div>
           </div>
-        </div>
-
-        {/* Risk Disclaimer - Investment risk warning */}
-        {/* 风险声明 - 投资风险提示 */}
-        <RiskDisclaimer compact className="mt-4" />
-
-        {/* Risk Agreement Checkbox */}
-        {/* 风险协议同意复选框 */}
-        <RiskAgreementCheckbox
-          checked={agreedToRisk}
-          onChange={setAgreedToRisk}
-          disabled={isLoading}
-          className="mt-3"
-        />
 
           {/* Submit Button */}
           <Button
@@ -204,17 +223,6 @@ function LoginForm() {
               "使用本地账户登录"
             )}
           </Button>
-
-          {/* Demo Account Info */}
-          <div className="mt-4 p-3 bg-slate-700/50 rounded-lg border border-slate-600/50">
-            <p className="text-xs text-slate-400 mb-2">演示账户:</p>
-            <p className="text-sm text-slate-300">
-              邮箱: <code className="text-amber-400">demo@lurus.cn</code>
-            </p>
-            <p className="text-sm text-slate-300">
-              密码: <code className="text-amber-400">demo123</code>
-            </p>
-          </div>
         </form>
       )}
 

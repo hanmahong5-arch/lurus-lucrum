@@ -47,6 +47,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/trading', label: '交易面板', labelEn: 'Trading' },
   { href: '/dashboard/insights', label: '机构洞察', labelEn: 'Insights' },
   { href: '/dashboard/advisor', label: '投资顾问', labelEn: 'Advisor' },
+  { href: '/backtest-agent', label: 'AI 回测', labelEn: 'AI Backtest' },
   { href: '/dashboard/history', label: '历史记录', labelEn: 'History' },
 ];
 

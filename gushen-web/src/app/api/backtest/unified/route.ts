@@ -24,6 +24,7 @@ import type {
   SectorAggregatedResult,
   StockBacktestResult,
   DetailedTrade,
+  BacktestKline,
 } from "@/lib/backtest/types";
 import {
   buildReturnMetrics,
@@ -35,6 +36,8 @@ import {
   getSectorStocks,
   type SectorStock,
 } from "@/lib/data-service/sources/eastmoney-sector";
+import { runBacktest } from "@/lib/backtest/engine";
+import { getKLineFromDatabase } from "@/lib/backtest/db-kline-provider";
 
 // =============================================================================
 // CONSTANTS / 常量
@@ -494,195 +497,59 @@ function validateRequest(
 // =============================================================================
 
 /**
- * Generate mock equity curve for demonstration
- * 生成模拟净值曲线用于演示
+ * Build a minimal strategy code string from strategy request params.
+ * The engine's parseStrategyCode() extracts indicators via keyword detection,
+ * and parameters via "key = value" regex patterns.
+ * 根据策略请求参数构建最小策略代码字符串
  */
-function generateMockEquityCurve(
-  startDate: string,
-  endDate: string,
-  initialCapital: number,
-  volatility: number = 0.02,
-): Array<{
-  date: string;
-  equity: number;
-  benchmark?: number;
-  drawdown: number;
-}> {
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const curve: Array<{
-    date: string;
-    equity: number;
-    benchmark?: number;
-    drawdown: number;
-  }> = [];
+function buildStrategyCode(
+  strategy?: UnifiedBacktestRequest["strategy"],
+): string {
+  if (!strategy) {
+    return "class MACrossStrategy:\n  fast_window = 5\n  slow_window = 20\n  sma";
+  }
 
-  let equity = initialCapital;
-  let benchmark = initialCapital;
-  let peak = initialCapital;
+  if (strategy.type === "custom" && strategy.customCode) {
+    return strategy.customCode;
+  }
 
-  const current = new Date(start);
-  while (current <= end) {
-    // Skip weekends
-    if (current.getDay() !== 0 && current.getDay() !== 6) {
-      // Random walk with slight upward bias
-      const change = (Math.random() - 0.48) * volatility;
-      equity = equity * (1 + change);
+  const params = strategy.params ?? {};
+  const builtinId = strategy.builtinId ?? "ma_cross";
 
-      // Benchmark with lower volatility
-      const benchmarkChange = (Math.random() - 0.48) * (volatility * 0.6);
-      benchmark = benchmark * (1 + benchmarkChange);
-
-      // Track peak and drawdown
-      if (equity > peak) peak = equity;
-      const drawdown = ((peak - equity) / peak) * 100;
-
-      curve.push({
-        date: current.toISOString().split("T")[0]!,
-        equity: Math.round(equity * 100) / 100,
-        benchmark: Math.round(benchmark * 100) / 100,
-        drawdown: Math.round(drawdown * 100) / 100,
-      });
+  switch (builtinId) {
+    case "ma_cross": {
+      const fast = params.fast_window ?? params.fast ?? 5;
+      const slow = params.slow_window ?? params.slow ?? 20;
+      return `class MACrossStrategy:\n  fast_window = ${fast}\n  slow_window = ${slow}\n  sma`;
     }
-
-    current.setDate(current.getDate() + 1);
+    case "rsi": {
+      const period = params.rsi_period ?? params.rsi_window ?? 14;
+      const buy = params.rsi_buy ?? params.oversold ?? 30;
+      const sell = params.rsi_sell ?? params.overbought ?? 70;
+      return `class RSIStrategy:\n  rsi_period = ${period}\n  rsi_buy = ${buy}\n  rsi_sell = ${sell}\n  rsi RSI`;
+    }
+    case "macd": {
+      return `class MACDStrategy:\n  macd MACD`;
+    }
+    case "boll": {
+      const period = params.boll_period ?? params.period ?? 20;
+      return `class BollingerStrategy:\n  boll_period = ${period}\n  boll 布林`;
+    }
+    default:
+      return `class MACrossStrategy:\n  fast_window = 5\n  slow_window = 20\n  sma`;
   }
-
-  return curve;
 }
 
 /**
- * Generate mock trades for demonstration
- * 生成模拟交易记录用于演示
- */
-function generateMockTrades(
-  equityCurve: Array<{ date: string; equity: number }>,
-  symbol: string,
-  symbolName: string,
-): DetailedTrade[] {
-  const trades: DetailedTrade[] = [];
-
-  // Handle empty curve
-  if (equityCurve.length < 2) {
-    return trades;
-  }
-
-  const numTrades = Math.floor(Math.random() * 15) + 5;
-
-  for (let i = 0; i < numTrades; i++) {
-    const buyIdx = Math.floor(
-      Math.random() * Math.max(1, equityCurve.length - 10),
-    );
-    const holdingDays = Math.floor(Math.random() * 10) + 1;
-    const sellIdx = Math.min(buyIdx + holdingDays, equityCurve.length - 1);
-
-    const buyEntry = equityCurve[buyIdx];
-    const sellEntry = equityCurve[sellIdx];
-
-    if (!buyEntry || !sellEntry) continue;
-
-    const buyDate = buyEntry.date;
-    const sellDate = sellEntry.date;
-    const buyPrice = 100 + Math.random() * 50;
-    const sellPrice = buyPrice * (1 + (Math.random() - 0.4) * 0.1);
-    const pnlPercent = ((sellPrice - buyPrice) / buyPrice) * 100;
-
-    const buyTradeId = uuidv4();
-
-    // Buy trade
-    trades.push({
-      id: buyTradeId,
-      timestamp: new Date(buyDate).getTime(),
-      date: buyDate,
-      type: "buy",
-      symbol,
-      symbolName,
-      signalPrice: buyPrice,
-      executePrice: buyPrice * 1.001,
-      slippage: buyPrice * 0.001,
-      slippagePercent: 0.1,
-      commission: buyPrice * 100 * 0.0003,
-      commissionPercent: 0.03,
-      totalCost: buyPrice * 100 * 0.0013,
-      lotCalculation: {
-        requestedQuantity: 100,
-        actualLots: 1,
-        actualQuantity: 100,
-        lotSize: 100,
-        roundingLoss: 0,
-        roundingLossPercent: 0,
-      },
-      requestedQuantity: 100,
-      actualQuantity: 100,
-      lots: 1,
-      lotSize: 100,
-      quantityUnit: "股",
-      orderValue: buyPrice * 100,
-      cashBefore: 100000,
-      cashAfter: 100000 - buyPrice * 100,
-      positionBefore: 0,
-      positionAfter: 100,
-      portfolioValueBefore: 100000,
-      portfolioValueAfter: 100000,
-      triggerReason: "MACD金叉",
-      indicatorValues: { macd_dif: 0.5, macd_dea: 0.3 },
-    });
-
-    // Sell trade
-    trades.push({
-      id: uuidv4(),
-      timestamp: new Date(sellDate).getTime(),
-      date: sellDate,
-      type: "sell",
-      symbol,
-      symbolName,
-      signalPrice: sellPrice,
-      executePrice: sellPrice * 0.999,
-      slippage: sellPrice * 0.001,
-      slippagePercent: 0.1,
-      commission: sellPrice * 100 * 0.0003,
-      commissionPercent: 0.03,
-      totalCost: sellPrice * 100 * 0.0013,
-      lotCalculation: {
-        requestedQuantity: 100,
-        actualLots: 1,
-        actualQuantity: 100,
-        lotSize: 100,
-        roundingLoss: 0,
-        roundingLossPercent: 0,
-      },
-      requestedQuantity: 100,
-      actualQuantity: 100,
-      lots: 1,
-      lotSize: 100,
-      quantityUnit: "股",
-      orderValue: sellPrice * 100,
-      cashBefore: 100000 - buyPrice * 100,
-      cashAfter: 100000 - buyPrice * 100 + sellPrice * 100,
-      positionBefore: 100,
-      positionAfter: 0,
-      portfolioValueBefore: 100000,
-      portfolioValueAfter: 100000 + (sellPrice - buyPrice) * 100,
-      pnl: (sellPrice - buyPrice) * 100,
-      pnlPercent,
-      holdingDays,
-      entryTradeId: buyTradeId,
-      triggerReason: "持仓到期",
-      indicatorValues: { macd_dif: -0.2, macd_dea: 0.1 },
-    });
-  }
-
-  return trades;
-}
-
-/**
- * Run backtest for single stock
- * 对单只股票运行回测
+ * Run backtest for a single stock using real K-line data from PostgreSQL.
+ * Falls back to BT201/BT202 errors when data coverage is insufficient.
+ * 使用 PostgreSQL 真实 K 线数据对单只股票运行回测
  */
 async function runStockBacktest(
   symbol: string,
   symbolName: string,
   config: UnifiedBacktestRequest["config"],
+  strategy?: UnifiedBacktestRequest["strategy"],
 ): Promise<{
   equityCurve: Array<{
     date: string;
@@ -694,18 +561,69 @@ async function runStockBacktest(
   returnMetrics: ReturnMetrics;
   riskMetrics: RiskMetrics;
   tradingMetrics: TradingMetrics;
+  dataSource: "postgresql";
 }> {
-  // Generate mock data for demonstration
-  // In production, this would call actual backtest engine
-  const equityCurve = generateMockEquityCurve(
+  // Fetch K-line data from database
+  const dbResult = await getKLineFromDatabase(
+    symbol,
     config.startDate,
     config.endDate,
-    config.initialCapital,
   );
 
-  const trades = generateMockTrades(equityCurve, symbol, symbolName);
+  if (!dbResult.success || dbResult.data.length < 5) {
+    if (
+      dbResult.coverage !== undefined &&
+      dbResult.coverage < 0.85
+    ) {
+      const err = new Error(
+        `数据不足，无法回测: ${symbol} 数据覆盖率 ${(dbResult.coverage * 100).toFixed(1)}%（要求 ≥ 85%）`,
+      );
+      (err as Error & { code: string }).code = ErrorCodes.INSUFFICIENT_DATA;
+      throw err;
+    }
+    const err = new Error(
+      `数据库连接失败，无法获取 ${symbol} 的 K 线数据: ${dbResult.error ?? "unknown"}`,
+    );
+    (err as Error & { code: string }).code = "BT202";
+    throw err;
+  }
 
-  // Build metrics
+  // Convert KLineData to BacktestKline (drop the optional amount field)
+  const klines: BacktestKline[] = dbResult.data.map((kl) => ({
+    time: kl.time,
+    open: kl.open,
+    high: kl.high,
+    low: kl.low,
+    close: kl.close,
+    volume: kl.volume,
+  }));
+
+  // Build BacktestConfig
+  const btConfig = {
+    symbol,
+    initialCapital: config.initialCapital,
+    commission: config.commission ?? 0.0003,
+    slippage: config.slippage ?? 0.001,
+    startDate: config.startDate,
+    endDate: config.endDate,
+    timeframe: (config.timeframe ?? "1d") as "1d",
+  };
+
+  // Build strategy code string and run engine
+  const strategyCode = buildStrategyCode(strategy);
+  const result = await runBacktest(strategyCode, klines, btConfig);
+
+  // EquityPoint[] already has { date, equity, drawdown } — directly compatible
+  const equityCurve = result.equityCurve.map((ep) => ({
+    date: ep.date,
+    equity: ep.equity,
+    drawdown: ep.drawdown,
+  }));
+
+  // Prefer detailed trades from enhanced result; fall back to an empty array
+  const trades: DetailedTrade[] = result.enhanced?.trades ?? [];
+
+  // Build unified metrics
   const returnMetrics = buildReturnMetrics(equityCurve);
   const riskMetrics = buildRiskMetrics(equityCurve);
   const tradingMetrics = buildTradingMetrics(
@@ -713,7 +631,7 @@ async function runStockBacktest(
     equityCurve.length,
   );
 
-  return { equityCurve, trades, returnMetrics, riskMetrics, tradingMetrics };
+  return { equityCurve, trades, returnMetrics, riskMetrics, tradingMetrics, dataSource: "postgresql" };
 }
 
 /**
@@ -775,6 +693,7 @@ async function runSectorBacktest(
         stock.symbol,
         stock.name,
         request.config,
+        request.strategy,
       );
 
       stockResults.push({
@@ -901,7 +820,7 @@ async function runIndividualBacktest(
   }
 
   const { symbol, name: symbolName } = target.stock;
-  const result = await runStockBacktest(symbol, symbolName, request.config);
+  const result = await runStockBacktest(symbol, symbolName, request.config, request.strategy);
 
   // Diagnostics
   const diagnostics =
@@ -981,6 +900,7 @@ async function runPortfolioBacktest(
         stock.symbol,
         stock.name,
         request.config,
+        request.strategy,
       );
 
       stockResults.push({
@@ -1137,14 +1057,43 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: result,
+      metadata: { dataSource: "postgresql" },
     });
   } catch (error) {
     console.error("Unified backtest error:", error);
 
     const errorMessage =
       error instanceof Error ? error.message : "Unknown error";
+    const errorCode = (error as { code?: string }).code;
 
-    // Determine error type and return appropriate response
+    // Insufficient data coverage (BT201)
+    if (
+      errorCode === ErrorCodes.INSUFFICIENT_DATA ||
+      errorMessage.includes("数据不足")
+    ) {
+      return createErrorResponse(
+        ErrorCodes.INSUFFICIENT_DATA,
+        errorMessage,
+        "Insufficient data coverage for backtest",
+        422,
+        undefined,
+        "请选择数据更充足的股票或缩短回测时间范围",
+      );
+    }
+
+    // Database connection failure (BT202)
+    if (errorCode === "BT202" || errorMessage.includes("数据库连接失败")) {
+      return createErrorResponse(
+        "BT202",
+        errorMessage,
+        "Database connection failed",
+        502,
+        undefined,
+        "请稍后重试，若持续出现请联系管理员",
+      );
+    }
+
+    // Sector data fetch failure
     if (
       errorMessage.includes("获取板块成分股失败") ||
       errorMessage.includes("fetch")
