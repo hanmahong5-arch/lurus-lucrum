@@ -16,12 +16,14 @@
 
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import {
   BUILTIN_TEMPLATES,
   DIFFICULTY_CONFIG,
   type BuiltinTemplate,
 } from "@/lib/strategy-templates/builtin-templates";
+import type { PlanTier } from "@/lib/config/plan-limits";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 
 // =============================================================================
 // TYPES
@@ -30,6 +32,8 @@ import {
 interface BuiltinTemplateGridProps {
   /** Callback when user selects a template */
   onSelectTemplate: (template: BuiltinTemplateSelection) => void;
+  /** Current user's plan tier (defaults to "free") */
+  userPlan?: PlanTier;
   /** Additional CSS classes */
   className?: string;
 }
@@ -104,14 +108,31 @@ function ScoreRangeIndicator({
 /**
  * Single builtin template card
  */
+/** Tier hierarchy for access checks */
+const TIER_ORDER: Record<PlanTier, number> = { free: 0, standard: 1, premium: 2 };
+
+function isTemplateLocked(templateTier: PlanTier, userPlan: PlanTier): boolean {
+  return TIER_ORDER[userPlan] < TIER_ORDER[templateTier];
+}
+
 function BuiltinTemplateCard({
   template,
   onSelect,
+  userPlan = "free",
+  onLockClick,
 }: {
   template: BuiltinTemplate;
   onSelect: (template: BuiltinTemplateSelection) => void;
+  userPlan?: PlanTier;
+  onLockClick: (templateName: string) => void;
 }) {
+  const locked = isTemplateLocked(template.tier, userPlan);
+
   const handleUse = () => {
+    if (locked) {
+      onLockClick(template.name);
+      return;
+    }
     onSelect({
       id: template.id,
       name: template.name,
@@ -128,7 +149,7 @@ function BuiltinTemplateCard({
 
   return (
     <div
-      className="border border-gray-700 rounded-lg bg-gray-800/50 hover:border-gray-500 transition-colors p-4 flex flex-col gap-3"
+      className={`border border-gray-700 rounded-lg bg-gray-800/50 transition-colors p-4 flex flex-col gap-3 ${locked ? "opacity-60" : "hover:border-gray-500"}`}
       data-testid={`builtin-template-card-${template.id}`}
     >
       {/* Header: icon + name + difficulty + score */}
@@ -136,6 +157,7 @@ function BuiltinTemplateCard({
         <div className="flex items-center gap-2 min-w-0">
           <span className="text-xl flex-shrink-0">{template.icon}</span>
           <h3 className="font-medium text-white truncate">{template.name}</h3>
+          {locked && <span className="text-sm">🔒</span>}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           <ScoreRangeIndicator
@@ -150,7 +172,7 @@ function BuiltinTemplateCard({
       <p className="text-sm text-gray-400">{template.description}</p>
 
       {/* Conditions summary */}
-      <div className="grid grid-cols-2 gap-2 text-xs">
+      <div className={`grid grid-cols-2 gap-2 text-xs ${locked ? "blur-sm select-none" : ""}`}>
         <div className="bg-green-900/20 border border-green-800/30 rounded px-2 py-1.5">
           <span className="text-green-400 font-medium">买入:</span>
           <ul className="text-gray-300 mt-0.5 space-y-0.5">
@@ -175,13 +197,17 @@ function BuiltinTemplateCard({
         </div>
       </div>
 
-      {/* Use button */}
+      {/* Use / Unlock button */}
       <button
         onClick={handleUse}
-        className="w-full px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors font-medium"
-        aria-label={`使用${template.name}`}
+        className={`w-full px-4 py-2 text-white text-sm rounded transition-colors font-medium ${
+          locked
+            ? "bg-slate-600 hover:bg-slate-500"
+            : "bg-blue-600 hover:bg-blue-500"
+        }`}
+        aria-label={locked ? `解锁${template.name}` : `使用${template.name}`}
       >
-        使用
+        {locked ? "🔒 解锁" : "使用"}
       </button>
     </div>
   );
@@ -199,8 +225,17 @@ function BuiltinTemplateCard({
  */
 export function BuiltinTemplateGrid({
   onSelectTemplate,
+  userPlan = "free",
   className = "",
 }: BuiltinTemplateGridProps) {
+  const [lockDialogOpen, setLockDialogOpen] = useState(false);
+  const [lockedTemplateName, setLockedTemplateName] = useState("");
+
+  const handleLockClick = (templateName: string) => {
+    setLockedTemplateName(templateName);
+    setLockDialogOpen(true);
+  };
+
   return (
     <div
       className={`space-y-4 ${className}`}
@@ -229,6 +264,8 @@ export function BuiltinTemplateGrid({
             key={template.id}
             template={template}
             onSelect={onSelectTemplate}
+            userPlan={userPlan}
+            onLockClick={handleLockClick}
           />
         ))}
       </div>
@@ -240,6 +277,14 @@ export function BuiltinTemplateGrid({
           策略模板仅供学习参考，不构成投资建议。实盘交易需根据实际情况调整参数并做好风险管理。
         </p>
       </div>
+
+      {/* Upgrade dialog for locked templates */}
+      <UpgradeDialog
+        open={lockDialogOpen}
+        onOpenChange={setLockDialogOpen}
+        variant="lock"
+        templateName={lockedTemplateName}
+      />
     </div>
   );
 }

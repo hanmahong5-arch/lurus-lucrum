@@ -29,6 +29,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { ParameterBoundaryPanel } from "./parameter-boundary-panel";
+import { useFeatureUsage } from "@/hooks/use-feature-usage";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 
 // Types for API responses
 interface ParameterSuggestion {
@@ -167,6 +169,10 @@ export function AIStrategyAssistant({
   onApplyAllSuggestions,
   className,
 }: AIStrategyAssistantProps) {
+  // Usage tracking
+  const { usage, isBlocked, refresh: refreshUsage } = useFeatureUsage();
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+
   // State management
   const [activeTab, setActiveTab] = useState("optimize");
   const [isLoading, setIsLoading] = useState(false);
@@ -217,6 +223,12 @@ export function AIStrategyAssistant({
       return;
     }
 
+    // Client-side quota pre-check
+    if (isBlocked("ai_call")) {
+      setUpgradeDialogOpen(true);
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
@@ -231,6 +243,12 @@ export function AIStrategyAssistant({
           currentParameters,
         }),
       });
+
+      if (response.status === 429) {
+        setUpgradeDialogOpen(true);
+        void refreshUsage();
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -252,13 +270,19 @@ export function AIStrategyAssistant({
       );
     } finally {
       setIsLoading(false);
+      void refreshUsage();
     }
-  }, [strategyCode, backtestResult, currentParameters]);
+  }, [strategyCode, backtestResult, currentParameters, isBlocked, refreshUsage]);
 
   // Fetch strategy explanation
   const fetchStrategyExplanation = useCallback(async () => {
     if (!strategyCode) {
       setError("请先提供策略代码 | Please provide strategy code first");
+      return;
+    }
+
+    if (isBlocked("ai_call")) {
+      setUpgradeDialogOpen(true);
       return;
     }
 
@@ -274,6 +298,12 @@ export function AIStrategyAssistant({
           strategyCode,
         }),
       });
+
+      if (response.status === 429) {
+        setUpgradeDialogOpen(true);
+        void refreshUsage();
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -295,13 +325,19 @@ export function AIStrategyAssistant({
       );
     } finally {
       setIsLoading(false);
+      void refreshUsage();
     }
-  }, [strategyCode]);
+  }, [strategyCode, isBlocked, refreshUsage]);
 
   // Fetch sensitivity analysis
   const fetchSensitivityAnalysis = useCallback(async () => {
     if (!strategyCode) {
       setError("请先提供策略代码 | Please provide strategy code first");
+      return;
+    }
+
+    if (isBlocked("ai_call")) {
+      setUpgradeDialogOpen(true);
       return;
     }
 
@@ -318,6 +354,12 @@ export function AIStrategyAssistant({
           currentParameters,
         }),
       });
+
+      if (response.status === 429) {
+        setUpgradeDialogOpen(true);
+        void refreshUsage();
+        return;
+      }
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -339,8 +381,9 @@ export function AIStrategyAssistant({
       );
     } finally {
       setIsLoading(false);
+      void refreshUsage();
     }
-  }, [strategyCode, currentParameters]);
+  }, [strategyCode, currentParameters, isBlocked, refreshUsage]);
 
   // Apply single parameter suggestion
   const handleApplySingleParam = useCallback(
@@ -829,12 +872,17 @@ export function AIStrategyAssistant({
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-lg">
           <span className="text-2xl">🤖</span>
-          <div>
+          <div className="flex-1">
             <div>策略助手</div>
             <div className="text-xs font-normal text-muted-foreground">
               Strategy Assistant
             </div>
           </div>
+          {usage.ai_call && isFinite(usage.ai_call.limit) && (
+            <span className="text-xs font-mono text-muted-foreground bg-slate-800/50 px-2 py-1 rounded">
+              {usage.ai_call.remaining}/{usage.ai_call.limit}
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent>
@@ -948,6 +996,17 @@ export function AIStrategyAssistant({
           </div>
         )}
       </CardContent>
+
+      {/* Upgrade dialog for AI quota exceeded */}
+      <UpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        variant="limit"
+        featureName="ai_call"
+        used={usage.ai_call?.used ?? 0}
+        limit={usage.ai_call?.limit ?? 0}
+        resetAt={usage.ai_call?.resetAt}
+      />
     </Card>
   );
 }

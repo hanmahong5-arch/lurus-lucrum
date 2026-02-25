@@ -25,6 +25,8 @@ import { ScoreCard } from "@/components/backtest/score-card";
 import { PreCheckPanel, usePreCheckConditions } from "@/components/backtest/pre-check-panel";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { calculateScore } from "@/lib/backtest/score";
+import { useFeatureUsage } from "@/hooks/use-feature-usage";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -215,6 +217,12 @@ export function BacktestPanel({
     };
   }, [effectiveSymbol, backtestTarget.mode]);
 
+  // Usage tracking
+  const { usage, plan, refresh: refreshUsage, isBlocked, getRemaining } = useFeatureUsage();
+  const [upgradeDialogOpen, setUpgradeDialogOpen] = useState(false);
+  const [upgradeVariant, setUpgradeVariant] = useState<"limit" | "aha" | "upsell">("limit");
+  const [ahaSharpRatio, setAhaSharpRatio] = useState(0);
+
   // UI state
   const [showConfig, setShowConfig] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
@@ -351,6 +359,13 @@ export function BacktestPanel({
     // Guard: PreCheckPanel's hasBlocker disables the button, but defend against programmatic calls
     if (hasBlocker) return;
 
+    // Quota check (client-side pre-flight)
+    if (isBlocked("backtest")) {
+      setUpgradeVariant("limit");
+      setUpgradeDialogOpen(true);
+      return;
+    }
+
     setIsRunning(true);
     setError(null);
     onBacktestStart?.();
@@ -380,8 +395,20 @@ export function BacktestPanel({
           if (data.meta?.dataSource) {
             setDataSourceInfo(data.meta.dataSource);
           }
+
+          // Aha moment: Sharpe > 1.5 and free plan
+          const sharpe = data.data.sharpeRatio ?? data.data.riskMetrics?.sharpeRatio ?? 0;
+          if (sharpe > 1.5 && plan === "free") {
+            setAhaSharpRatio(sharpe);
+            setUpgradeVariant("aha");
+            setUpgradeDialogOpen(true);
+          }
+        } else if (response.status === 429) {
+          // Server-side quota exceeded
+          setUpgradeVariant("limit");
+          setUpgradeDialogOpen(true);
         } else {
-          setError(data.error ?? "回测失败 / Backtest failed");
+          setError(data.error?.message ?? data.error ?? "回测失败 / Backtest failed");
         }
       }
     } catch (err) {
@@ -391,8 +418,10 @@ export function BacktestPanel({
     } finally {
       setIsRunning(false);
       onBacktestEnd?.();
+      // Refresh usage data after backtest
+      void refreshUsage();
     }
-  }, [hasBlocker, strategyCode, config, effectiveSymbol, onRunBacktest, onBacktestStart, onBacktestEnd]);
+  }, [hasBlocker, isBlocked, plan, strategyCode, config, effectiveSymbol, onRunBacktest, onBacktestStart, onBacktestEnd, refreshUsage]);
 
   /**
    * Export backtest report
@@ -504,6 +533,11 @@ export function BacktestPanel({
                         <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
                       </svg>
                       运行回测
+                      {usage.backtest && isFinite(usage.backtest.limit) && (
+                        <span className="font-mono text-xs opacity-70">
+                          {usage.backtest.remaining}/{usage.backtest.limit}
+                        </span>
+                      )}
                     </>
                   )}
                 </button>
@@ -1109,6 +1143,33 @@ export function BacktestPanel({
           </div>
         )}
       </div>
+
+      {/* Pro upsell banner for free users with results */}
+      {displayResult && plan === "free" && (
+        <div className="mx-4 mb-4 p-3 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-700/30 rounded-lg flex items-center justify-between">
+          <p className="text-xs text-gray-300">
+            Pro 版提供 30+ 专业指标、更长历史数据和无限回测次数
+          </p>
+          <button
+            onClick={() => { setUpgradeVariant("upsell"); setUpgradeDialogOpen(true); }}
+            className="text-xs text-blue-400 hover:text-blue-300 whitespace-nowrap ml-3"
+          >
+            了解更多 →
+          </button>
+        </div>
+      )}
+
+      {/* Upgrade dialog */}
+      <UpgradeDialog
+        open={upgradeDialogOpen}
+        onOpenChange={setUpgradeDialogOpen}
+        variant={upgradeVariant}
+        featureName="backtest"
+        used={usage.backtest?.used ?? 0}
+        limit={usage.backtest?.limit ?? 0}
+        resetAt={usage.backtest?.resetAt}
+        sharpeRatio={ahaSharpRatio}
+      />
     </div>
   );
 }

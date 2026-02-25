@@ -16,6 +16,7 @@
 
 import type { StrategyCategory } from "./index";
 import type { ScoreGrade } from "@/lib/backtest/score/types";
+import type { PlanTier } from "@/lib/config/plan-limits";
 
 // =============================================================================
 // TYPES
@@ -62,6 +63,8 @@ export interface BuiltinTemplate {
   };
   /** Natural language prompt for AI generation */
   prompt: string;
+  /** Minimum plan tier required to use this template */
+  tier: PlanTier;
 }
 
 /** Difficulty display configuration */
@@ -184,6 +187,7 @@ class DualMaCrossStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "B" },
     prompt: "双均线交叉策略：当5日均线上穿20日均线时买入，当5日均线下穿20日均线时卖出，止损5%",
+    tier: "free",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -288,6 +292,7 @@ class KdjStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "B" },
     prompt: "KDJ策略：当K值低于20且K线上穿D线形成金叉时买入，当K值高于80且K线下穿D线时卖出",
+    tier: "free",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -396,6 +401,7 @@ class MacdMomentumStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "A" },
     prompt: "MACD动量策略：DIF上穿DEA金叉且成交量放大1.5倍时买入，DIF下穿DEA死叉时卖出，参数12-26-9",
+    tier: "standard",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -475,6 +481,7 @@ class BollingerBreakoutStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "B" },
     prompt: "布林带突破策略：价格突破布林带上轨时买入，跌破中轨时卖出，布林带周期20，标准差倍数2",
+    tier: "standard",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -610,6 +617,7 @@ class MultiFactorStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "B", max: "A" },
     prompt: "多因子综合策略：MACD金叉 + 价格在20日均线之上 + RSI低于70时买入，MACD死叉或RSI超70或跌破均线时卖出",
+    tier: "standard",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -692,6 +700,7 @@ class RsiReversalStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "B" },
     prompt: "RSI策略：RSI(14)低于30时买入，高于70时卖出",
+    tier: "free",
   },
 ] as const;
 

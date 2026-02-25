@@ -15,6 +15,9 @@
 import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth/auth";
+import { checkUsage, incrementUsage } from "@/lib/middleware/usage-tracker";
 import { upsertPopularStrategy, recordUserEvent } from "@/lib/db/queries";
 import type {
   UnifiedBacktestRequest,
@@ -86,6 +89,9 @@ const ErrorCodes = {
   // Engine errors
   ENGINE_TIMEOUT: "BT400",
   ENGINE_ERROR: "BT401",
+
+  // Quota errors
+  QUOTA_EXCEEDED: "BT300",
 
   // System errors
   UNKNOWN_ERROR: "BT999",
@@ -1006,6 +1012,23 @@ export async function POST(request: NextRequest) {
 
     const validatedRequest = validation.data;
 
+    // Quota check: verify user has remaining backtest quota
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.email ?? session?.user?.name ?? "anonymous";
+    const plan = (session?.user as { role?: string } | undefined)?.role ?? "free";
+
+    const usageStatus = await checkUsage(userId, "backtest", plan);
+    if (!usageStatus.allowed) {
+      return createErrorResponse(
+        ErrorCodes.QUOTA_EXCEEDED,
+        `今日回测额度已用完 (${usageStatus.used}/${usageStatus.limit})，请明日再试或升级计划`,
+        `Daily backtest quota exceeded (${usageStatus.used}/${usageStatus.limit})`,
+        429,
+        { used: usageStatus.used, limit: usageStatus.limit, resetAt: usageStatus.resetAt },
+        "升级到 Standard 或 Premium 计划以获得更多回测次数",
+      );
+    }
+
     // Create timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
@@ -1055,6 +1078,9 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
+
+    // Increment usage counter (fire-and-forget)
+    void incrementUsage(userId, "backtest");
 
     // Save successful strategy to public pool and record event (async, non-blocking)
     const strategyCode: string =

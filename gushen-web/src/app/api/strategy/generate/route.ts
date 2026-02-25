@@ -9,6 +9,9 @@
 
 import { createHash } from 'crypto';
 import { NextRequest, NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth/auth';
+import { checkUsage, incrementUsage } from '@/lib/middleware/usage-tracker';
 import { findPopularStrategyByKey, upsertPopularStrategy } from '@/lib/db/queries';
 
 // lurus-api configuration
@@ -75,6 +78,26 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+
+    // AI call quota check
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.email ?? session?.user?.name ?? 'anonymous';
+    const userPlan = (session?.user as { role?: string } | undefined)?.role ?? 'free';
+
+    const usageStatus = await checkUsage(userId, 'ai_call', userPlan);
+    if (!usageStatus.allowed) {
+      return NextResponse.json(
+        {
+          error: `今日 AI 调用额度已用完 (${usageStatus.used}/${usageStatus.limit})`,
+          code: 'AI_QUOTA_EXCEEDED',
+          resetAt: usageStatus.resetAt,
+        },
+        { status: 429 },
+      );
+    }
+
+    // Increment usage (fire-and-forget)
+    void incrementUsage(userId, 'ai_call');
 
     // Build cache key from the prompt
     const cacheKey = computeCacheKey(prompt);
