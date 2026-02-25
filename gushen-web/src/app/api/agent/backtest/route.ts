@@ -10,6 +10,8 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
 import { streamBacktestAgent, type AgentStreamEvent } from "@/lib/agent/backtest-agent";
+import { checkAndConsumeQuota } from "@/lib/middleware/quota-check";
+import { recordUserEvent } from "@/lib/db/queries";
 
 /** Maximum allowed message length */
 const MAX_MESSAGE_LENGTH = 500;
@@ -33,6 +35,8 @@ export async function POST(request: NextRequest) {
       },
     );
   }
+
+  const userId = session.user.id as string | undefined;
 
   // Parse request body
   let message: string;
@@ -59,6 +63,34 @@ export async function POST(request: NextRequest) {
       },
     );
   }
+
+  // Check quota before running the agent
+  if (userId) {
+    const estimatedTokens = 3000; // Agent backtest uses ~3000 tokens per run
+    const quota = await checkAndConsumeQuota(userId, estimatedTokens, "agent_backtest");
+    if (!quota.allowed) {
+      return new Response(
+        sseEvent({
+          type: "error",
+          code: "QUOTA_EXCEEDED",
+          message: `AI 回测次数已达今日上限（剩余 ${quota.remaining} tokens）。请升级计划继续使用。`,
+        }),
+        {
+          status: 429,
+          headers: { "Content-Type": "text/event-stream" },
+        },
+      );
+    }
+  }
+
+  // Record the agent_backtest event (async)
+  recordUserEvent({
+    userId: userId ?? null,
+    sessionId,
+    eventType: "agent_backtest",
+    metadata: { messageLength: message.length },
+    tokenCost: 0, // updated after completion
+  });
 
   // Stream response using SSE
   const stream = new ReadableStream({

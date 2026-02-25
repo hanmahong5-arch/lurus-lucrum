@@ -1,19 +1,25 @@
 /**
  * Strategy Generation API Route
- * Connects to lurus-api (DeepSeek LLM) to generate trading strategies
- * 策略生成 API 路由 - 连接 lurus-api (DeepSeek LLM) 生成交易策略
+ * Connects to lurus-api (DeepSeek LLM) to generate trading strategies.
+ * Implements a public cache pool: checks for identical strategies before calling LLM.
+ *
+ * 策略生成 API 路由 - 连接 lurus-api (DeepSeek LLM) 生成交易策略。
+ * 实现公共缓存池：调用 LLM 前先查询相同策略缓存。
  */
 
-import { NextRequest, NextResponse } from "next/server";
+import { createHash } from 'crypto';
+import { NextRequest, NextResponse } from 'next/server';
+import { findPopularStrategyByKey, upsertPopularStrategy } from '@/lib/db/queries';
 
 // lurus-api configuration
-// 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
-const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
+const LURUS_API_URL = process.env.LURUS_API_URL || 'https://api.lurus.cn';
 const LURUS_API_KEY =
-  process.env.LURUS_API_KEY || "sk-gushenAIQuantTradingPlatform2026";
+  process.env.LURUS_API_KEY || 'sk-gushenAIQuantTradingPlatform2026';
+
+// Approximate tokens per character (rough estimate for cache savings display)
+const TOKENS_PER_CHAR = 0.4;
 
 // System prompt for strategy generation
-// 策略生成的系统提示词
 const SYSTEM_PROMPT = `你是一个专业的量化交易策略开发专家，精通 VeighNa 量化交易框架。
 你的任务是根据用户的自然语言描述，生成可执行的 VeighNa CTA 策略代码。
 
@@ -34,92 +40,137 @@ const SYSTEM_PROMPT = `你是一个专业的量化交易策略开发专家，精
 You are a professional quantitative trading strategy developer, expert in VeighNa framework.
 Your task is to generate executable VeighNa CTA strategy code based on user's natural language description.`;
 
+/**
+ * Compute a deterministic MD5 cache key from the strategy prompt.
+ * Normalises whitespace so semantically identical prompts hit the same key.
+ */
+function computeCacheKey(prompt: string): string {
+  const normalised = prompt.trim().toLowerCase().replace(/\s+/g, ' ');
+  return createHash('md5').update(normalised).digest('hex');
+}
+
+/**
+ * Extract Python code from markdown code block if present.
+ */
+function extractCode(raw: string): string {
+  const withLang = raw.match(/```python\n([\s\S]*?)```/);
+  if (withLang?.[1]) return withLang[1];
+  const plain = raw.match(/```\n([\s\S]*?)```/);
+  if (plain?.[1]) return plain[1];
+  return raw;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { prompt } = body;
+    const { prompt, strategyType, params } = body as {
+      prompt?: unknown;
+      strategyType?: string;
+      params?: Record<string, unknown>;
+    };
 
-    if (!prompt || typeof prompt !== "string") {
+    if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json(
-        { error: "Missing or invalid prompt" },
-        { status: 400 },
+        { error: 'Missing or invalid prompt' },
+        { status: 400 }
       );
     }
 
-    // Call lurus-api (DeepSeek) for strategy generation
-    // 调用 lurus-api (DeepSeek) 生成策略
-    console.log("[API] Calling lurus-api for strategy generation...");
+    // Build cache key from the prompt
+    const cacheKey = computeCacheKey(prompt);
+
+    // Check public cache pool first
+    const cached = await findPopularStrategyByKey(cacheKey);
+    if (cached?.veighnaCode) {
+      const code = cached.veighnaCode;
+      const savedTokens = Math.round(SYSTEM_PROMPT.length * TOKENS_PER_CHAR + prompt.length * TOKENS_PER_CHAR + 500);
+
+      // Bump usage count asynchronously
+      void upsertPopularStrategy({
+        cacheKey,
+        code,
+        strategyType: strategyType ?? 'unknown',
+      }).catch((err: unknown) => {
+        console.error('[strategy/generate] Failed to update cache usage:', err);
+      });
+
+      console.log(`[strategy/generate] Cache HIT for key ${cacheKey}, savedTokens=${savedTokens}`);
+
+      return NextResponse.json({
+        success: true,
+        code: code.trim(),
+        cached: true,
+        savedTokens,
+        cacheKey,
+        usage: null,
+      });
+    }
+
+    // Cache miss — call lurus-api (DeepSeek) for strategy generation
+    console.log('[strategy/generate] Cache MISS — calling lurus-api...');
     const startTime = Date.now();
 
     const response = await fetch(`${LURUS_API_URL}/v1/chat/completions`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
+        'Content-Type': 'application/json',
         Authorization: `Bearer ${LURUS_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "deepseek-chat",
+        model: 'deepseek-chat',
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          { role: 'system', content: SYSTEM_PROMPT },
           {
-            role: "user",
+            role: 'user',
             content: `请根据以下策略描述生成 VeighNa CTA 策略代码：\n\n${prompt}`,
           },
         ],
         temperature: 0.3,
         max_tokens: 2000,
       }),
-      // Disable Next.js fetch caching for API calls
-      // 禁用 Next.js fetch 缓存
-      cache: "no-store",
+      cache: 'no-store',
     });
 
     console.log(
-      `[API] Response received in ${Date.now() - startTime}ms, status: ${response.status}`,
+      `[strategy/generate] Response in ${Date.now() - startTime}ms, status: ${response.status}`
     );
 
     if (!response.ok) {
-      // Handle non-JSON error responses (like plain text "no available server")
-      // 处理非JSON错误响应
-      const errorText = await response.text().catch(() => "Unknown error");
-      console.error("LLM API error:", response.status, errorText);
+      const errorText = await response.text().catch(() => 'Unknown error');
+      console.error('[strategy/generate] LLM API error:', response.status, errorText);
       return NextResponse.json(
-        {
-          error: "Failed to generate strategy",
-          details: errorText,
-          status: response.status,
-        },
-        { status: response.status },
+        { error: 'Failed to generate strategy', details: errorText, status: response.status },
+        { status: response.status }
       );
     }
 
     const data = await response.json();
-    const generatedCode = data.choices?.[0]?.message?.content || "";
+    const generatedCode = (data.choices?.[0]?.message?.content as string) || '';
+    const code = extractCode(generatedCode).trim();
+    const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? 0;
 
-    // Extract code from markdown code blocks if present
-    // 如果有 markdown 代码块，提取代码
-    let code = generatedCode;
-    const codeBlockMatch = generatedCode.match(/```python\n([\s\S]*?)```/);
-    if (codeBlockMatch) {
-      code = codeBlockMatch[1];
-    } else {
-      // Try without language specifier
-      const simpleCodeBlock = generatedCode.match(/```\n([\s\S]*?)```/);
-      if (simpleCodeBlock) {
-        code = simpleCodeBlock[1];
-      }
-    }
+    // Write to public pool asynchronously (do not block response)
+    void upsertPopularStrategy({
+      cacheKey,
+      code,
+      strategyType: strategyType ?? 'unknown',
+    }).catch((err: unknown) => {
+      console.error('[strategy/generate] Failed to write to public pool:', err);
+    });
 
     return NextResponse.json({
       success: true,
-      code: code.trim(),
+      code,
+      cached: false,
+      savedTokens: 0,
+      cacheKey,
       usage: data.usage,
     });
   } catch (error) {
-    console.error("Strategy generation error:", error);
+    console.error('[strategy/generate] Error:', error);
     return NextResponse.json(
-      { error: "Internal server error", message: String(error) },
-      { status: 500 },
+      { error: 'Internal server error', message: String(error) },
+      { status: 500 }
     );
   }
 }

@@ -36,6 +36,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
+import { useQuotaStatus } from '@/hooks/use-quota-status';
 
 // Navigation items for dashboard tabs
 // 仪表板标签的导航项
@@ -48,6 +49,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/insights', label: '机构洞察', labelEn: 'Insights' },
   { href: '/dashboard/advisor', label: '投资顾问', labelEn: 'Advisor' },
   { href: '/backtest-agent', label: 'AI 回测', labelEn: 'AI Backtest' },
+  { href: '/dashboard/strategy-scanner', label: '扫描选板', labelEn: 'Scanner' },
   { href: '/dashboard/history', label: '历史记录', labelEn: 'History' },
 ];
 
@@ -92,6 +94,33 @@ function getUserInitials(name: string | null | undefined, email: string | null |
     return email.substring(0, Math.min(2, email.length)).toUpperCase();
   }
   return 'U';
+}
+
+/**
+ * Quota progress bar for free/standard users
+ * 免费版/标准版用户的配额进度条
+ */
+function QuotaBar({ userId, plan }: { userId: string; plan: string }) {
+  const { remaining, total, loading } = useQuotaStatus(userId);
+
+  // Premium users have no limits — hide bar
+  if (plan === 'premium' || loading || total <= 0) return null;
+
+  const usedPercent = Math.min(100, Math.round(((total - remaining) / total) * 100));
+  const remainingPercent = 100 - usedPercent;
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-white/50" title={`今日 AI 配额: 剩余 ${remaining} / ${total} tokens`}>
+      <span className="hidden sm:inline">配额</span>
+      <div className="w-16 h-1.5 rounded-full bg-white/10 overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all ${remainingPercent < 20 ? 'bg-loss' : 'bg-accent'}`}
+          style={{ width: `${remainingPercent}%` }}
+        />
+      </div>
+      <span className="font-mono tabular-nums">{remaining}</span>
+    </div>
+  );
 }
 
 /**
@@ -143,8 +172,13 @@ export function DashboardHeader() {
             })}
           </nav>
 
-          {/* Right side - Auto-save & Account */}
+          {/* Right side - Auto-save, Quota & Account */}
           <div className="flex items-center gap-3">
+            {/* Quota progress bar (free/standard users only) */}
+            {isAuthenticated && user?.id && user.role !== 'premium' && (
+              <QuotaBar userId={user.id} plan={user.role ?? 'free'} />
+            )}
+
             {/* Auto-save indicator (only show on strategy editor) */}
             {pathname === '/dashboard' && (
               <AutoSaveIndicator

@@ -57,6 +57,16 @@ URL: http://43.226.46.164:3000/dashboard
 - 代码版本: commit 935bf56
 - 镜像版本: gushen-web:v18
 - 部署时间: 2026-01-22 19:00-19:30
+
+---
+
+## 2026-02-25: Phase 2 — 策略共享池 + 行为计费 + 并行扫描 Agent
+
+**Story 1 策略公共缓存池**: `popularStrategies` 新增 cacheKey/authorId/avgReturn/usageCount 字段；`queries.ts` 新增 `upsertPopularStrategy` / `findPopularStrategyByKey`；`/api/strategy/generate` 生成前查缓存，命中返回 `cached:true,savedTokens:N`；`/api/backtest/unified` 成功后异步写公共池。
+**Story 2 行为追踪+计费**: 新增 `userEvents` DB 表、`recordUserEvent`（fire-and-forget）；新增 `src/lib/middleware/quota-check.ts`（fail-open，500ms 超时）；`advisor/chat` + `agent/backtest` 加配额检查；DashboardHeader 新增配额进度条 + `use-quota-status` hook；`CacheBadge` 新增 savedTokens 展示。
+**Story 3 并行扫描 Agent**: 新增 `scanner-agent.ts`（LangGraph 4节点，并发度 SCANNER_CONCURRENCY=5）；`/api/agent/scanner` SSE 端点；`ScannerPanel.tsx` 双栏 UI；`/dashboard/strategy-scanner` 页面（含 auth guard）；DashboardHeader 增加"扫描选板"导航。
+**Story 4 文档**: CLAUDE.md 项目结构补全 8 个模块；epics.md FR-1.5/FR-2.10 标记 ✅ Done。
+验证: 🔧 Code Complete — `bun run typecheck` → PASS（0 错误）。待部署到 K3s 后端到端验证。
 - Pod状态: Running
 - 所有功能: 已上线
 
@@ -431,3 +441,16 @@ URL: http://43.226.46.164:3000/dashboard
 - 所有5种机构数据均使用真实 EastMoney API
 
 ---
+
+## 2026-02-25: 股神平台三项改造 (Auth + RealBacktest + BacktestAgent)
+1. auth.ts: 替换 lurus-sso CredentialsProvider → ZitadelProvider (OIDC/PKCE)
+2. login/page.tsx: SSO 按钮调用 signIn("zitadel")，风险复选框移至顶层，删除演示账户展示
+3. .env.local: 新增 ZITADEL_ISSUER / ZITADEL_CLIENT_ID / ZITADEL_CLIENT_SECRET 占位
+4. unified/route.ts: runStockBacktest() 接入 getKLineFromDatabase + runBacktest 真实引擎；增加 BT201/BT202 错误码；响应体加 metadata.dataSource="postgresql"
+5. 新建 src/lib/agent/backtest-agent.ts: LangGraph 5 节点 (parseIntent→validateParams→runBacktest→analyzeResult→generateReport)
+6. 新建 src/app/api/agent/backtest/route.ts: SSE 端点，需登录
+7. 新建 src/components/agent/BacktestAgentPanel.tsx + src/app/backtest-agent/page.tsx
+8. dashboard-header.tsx: 添加"AI 回测"导航项
+
+Verification: `bun run typecheck → 无错误输出 (PASS)`
+Remaining: ⏳ 待验证 — 需配置 Zitadel Client ID 后验证 OIDC 登录流程；需 DATABASE_URL 验证真实回测引擎

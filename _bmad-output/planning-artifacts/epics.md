@@ -20,7 +20,7 @@ FR-1.1: Natural language strategy description input (Chinese) [P0] ✅ Done
 FR-1.2: AI code generation (vnpy CtaTemplate format) [P0] ✅ Done
 FR-1.3: Python syntax highlighting code editor [P0] ✅ Done
 FR-1.4: Visual parameter editor with type controls [P0] ✅ Done
-FR-1.5: Strategy template library (≥ 5 templates) [P1] Pending
+FR-1.5: Strategy template library (≥ 5 templates) [P1] ✅ Done — `src/components/strategy-editor/` 内已实现策略模板选择器
 FR-1.6: Code validation before backtest [P1] ✅ Done
 FR-1.7: Strategy versioning [P2] Pending
 
@@ -33,7 +33,7 @@ FR-2.6: K-line data quality validation [P0] ✅ Done
 FR-2.7: Real stock target selection (not mock default) [P0] In Progress
 FR-2.8: Backtest progress event streaming [P1] ✅ Done
 FR-2.9: Result caching (Redis + in-memory hybrid) [P1] ✅ Done
-FR-2.10: Parallel batch backtest for multi-stock [P1] Pending
+FR-2.10: Parallel batch backtest for multi-stock [P1] ✅ Done — `/api/backtest/multi-stocks/stream` + `executeBatchBacktest` 已实现，支持100只股票并行扫描
 FR-2.11: Interface-driven engine architecture (IDataProvider, IBacktestEngine) [P0] ✅ Done
 FR-2.12: Comprehensive test coverage (≥ 85%, 680+ tests) [P0] ✅ Done
 

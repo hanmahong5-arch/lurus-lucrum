@@ -52,6 +52,8 @@ export interface CacheBadgeProps {
   onRefresh: () => void;
   /** Whether the refresh is currently in progress */
   refreshing?: boolean;
+  /** Number of tokens saved by using the cache */
+  savedTokens?: number;
   /** Additional CSS classes */
   className?: string;
 }
@@ -126,6 +128,7 @@ export function CacheBadge({
   cachedAt,
   onRefresh,
   refreshing = false,
+  savedTokens,
   className,
 }: CacheBadgeProps) {
   // Don't render if not cached
@@ -172,7 +175,14 @@ export function CacheBadge({
       </svg>
 
       {/* Badge label */}
-      <span className="font-medium text-white/70">来自缓存</span>
+      <span className="font-medium text-white/70">缓存策略</span>
+
+      {/* Saved tokens indicator */}
+      {savedTokens != null && savedTokens > 0 && (
+        <span className="text-profit font-mono tabular-nums" title="通过缓存节省的 Token 数">
+          · 节省 ~{savedTokens} Tokens
+        </span>
+      )}
 
       {/* Relative time */}
       {isTimeKnown ? (

@@ -12,8 +12,10 @@
  * - Rate limiting preparation
  */
 
+import { createHash } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
 import { v4 as uuidv4 } from "uuid";
+import { upsertPopularStrategy, recordUserEvent } from "@/lib/db/queries";
 import type {
   UnifiedBacktestRequest,
   UnifiedBacktestResult,
@@ -1053,6 +1055,47 @@ export async function POST(request: NextRequest) {
       }
       throw error;
     }
+
+    // Save successful strategy to public pool and record event (async, non-blocking)
+    const strategyCode: string =
+      typeof validatedRequest.strategy?.customCode === "string"
+        ? validatedRequest.strategy.customCode
+        : "";
+    const strategyType: string =
+      typeof validatedRequest.strategy?.builtinId === "string"
+        ? validatedRequest.strategy.builtinId
+        : "unknown";
+
+    if (strategyCode) {
+      const normalised = strategyCode.trim().toLowerCase().replace(/\s+/g, " ");
+      const cacheKey = createHash("md5").update(normalised).digest("hex");
+
+      void upsertPopularStrategy({
+        cacheKey,
+        code: strategyCode,
+        strategyType,
+        totalReturn: result.returnMetrics.totalReturn,
+        sharpeRatio: result.riskMetrics.sharpeRatio,
+      }).catch((err: unknown) => {
+        console.error("[unified-backtest] Failed to save to public pool:", err);
+      });
+    }
+
+    recordUserEvent({
+      eventType: "backtest_run",
+      metadata: {
+        mode: validatedRequest.target.mode,
+        symbol:
+          validatedRequest.target.mode === "stock"
+            ? validatedRequest.target.stock?.symbol
+            : validatedRequest.target.mode === "sector"
+              ? validatedRequest.target.sector?.code
+              : undefined,
+        strategyType,
+        executionTime: result.executionTime,
+        totalReturn: result.returnMetrics.totalReturn,
+      },
+    });
 
     return NextResponse.json({
       success: true,

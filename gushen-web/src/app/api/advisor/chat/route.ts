@@ -12,6 +12,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth/auth";
 import type { AdvisorContext, ChatMode } from "@/lib/advisor/agent/types";
 import {
   buildAdvisorSystemPrompt,
@@ -23,6 +25,8 @@ import {
 } from "@/lib/advisor/agent/agent-orchestrator";
 import { recommendAnalyst } from "@/lib/advisor/agent/analyst-agents";
 import { INVESTMENT_ADVISOR_SYSTEM_PROMPT } from "@/lib/investment-context/conversation-templates";
+import { checkAndConsumeQuota, consumeQuota } from "@/lib/middleware/quota-check";
+import { recordUserEvent } from "@/lib/db/queries";
 
 // lurus-api configuration
 // 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
@@ -146,6 +150,9 @@ function getModeConfig(mode: ChatMode): {
  */
 export async function POST(request: NextRequest) {
   try {
+    const session = await getServerSession(authOptions);
+    const userId = session?.user?.id as string | undefined;
+
     const body: AdvisorChatRequest = await request.json();
     const {
       message,
@@ -172,6 +179,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get mode-specific configuration (temperature + maxTokens)
+    const { temperature, maxTokens } = getModeConfig(mode);
+
+    // Check quota for authenticated users
+    // 对已认证用户执行配额检查
+    if (userId) {
+      const quota = await checkAndConsumeQuota(userId, maxTokens, "advisor_chat");
+      if (!quota.allowed) {
+        return NextResponse.json(
+          {
+            error: "AI 对话次数已达今日上限",
+            code: "QUOTA_EXCEEDED",
+            remaining: quota.remaining,
+            plan: quota.plan,
+            upgradeUrl: "/dashboard/account",
+          },
+          { status: 429 }
+        );
+      }
+    }
+
     // Build system prompt with new or legacy context
     // 使用新或旧上下文构建系统提示词
     const systemPrompt = buildSystemPrompt(advisorContext, context, mode);
@@ -183,10 +211,6 @@ export async function POST(request: NextRequest) {
       ...history.slice(-10), // Keep last 10 messages / 保留最近10条消息
       { role: "user", content: message },
     ];
-
-    // Get mode-specific configuration
-    // 获取模式特定配置
-    const { temperature, maxTokens } = getModeConfig(mode);
 
     // Log request details
     // 记录请求详情
@@ -304,6 +328,27 @@ export async function POST(request: NextRequest) {
         { error: "Empty response from advisor" },
         { status: 500 },
       );
+    }
+
+    const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? maxTokens;
+
+    // Record user behavior event (async, non-blocking)
+    recordUserEvent({
+      userId: userId ?? null,
+      eventType: "advisor_chat",
+      metadata: {
+        mode,
+        tokenCost: actualTokens,
+        messageCount: history.length + 1,
+        responseTime,
+        contextType: advisorContext ? "agentic" : "legacy",
+      },
+      tokenCost: actualTokens,
+    });
+
+    // Consume actual tokens (in addition to estimated already consumed in checkAndConsumeQuota)
+    if (userId && actualTokens > maxTokens) {
+      consumeQuota({ userId, tokens: actualTokens - maxTokens, operationType: "advisor_chat" });
     }
 
     return NextResponse.json({

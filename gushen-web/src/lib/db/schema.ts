@@ -610,6 +610,16 @@ export const popularStrategies = pgTable(
     originalUrl: text('original_url'),
     /** Tags for categorization / 分类标签 */
     tags: jsonb('tags').$type<string[]>(),
+    // Public pool cache fields (公共缓存池字段)
+    /** MD5 cache key for deduplication / MD5缓存键用于去重 */
+    cacheKey: varchar('cache_key', { length: 64 }).unique(),
+    /** User who contributed this strategy to the pool / 贡献此策略的用户 */
+    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Average return across all usages / 所有使用次数的平均收益率 */
+    avgReturn: decimal('avg_return', { precision: 10, scale: 4 }),
+    /** How many times this cached strategy was used / 缓存策略被使用的次数 */
+    usageCount: integer('usage_count').default(1).notNull(),
+
     /** Is featured/recommended / 是否推荐 */
     isFeatured: boolean('is_featured').default(false),
     /** When the strategy was last crawled / 最后爬取时间 */
@@ -623,6 +633,44 @@ export const popularStrategies = pgTable(
     typeIdx: index('idx_popular_strategies_type').on(table.strategyType),
     popularityIdx: index('idx_popular_strategies_popularity').on(table.popularityScore),
     featuredIdx: index('idx_popular_strategies_featured').on(table.isFeatured),
+    cacheKeyIdx: index('idx_popular_strategies_cache_key').on(table.cacheKey),
+  })
+);
+
+// ============================================================================
+// User Behavior Event Tracking Table (用户行为事件追踪表)
+// ============================================================================
+
+/**
+ * User events table - Tracks all user actions for analytics and billing
+ * 用户事件表 - 追踪所有用户操作，用于分析和计费
+ *
+ * eventType values:
+ *   strategy_generate | strategy_cache_hit
+ *   backtest_run | backtest_sector | backtest_multi
+ *   advisor_chat | agent_backtest | agent_scan
+ *   page_view | login | logout
+ */
+export const userEvents = pgTable(
+  'user_events',
+  {
+    id: serial('id').primaryKey(),
+    /** User ID (nullable for anonymous) / 用户ID（匿名时为空） */
+    userId: text('user_id'),
+    /** Anonymous session identifier / 匿名会话标识 */
+    sessionId: text('session_id'),
+    /** Event type / 事件类型 */
+    eventType: varchar('event_type', { length: 50 }).notNull(),
+    /** Flexible metadata JSON / 灵活的元数据JSON */
+    metadata: jsonb('metadata'),
+    /** Token cost for AI operations / AI操作消耗的Token数 */
+    tokenCost: integer('token_cost').default(0),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('idx_user_events_user').on(table.userId),
+    typeIdx: index('idx_user_events_type').on(table.eventType),
+    createdIdx: index('idx_user_events_created').on(table.createdAt),
   })
 );
 
@@ -862,3 +910,7 @@ export type NewWorkflowStepCache = typeof workflowStepCache.$inferInsert;
 // Strategy version types
 export type StrategyVersion = typeof strategyVersions.$inferSelect;
 export type NewStrategyVersion = typeof strategyVersions.$inferInsert;
+
+// User event types
+export type UserEvent = typeof userEvents.$inferSelect;
+export type NewUserEvent = typeof userEvents.$inferInsert;

@@ -15,6 +15,8 @@ import {
   klineDaily,
   validationCache,
   validationPresets,
+  popularStrategies,
+  userEvents,
   type Stock,
   type Sector,
   type KLineDaily,
@@ -445,4 +447,117 @@ export async function updatePresetUsage(presetId: number): Promise<void> {
       useCount: sql`${validationPresets.useCount} + 1`,
     })
     .where(eq(validationPresets.id, presetId));
+}
+
+// ============================================================================
+// Popular Strategy Pool Queries (策略公共缓存池查询)
+// ============================================================================
+
+/**
+ * Find a cached popular strategy by its MD5 cache key
+ * 通过MD5缓存键查找缓存策略
+ */
+export async function findPopularStrategyByKey(cacheKey: string): Promise<{
+  id: number;
+  veighnaCode: string | null;
+  originalCode: string | null;
+  usageCount: number;
+  avgReturn: string | null;
+  sharpeRatio: string | null;
+} | null> {
+  const result = await db
+    .select({
+      id: popularStrategies.id,
+      veighnaCode: popularStrategies.veighnaCode,
+      originalCode: popularStrategies.originalCode,
+      usageCount: popularStrategies.usageCount,
+      avgReturn: popularStrategies.avgReturn,
+      sharpeRatio: popularStrategies.sharpeRatio,
+    })
+    .from(popularStrategies)
+    .where(eq(popularStrategies.cacheKey, cacheKey))
+    .limit(1);
+
+  return result[0] ?? null;
+}
+
+/**
+ * Upsert a strategy into the popular strategies pool
+ * UPSERT 策略到公共缓存池
+ */
+export async function upsertPopularStrategy(params: {
+  cacheKey: string;
+  code: string;
+  strategyType: string;
+  authorId?: string;
+  totalReturn?: number;
+  sharpeRatio?: number;
+}): Promise<void> {
+  const existing = await findPopularStrategyByKey(params.cacheKey);
+
+  if (existing) {
+    // Update existing: increment usage, recalculate avgReturn
+    const newUsageCount = existing.usageCount + 1;
+    const prevAvg = parseFloat(existing.avgReturn ?? '0');
+    const newAvg =
+      params.totalReturn !== undefined
+        ? (prevAvg * existing.usageCount + params.totalReturn) / newUsageCount
+        : prevAvg;
+
+    await db
+      .update(popularStrategies)
+      .set({
+        usageCount: newUsageCount,
+        avgReturn: newAvg.toString(),
+        updatedAt: new Date(),
+      })
+      .where(eq(popularStrategies.cacheKey, params.cacheKey));
+  } else {
+    // Insert new entry into pool
+    await db.insert(popularStrategies).values({
+      cacheKey: params.cacheKey,
+      source: 'user_generated',
+      sourceId: params.cacheKey,
+      name: `AI Generated ${params.strategyType} Strategy`,
+      strategyType: params.strategyType,
+      veighnaCode: params.code,
+      conversionStatus: 'success',
+      authorId: params.authorId,
+      avgReturn: params.totalReturn?.toString(),
+      sharpeRatio: params.sharpeRatio?.toString(),
+      usageCount: 1,
+      crawledAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+}
+
+// ============================================================================
+// User Event Tracking Queries (用户行为事件追踪查询)
+// ============================================================================
+
+/**
+ * Record a user behavior event asynchronously (fire-and-forget)
+ * 异步记录用户行为事件（不阻塞响应链路）
+ */
+export function recordUserEvent(event: {
+  userId?: string | null;
+  sessionId?: string | null;
+  eventType: string;
+  metadata?: Record<string, unknown>;
+  tokenCost?: number;
+}): void {
+  // Fire-and-forget: do not await, never block the response
+  void db
+    .insert(userEvents)
+    .values({
+      userId: event.userId ?? null,
+      sessionId: event.sessionId ?? null,
+      eventType: event.eventType,
+      metadata: event.metadata ?? null,
+      tokenCost: event.tokenCost ?? 0,
+    })
+    .catch((err: unknown) => {
+      console.error('[recordUserEvent] Failed to record event:', err);
+    });
 }

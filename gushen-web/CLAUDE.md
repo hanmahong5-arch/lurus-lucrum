@@ -68,23 +68,56 @@ gushen-web/
 │   ├── app/                    # Next.js App Router pages
 │   │   ├── api/                # API routes (backend proxy layer)
 │   │   │   ├── advisor/        # AI investment advisor endpoints
+│   │   │   ├── agent/          # LangGraph agent endpoints
+│   │   │   │   ├── backtest/   # AI-driven backtest agent (SSE)
+│   │   │   │   └── scanner/    # Parallel sector scanner agent (SSE)
 │   │   │   ├── auth/           # NextAuth.js authentication
 │   │   │   ├── backtest/       # Backtest execution API
+│   │   │   │   ├── unified/    # Unified multi-mode backtest
+│   │   │   │   ├── sector/     # Sector backtest
+│   │   │   │   └── multi-stocks/stream/  # Batch SSE stream
 │   │   │   ├── data/           # Market data proxy
-│   │   │   └── stocks/         # Stock list & K-line data
+│   │   │   ├── lurus/          # lurus-api proxy (billing, AI)
+│   │   │   ├── stocks/         # Stock list & K-line data
+│   │   │   └── strategies/     # Popular strategies pool API
+│   │   ├── backtest-agent/     # AI backtest agent page
 │   │   └── dashboard/          # Dashboard pages
 │   │       ├── page.tsx        # Strategy editor (main trading UI)
-│   │       └── strategy-validation/  # Multi-stock validation
+│   │       ├── advisor/        # Investment advisor chat
+│   │       ├── history/        # Backtest history
+│   │       ├── insights/       # Institutional insights
+│   │       ├── strategy-scanner/  # Parallel sector scanner
+│   │       ├── strategy-validation/  # Multi-stock validation
+│   │       └── trading/        # Trading panel
 │   │
 │   ├── components/             # React components
-│   │   ├── strategy-editor/    # Strategy code editor & parameters
-│   │   ├── charts/             # K-line charts (lightweight-charts)
+│   │   ├── agent/              # LangGraph agent UIs
+│   │   │   ├── BacktestAgentPanel.tsx
+│   │   │   └── ScannerPanel.tsx
 │   │   ├── advisor/            # AI advisor chat UI
+│   │   ├── charts/             # K-line charts (lightweight-charts)
+│   │   ├── dashboard/          # Shared dashboard components
+│   │   │   └── dashboard-header.tsx
+│   │   ├── design-system/      # Design system components
+│   │   ├── financial/          # Financial data display
+│   │   ├── report/             # Report generation
+│   │   ├── risk/               # Risk metrics display
+│   │   ├── strategy-editor/    # Strategy code editor & parameters
 │   │   └── ui/                 # Radix UI primitives
 │   │
+│   ├── hooks/                  # Custom React hooks
+│   │   ├── useBilling.ts       # Subscription & billing
+│   │   ├── use-quota-status.ts # AI token quota display
+│   │   └── use-user-workspace.ts
+│   │
 │   └── lib/                    # Core business logic
+│       ├── agent/              # ⭐ LangGraph agent implementations
+│       │   ├── backtest-agent.ts   # AI-driven backtest (5-node graph)
+│       │   └── scanner-agent.ts    # Parallel sector scanner
+│       │
 │       ├── backtest/           # ⭐ Financial-grade backtest engine
 │       │   ├── core/           # Interfaces, validators, errors
+│       │   ├── parallel/       # Batch & chunked execution
 │       │   ├── engine.ts       # Main backtest engine
 │       │   ├── statistics.ts   # 30+ financial metrics
 │       │   └── types.ts        # Comprehensive type definitions
@@ -94,9 +127,14 @@ gushen-web/
 │       │   ├── schools/        # 7 investment schools
 │       │   └── token-budget.ts # Token management
 │       │
+│       ├── auth/               # NextAuth.js configuration
 │       ├── db/                 # Drizzle ORM schemas
 │       │   ├── schema.ts       # Database schema definitions
+│       │   ├── queries.ts      # Query functions (cache pool, events)
 │       │   └── index.ts        # DB client & connection
+│       │
+│       ├── middleware/         # Server-side middleware
+│       │   └── quota-check.ts  # AI token quota enforcement
 │       │
 │       ├── redis/              # Redis client & caching
 │       ├── data-service/       # Market data fetching
@@ -394,7 +432,7 @@ bun run test -- src/lib/backtest     # Run tests in specific directory
 
 ---
 
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-02-25
 
 ---
 
