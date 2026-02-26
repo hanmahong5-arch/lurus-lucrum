@@ -189,7 +189,10 @@ async function runSectorScan(
 
   const res = await fetch(`${baseUrl}/api/backtest/unified`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-token": process.env.NEXTAUTH_SECRET ?? "gushen-internal",
+    },
     body: JSON.stringify(backtestBody),
     signal: AbortSignal.timeout(90_000),
   });
