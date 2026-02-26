@@ -1,10 +1,11 @@
 /**
  * Custom Agent Run Panel Component
- * 自定义 Agent 运行面板
+ * Agent execution panel with live progress and results
  *
- * Two-column layout (reuses ScannerPanel pattern):
+ * Responsive two-column layout (reuses ScannerPanel pattern):
  * - Left: Progress timeline (5 nodes) + token badge
- * - Right: Streaming results table + AI insights
+ * - Right: Streaming results table + insights
+ * - Mobile: single-column vertical layout
  *
  * @module components/agent/custom-agent-run-panel
  */
@@ -64,7 +65,7 @@ const NODE_LABELS: Record<string, string> = {
   resolveTargets: "解析标的",
   parallelBacktest: "并行回测",
   rankAndAggregate: "排名聚合",
-  generateInsights: "AI 分析",
+  generateInsights: "综合研判",
 };
 
 const NODE_ORDER: string[] = [
@@ -284,10 +285,10 @@ export function CustomAgentRunPanel({
         </div>
       </div>
 
-      {/* Two-column layout */}
-      <div className="flex flex-1 overflow-hidden">
+      {/* Two-column layout: responsive — stack vertically on mobile */}
+      <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
         {/* Left: Progress timeline */}
-        <div className="w-64 border-r border-border p-4 overflow-y-auto">
+        <div className="w-full md:w-64 border-b md:border-b-0 md:border-r border-border p-4 overflow-y-auto">
           <h3 className="text-xs font-medium text-white/40 uppercase mb-4">
             运行进度
           </h3>
@@ -432,11 +433,11 @@ export function CustomAgentRunPanel({
             </div>
           )}
 
-          {/* AI Insights */}
+          {/* Insights */}
           {insights && (
-            <div className="ai-mark p-4 rounded-lg">
-              <h3 className="text-xs font-medium text-ai uppercase mb-2">
-                AI 综合分析
+            <div className="bg-surface-elevated border border-border rounded-lg p-4">
+              <h3 className="text-xs font-medium text-white/50 uppercase mb-2">
+                综合分析洞察
               </h3>
               <div className="text-sm text-white/80 whitespace-pre-wrap leading-relaxed">
                 {insights}
@@ -446,7 +447,7 @@ export function CustomAgentRunPanel({
 
           {/* Summary card */}
           {summary && (
-            <div className="mt-4 grid grid-cols-4 gap-3">
+            <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="stat-card">
                 <span className="stat-label">分析标的</span>
                 <span className="stat-value font-mono tabular-nums">
@@ -487,7 +488,7 @@ export function CustomAgentRunPanel({
                   d="M13 10V3L4 14h7v7l9-11h-7z"
                 />
               </svg>
-              <p className="text-sm">点击「开始运行」启动 Agent</p>
+              <p className="text-sm">点击「开始运行」启动分析任务</p>
             </div>
           )}
         </div>

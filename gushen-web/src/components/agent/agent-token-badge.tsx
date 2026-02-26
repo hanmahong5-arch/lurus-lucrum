@@ -1,6 +1,6 @@
 /**
  * Agent Token Badge Component
- * Token 消耗展示徽章组件
+ * Token consumption display badge
  *
  * Three modes:
  * - estimate: Static estimation during agent configuration
@@ -64,7 +64,7 @@ export function AgentTokenBadge(props: AgentTokenBadgeProps) {
     }
 
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ai-bg text-ai text-xs font-medium">
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 text-white/60 text-xs font-medium">
         <TokenIcon />
         <span className="font-mono tabular-nums">
           ~{formatTokens(props.tokens)}
@@ -81,8 +81,8 @@ export function AgentTokenBadge(props: AgentTokenBadgeProps) {
         : 0;
 
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-ai-bg text-ai text-xs font-medium">
-        <TokenIcon className="animate-ai-pulse" />
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-accent/10 text-accent text-xs font-medium">
+        <TokenIcon className="animate-pulse" />
         <span className="font-mono tabular-nums">
           {formatTokens(props.used)}
         </span>
@@ -93,7 +93,7 @@ export function AgentTokenBadge(props: AgentTokenBadgeProps) {
         {/* Mini progress bar */}
         <span className="w-8 h-1 rounded-full bg-white/10 overflow-hidden">
           <span
-            className="block h-full rounded-full bg-ai transition-all duration-500"
+            className="block h-full rounded-full bg-accent transition-all duration-500"
             style={{ width: `${percent}%` }}
           />
         </span>
@@ -126,7 +126,7 @@ export function AgentTokenBadge(props: AgentTokenBadgeProps) {
         <span className="absolute top-full left-0 mt-1 p-2 rounded bg-surface-modal border border-border text-xs whitespace-nowrap z-10">
           {props.breakdown.insights !== undefined && (
             <span className="block">
-              AI 分析: <span className="font-mono tabular-nums">{formatTokens(props.breakdown.insights)}</span>
+              综合研判: <span className="font-mono tabular-nums">{formatTokens(props.breakdown.insights)}</span>
             </span>
           )}
         </span>

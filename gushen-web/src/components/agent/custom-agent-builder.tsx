@@ -1,9 +1,9 @@
 /**
  * Custom Agent Builder Component
- * 自定义 Agent 配置构建器
+ * Analysis task configuration builder
  *
  * All-chip/button configuration interface (zero-typing).
- * Sections: name, targets, strategies, depth, backtest params, icon/color.
+ * Compact 4-section layout: name+appearance, targets, strategies, depth+backtest.
  *
  * @module components/agent/custom-agent-builder
  */
@@ -25,10 +25,10 @@ import type {
 // =============================================================================
 
 const PRESET_NAMES = [
-  { label: "趋势猎手", icon: "📈" },
-  { label: "价值发现", icon: "💎" },
-  { label: "动量扫描", icon: "⚡" },
-  { label: "板块轮动", icon: "🔄" },
+  { label: "趋势跟踪" },
+  { label: "价值筛选" },
+  { label: "动量扫描" },
+  { label: "板块轮动" },
 ];
 
 const BUILTIN_STRATEGIES = [
@@ -159,7 +159,7 @@ export function CustomAgentBuilder({
         : undefined;
 
     return {
-      name: name || "未命名 Agent",
+      name: name || "未命名任务",
       targets: {
         mode: targetMode,
         sectors: targetMode === "sector" ? selectedSectors : undefined,
@@ -199,12 +199,12 @@ export function CustomAgentBuilder({
   }, [name, customName, selectedStrategies, targetMode, selectedSectors, customSymbols]);
 
   return (
-    <div className="space-y-6">
-      {/* Section: Agent Name */}
+    <div className="space-y-5">
+      {/* Section 1: Name + Appearance (merged into one row) */}
       <section>
-        <h3 className="text-sm font-medium text-white/70 mb-3">Agent 名称</h3>
+        <h3 className="text-sm font-medium text-white/70 mb-3">名称与外观</h3>
         {!customName ? (
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2 mb-3">
             {PRESET_NAMES.map((preset) => (
               <button
                 key={preset.label}
@@ -215,7 +215,7 @@ export function CustomAgentBuilder({
                     : "bg-surface-elevated text-white/60 border border-transparent hover:bg-surface-hover"
                 }`}
               >
-                {preset.icon} {preset.label}
+                {preset.label}
               </button>
             ))}
             <button
@@ -231,14 +231,45 @@ export function CustomAgentBuilder({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={50}
-            placeholder="输入 Agent 名称"
-            className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-border text-white text-sm focus:border-accent focus:outline-none"
+            placeholder="输入任务名称"
+            className="w-full px-3 py-2 rounded-lg bg-surface-elevated border border-border text-white text-sm focus:border-accent focus:outline-none mb-3"
             autoFocus
           />
         )}
+        {/* Icon + Color picker inline */}
+        <div className="flex items-center gap-4">
+          <div className="flex gap-1.5">
+            {ICON_OPTIONS.map((ic) => (
+              <button
+                key={ic}
+                onClick={() => setIcon(ic)}
+                className={`w-8 h-8 rounded-lg flex items-center justify-center transition ${
+                  icon === ic
+                    ? "bg-accent/20 border border-accent/30"
+                    : "bg-surface-elevated hover:bg-surface-hover"
+                }`}
+              >
+                <AgentIcon name={ic} />
+              </button>
+            ))}
+          </div>
+          <div className="w-px h-6 bg-border" />
+          <div className="flex gap-1.5">
+            {COLOR_OPTIONS.map((c) => (
+              <button
+                key={c}
+                onClick={() => setColor(c)}
+                className={`w-6 h-6 rounded-full transition ${
+                  color === c ? "ring-2 ring-white ring-offset-2 ring-offset-void" : ""
+                }`}
+                style={{ backgroundColor: c }}
+              />
+            ))}
+          </div>
+        </div>
       </section>
 
-      {/* Section: Target Mode */}
+      {/* Section 2: Target Mode */}
       <section>
         <h3 className="text-sm font-medium text-white/70 mb-3">分析标的</h3>
         <div className="flex gap-2 mb-3">
@@ -291,7 +322,7 @@ export function CustomAgentBuilder({
         )}
       </section>
 
-      {/* Section: Strategies */}
+      {/* Section 3: Strategies */}
       <section>
         <h3 className="text-sm font-medium text-white/70 mb-3">绑定策略</h3>
         <div className="flex flex-wrap gap-2">
@@ -311,112 +342,78 @@ export function CustomAgentBuilder({
         </div>
       </section>
 
-      {/* Section: Analysis Depth */}
+      {/* Section 4: Analysis Depth + Backtest Params (merged side-by-side) */}
       <section>
-        <h3 className="text-sm font-medium text-white/70 mb-3">分析深度</h3>
-        <div className="flex gap-2">
-          {DEPTH_OPTIONS.map((opt) => {
-            const disabled = opt.depth === "deep" && !allowDeep;
-            return (
-              <button
-                key={opt.depth}
-                onClick={() => !disabled && setDepth(opt.depth)}
-                disabled={disabled}
-                className={`flex-1 px-3 py-2 rounded-lg text-sm text-center transition ${
-                  disabled
-                    ? "bg-surface-elevated text-white/20 cursor-not-allowed opacity-50"
-                    : depth === opt.depth
-                      ? "bg-accent/20 text-accent border border-accent/30"
-                      : "bg-surface-elevated text-white/60 border border-transparent hover:bg-surface-hover"
-                }`}
-              >
-                <span className="block font-medium">{opt.label}</span>
-                <span className="block text-xs text-white/40 mt-0.5">
-                  {opt.tokenLabel}
-                  {disabled && " (需升级)"}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* Section: Backtest Params */}
-      <section>
-        <h3 className="text-sm font-medium text-white/70 mb-3">回测参数</h3>
-        <div className="grid grid-cols-2 gap-3">
-          {/* Capital chips */}
+        <h3 className="text-sm font-medium text-white/70 mb-3">分析深度与回测参数</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {/* Left: Depth options */}
           <div>
-            <label className="text-xs text-white/40 mb-1.5 block">初始资金</label>
-            <div className="flex flex-wrap gap-1.5">
-              {CAPITAL_OPTIONS.map((c) => (
-                <button
-                  key={c}
-                  onClick={() => setCapital(c)}
-                  className={`px-2 py-1 rounded text-xs font-mono tabular-nums transition ${
-                    capital === c
-                      ? "bg-accent/20 text-accent"
-                      : "bg-surface-elevated text-white/50 hover:text-white/70"
-                  }`}
-                >
-                  {c >= 1000000 ? `${c / 10000}万` : `${(c / 10000).toFixed(0)}万`}
-                </button>
-              ))}
+            <label className="text-xs text-white/40 mb-1.5 block">分析深度</label>
+            <div className="flex gap-2">
+              {DEPTH_OPTIONS.map((opt) => {
+                const disabled = opt.depth === "deep" && !allowDeep;
+                return (
+                  <button
+                    key={opt.depth}
+                    onClick={() => !disabled && setDepth(opt.depth)}
+                    disabled={disabled}
+                    className={`flex-1 px-2 py-2 rounded-lg text-sm text-center transition ${
+                      disabled
+                        ? "bg-surface-elevated text-white/20 cursor-not-allowed opacity-50"
+                        : depth === opt.depth
+                          ? "bg-accent/20 text-accent border border-accent/30"
+                          : "bg-surface-elevated text-white/60 border border-transparent hover:bg-surface-hover"
+                    }`}
+                  >
+                    <span className="block font-medium text-xs">{opt.label}</span>
+                    <span className="block text-[10px] text-white/40 mt-0.5">
+                      {opt.tokenLabel}
+                      {disabled && " (需升级)"}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
-          {/* Date range */}
-          <div>
-            <label className="text-xs text-white/40 mb-1.5 block">回测区间</label>
-            <div className="flex items-center gap-2">
-              <input
-                type="date"
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="flex-1 px-2 py-1 rounded bg-surface-elevated border border-border text-white text-xs font-mono focus:border-accent focus:outline-none"
-              />
-              <span className="text-white/30 text-xs">至</span>
-              <input
-                type="date"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-                className="flex-1 px-2 py-1 rounded bg-surface-elevated border border-border text-white text-xs font-mono focus:border-accent focus:outline-none"
-              />
+          {/* Right: Capital + Date range */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">初始资金</label>
+              <div className="flex flex-wrap gap-1.5">
+                {CAPITAL_OPTIONS.map((c) => (
+                  <button
+                    key={c}
+                    onClick={() => setCapital(c)}
+                    className={`px-2 py-1 rounded text-xs font-mono tabular-nums transition ${
+                      capital === c
+                        ? "bg-accent/20 text-accent"
+                        : "bg-surface-elevated text-white/50 hover:text-white/70"
+                    }`}
+                  >
+                    {c >= 1000000 ? `${c / 10000}万` : `${(c / 10000).toFixed(0)}万`}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Section: Icon & Color */}
-      <section>
-        <h3 className="text-sm font-medium text-white/70 mb-3">外观</h3>
-        <div className="flex items-center gap-4">
-          <div className="flex gap-1.5">
-            {ICON_OPTIONS.map((ic) => (
-              <button
-                key={ic}
-                onClick={() => setIcon(ic)}
-                className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm transition ${
-                  icon === ic
-                    ? "bg-accent/20 border border-accent/30"
-                    : "bg-surface-elevated hover:bg-surface-hover"
-                }`}
-              >
-                <AgentIcon name={ic} />
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1.5">
-            {COLOR_OPTIONS.map((c) => (
-              <button
-                key={c}
-                onClick={() => setColor(c)}
-                className={`w-6 h-6 rounded-full transition ${
-                  color === c ? "ring-2 ring-white ring-offset-2 ring-offset-void" : ""
-                }`}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+            <div>
+              <label className="text-xs text-white/40 mb-1.5 block">回测区间</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="flex-1 px-2 py-1 rounded bg-surface-elevated border border-border text-white text-xs font-mono focus:border-accent focus:outline-none"
+                />
+                <span className="text-white/30 text-xs">至</span>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="flex-1 px-2 py-1 rounded bg-surface-elevated border border-border text-white text-xs font-mono focus:border-accent focus:outline-none"
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -448,7 +445,11 @@ export function CustomAgentBuilder({
   );
 }
 
-/** Agent icon renderer */
+// =============================================================================
+// Agent Icon — SVG line icons (no emoji)
+// =============================================================================
+
+/** Agent icon renderer using inline SVG */
 export function AgentIcon({
   name,
   className = "w-4 h-4",
@@ -456,15 +457,78 @@ export function AgentIcon({
   name: string;
   className?: string;
 }) {
-  const icons: Record<string, string> = {
-    bot: "🤖",
-    radar: "📡",
-    target: "🎯",
-    brain: "🧠",
-    rocket: "🚀",
-    flame: "🔥",
+  const svgProps = {
+    className,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: "currentColor",
+    strokeWidth: 1.5,
+    strokeLinecap: "round" as const,
+    strokeLinejoin: "round" as const,
   };
-  return <span className={className}>{icons[name] ?? "🤖"}</span>;
+
+  switch (name) {
+    // Terminal / console icon
+    case "bot":
+      return (
+        <svg {...svgProps}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M7 8l4 4-4 4" />
+          <path d="M13 16h4" />
+        </svg>
+      );
+    // Radar / scan icon
+    case "radar":
+      return (
+        <svg {...svgProps}>
+          <circle cx="12" cy="12" r="9" />
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 3v4" />
+          <path d="M12 12l6-6" />
+        </svg>
+      );
+    // Crosshair / target icon
+    case "target":
+      return (
+        <svg {...svgProps}>
+          <circle cx="12" cy="12" r="8" />
+          <circle cx="12" cy="12" r="3" />
+          <path d="M12 2v4M12 18v4M2 12h4M18 12h4" />
+        </svg>
+      );
+    // Chart / analytics icon
+    case "brain":
+      return (
+        <svg {...svgProps}>
+          <path d="M3 20h18" />
+          <path d="M5 20V10l4-6 4 8 4-4 4 6v6" />
+        </svg>
+      );
+    // Lightning / flash icon
+    case "rocket":
+      return (
+        <svg {...svgProps}>
+          <path d="M13 2L3 14h8l-1 8 10-12h-8l1-8z" />
+        </svg>
+      );
+    // Trend line icon
+    case "flame":
+      return (
+        <svg {...svgProps}>
+          <path d="M3 17l4-4 4 4 4-8 6 4" />
+          <circle cx="3" cy="17" r="1" fill="currentColor" stroke="none" />
+          <circle cx="21" cy="13" r="1" fill="currentColor" stroke="none" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...svgProps}>
+          <rect x="3" y="4" width="18" height="16" rx="2" />
+          <path d="M7 8l4 4-4 4" />
+          <path d="M13 16h4" />
+        </svg>
+      );
+  }
 }
 
 export default CustomAgentBuilder;
