@@ -27,6 +27,7 @@ interface FeatureUsageData {
 interface UsageState {
   backtest: FeatureUsageData | null;
   ai_call: FeatureUsageData | null;
+  custom_agent_run: FeatureUsageData | null;
 }
 
 interface UseFeatureUsageReturn {
@@ -52,7 +53,7 @@ const CACHE_TTL_MS = 30_000; // 30 seconds client-side cache
 // =============================================================================
 
 export function useFeatureUsage(): UseFeatureUsageReturn {
-  const [usage, setUsage] = useState<UsageState>({ backtest: null, ai_call: null });
+  const [usage, setUsage] = useState<UsageState>({ backtest: null, ai_call: null, custom_agent_run: null });
   const [plan, setPlan] = useState<string>("free");
   const [loading, setLoading] = useState(false);
   const lastFetchRef = useRef<number>(0);
@@ -73,6 +74,7 @@ export function useFeatureUsage(): UseFeatureUsageReturn {
         setUsage({
           backtest: json.data.backtest ?? null,
           ai_call: json.data.ai_call ?? null,
+          custom_agent_run: json.data.custom_agent_run ?? null,
         });
         if (json.plan) setPlan(json.plan);
         lastFetchRef.current = Date.now();

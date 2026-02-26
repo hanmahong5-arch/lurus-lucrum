@@ -15,6 +15,13 @@
       "when": 1769416641937,
       "tag": "0001_narrow_pete_wisdom",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1772085759037,
+      "tag": "0002_sour_toxin",
+      "breakpoints": true
     }
   ]
 }

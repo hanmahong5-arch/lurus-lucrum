@@ -843,6 +843,125 @@ export const strategyVersions = pgTable(
 );
 
 // ============================================================================
+// Custom Agent System Tables (自定义 Agent 系统)
+// ============================================================================
+
+/**
+ * Custom agents table - User-created agents for batch analysis
+ * 自定义 Agent 表 - 用户创建的批量分析 Agent
+ */
+export const customAgents = pgTable(
+  'custom_agents',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Owner user ID / 所有者用户ID */
+    userId: text('user_id').notNull(),
+    /** Agent display name (max 50 chars) / Agent 显示名称 */
+    name: text('name').notNull(),
+    /** Short description (max 200 chars) / 简短描述 */
+    description: text('description'),
+    /** Target configuration / 标的配置 */
+    targets: jsonb('targets').notNull().$type<{
+      mode: 'sector' | 'custom' | 'all';
+      sectors?: string[];
+      symbols?: string[];
+    }>(),
+    /** Bound strategies / 绑定策略 */
+    strategies: jsonb('strategies').notNull().$type<
+      Array<{ templateId: string; params?: Record<string, unknown> }>
+    >(),
+    /** Analysis depth: light skips AI, standard ~1.5K tokens, deep ~5K tokens */
+    analysisDepth: text('analysis_depth').notNull().default('standard'),
+    /** Optional backtest configuration override / 回测配置覆盖 */
+    backtestConfig: jsonb('backtest_config').$type<{
+      initialCapital?: number;
+      dateRange?: { start: string; end: string };
+      commission?: number;
+      slippage?: number;
+    }>(),
+    /** Display icon name / 显示图标 */
+    icon: text('icon').default('bot'),
+    /** Display color hex / 显示颜色 */
+    color: text('color').default('#6366f1'),
+    /** Whether pinned to top / 是否置顶 */
+    isPinned: boolean('is_pinned').default(false),
+    /** Total run count / 总运行次数 */
+    runCount: integer('run_count').default(0),
+    /** Last run timestamp / 上次运行时间 */
+    lastRunAt: timestamp('last_run_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userIdx: index('idx_custom_agents_user').on(table.userId),
+    userPinnedIdx: index('idx_custom_agents_user_pinned').on(table.userId, table.isPinned),
+  })
+);
+
+/**
+ * Custom agent runs table - Execution history for custom agents
+ * 自定义 Agent 运行记录表 - 运行历史
+ */
+export const customAgentRuns = pgTable(
+  'custom_agent_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    /** Reference to custom agent / Agent 引用 */
+    agentId: uuid('agent_id')
+      .notNull()
+      .references(() => customAgents.id, { onDelete: 'cascade' }),
+    /** User who triggered the run / 触发运行的用户 */
+    userId: text('user_id').notNull(),
+    /** Run status / 运行状态 */
+    status: text('status').notNull(), // running | completed | failed | cancelled
+    /** Frozen config at time of run / 运行时配置快照 */
+    configSnapshot: jsonb('config_snapshot'),
+    /** Aggregated result summary / 聚合结果摘要 */
+    resultSummary: jsonb('result_summary').$type<{
+      totalStocks: number;
+      analyzed: number;
+      topN: number;
+      avgReturn: number;
+      bestSymbol: string;
+    }>(),
+    /** Per-stock results / 每只股票的结果 */
+    stockResults: jsonb('stock_results').$type<
+      Array<{
+        symbol: string;
+        name: string;
+        totalReturn: number;
+        sharpeRatio: number;
+        maxDrawdown: number;
+        winRate: number;
+        score: number;
+      }>
+    >(),
+    /** AI-generated insights text / AI 生成的综合分析 */
+    insights: text('insights'),
+    /** Total token cost for this run / 本次运行的总 token 消耗 */
+    totalTokenCost: integer('total_token_cost').default(0),
+    /** Token cost breakdown by node / 各节点 token 消耗明细 */
+    tokenBreakdown: jsonb('token_breakdown').$type<{
+      resolveTargets?: number;
+      insights?: number;
+    }>(),
+    /** Execution duration in milliseconds / 执行耗时 */
+    durationMs: integer('duration_ms'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userCreatedIdx: index('idx_custom_agent_runs_user_created').on(
+      table.userId,
+      table.createdAt
+    ),
+    agentCreatedIdx: index('idx_custom_agent_runs_agent_created').on(
+      table.agentId,
+      table.createdAt
+    ),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -914,3 +1033,10 @@ export type NewStrategyVersion = typeof strategyVersions.$inferInsert;
 // User event types
 export type UserEvent = typeof userEvents.$inferSelect;
 export type NewUserEvent = typeof userEvents.$inferInsert;
+
+// Custom agent types
+export type CustomAgent = typeof customAgents.$inferSelect;
+export type NewCustomAgent = typeof customAgents.$inferInsert;
+
+export type CustomAgentRun = typeof customAgentRuns.$inferSelect;
+export type NewCustomAgentRun = typeof customAgentRuns.$inferInsert;

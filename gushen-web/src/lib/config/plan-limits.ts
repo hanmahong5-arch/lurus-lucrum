@@ -24,6 +24,13 @@ export interface PlanLimits {
   historyYears: number;
   /** Whether advanced metrics are available */
   advancedMetrics: boolean;
+  /** Custom agent tier limits */
+  customAgent: {
+    maxAgents: number;
+    runsPerDay: number;
+    maxStocks: number;
+    allowDeep: boolean;
+  };
 }
 
 // =============================================================================
@@ -38,6 +45,7 @@ const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     maxMultiStocks: 3,
     historyYears: 1,
     advancedMetrics: false,
+    customAgent: { maxAgents: 2, runsPerDay: 2, maxStocks: 5, allowDeep: false },
   },
   standard: {
     dailyBacktests: 50,
@@ -46,6 +54,7 @@ const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     maxMultiStocks: 50,
     historyYears: 5,
     advancedMetrics: true,
+    customAgent: { maxAgents: 10, runsPerDay: 20, maxStocks: 30, allowDeep: true },
   },
   premium: {
     dailyBacktests: Infinity,
@@ -54,6 +63,7 @@ const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     maxMultiStocks: 100,
     historyYears: 10,
     advancedMetrics: true,
+    customAgent: { maxAgents: -1, runsPerDay: -1, maxStocks: -1, allowDeep: true },
   },
 };
 
@@ -71,7 +81,7 @@ export function getLimitsForPlan(plan: string | undefined | null): PlanLimits {
 }
 
 /** Feature keys used in usage tracking */
-export type UsageFeature = "backtest" | "ai_call";
+export type UsageFeature = "backtest" | "ai_call" | "custom_agent_run";
 
 /**
  * Get the daily limit for a specific feature based on plan.
@@ -86,6 +96,10 @@ export function getFeatureLimit(
       return limits.dailyBacktests;
     case "ai_call":
       return limits.dailyAiCalls;
+    case "custom_agent_run":
+      return limits.customAgent.runsPerDay === -1
+        ? Infinity
+        : limits.customAgent.runsPerDay;
     default:
       return 0;
   }

@@ -50,6 +50,7 @@ const NAV_ITEMS = [
   { href: '/dashboard/advisor', label: '投资顾问', labelEn: 'Advisor' },
   { href: '/backtest-agent', label: 'AI 回测', labelEn: 'AI Backtest' },
   { href: '/dashboard/strategy-scanner', label: '扫描选板', labelEn: 'Scanner' },
+  { href: '/dashboard/agents', label: '我的 Agent', labelEn: 'Agents' },
   { href: '/dashboard/history', label: '历史记录', labelEn: 'History' },
 ];
 
