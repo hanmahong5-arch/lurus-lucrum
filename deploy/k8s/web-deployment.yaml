@@ -38,9 +38,18 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: cloud-ubuntu-3-2c2g
 
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: web
-          image: ghcr.io/hanmahong5-arch/gushen-web:latest
+          image: ghcr.io/hanmahong5-arch/gushen-web:main
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -123,7 +132,18 @@ spec:
             timeoutSeconds: 3
             failureThreshold: 3
 
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: nextjs-cache
+              mountPath: /app/.next/cache
+
       restartPolicy: Always
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: nextjs-cache
+          emptyDir: {}
 ---
 # Web Service (ClusterIP for internal access)
 apiVersion: v1

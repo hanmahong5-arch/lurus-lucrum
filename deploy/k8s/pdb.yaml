@@ -1,0 +1,14 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: gushen-web-pdb
+  namespace: ai-qtrd
+  labels:
+    app: ai-qtrd-web
+    app.kubernetes.io/name: gushen-web
+    app.kubernetes.io/part-of: lurus
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app: ai-qtrd-web

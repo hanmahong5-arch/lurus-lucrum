@@ -7,6 +7,7 @@ namespace: ai-qtrd
 resources:
   - namespace.yaml
   - web-deployment.yaml
+  - pdb.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: lurus
