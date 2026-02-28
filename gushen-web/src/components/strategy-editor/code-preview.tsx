@@ -431,7 +431,7 @@ export function CodePreview({
   };
 
   return (
-    <div className="terminal-block overflow-hidden flex flex-col h-full">
+    <div className="terminal-block overflow-hidden flex flex-col">
       {/* VS Code style header with traffic lights */}
       <div className="terminal-header flex items-center justify-between shrink-0">
         <div className="flex items-center gap-3">
@@ -555,7 +555,7 @@ export function CodePreview({
             <div
               ref={codeContainerRef}
               className={cn(
-                "flex-1 overflow-auto py-4 px-4 transition-all duration-300",
+                "flex-1 overflow-auto py-4 px-4 transition-all duration-300 min-h-[160px]",
                 showMinimap && !isCollapsed && lineCount > 20 && "pr-20",
                 isCollapsed && "max-h-[400px]"
               )}

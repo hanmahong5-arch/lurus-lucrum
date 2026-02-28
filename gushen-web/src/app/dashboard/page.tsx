@@ -5,12 +5,11 @@ import Link from "next/link";
 import { StrategyInput } from "@/components/strategy-editor/strategy-input";
 import { CodePreview } from "@/components/strategy-editor/code-preview";
 import { BacktestPanel } from "@/components/strategy-editor/backtest-panel";
-import { StrategyTemplateList } from "@/components/strategy-editor/strategy-templates";
 import { ParameterEditor } from "@/components/strategy-editor/parameter-editor";
 import { AutoSaveIndicator } from "@/components/strategy-editor/auto-save-indicator";
 import { DraftHistoryPanel } from "@/components/strategy-editor/draft-history-panel";
 import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-card";
-import { AIStrategyAssistant } from "@/components/strategy-editor/ai-strategy-assistant";
+import { StrategyWorkbenchPanel } from "@/components/strategy-editor/strategy-workbench-panel";
 import { StrategyLogicSummary } from "@/components/strategy-editor/strategy-logic-summary";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { TieredDemoSelector } from "@/components/onboarding";
@@ -466,7 +465,7 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
             />
           </div>
 
-          {/* Right column - Backtest + AI Assistant */}
+          {/* Right column - Backtest + Strategy Workbench */}
           <div className="space-y-6">
             <BacktestPanel
               strategyCode={generatedCode}
@@ -474,22 +473,16 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
               onBacktestEnd={handleBacktestEnd}
             />
 
-            {/* AI Strategy Assistant - shows when code is generated */}
-            {generatedCode && (
-              <AIStrategyAssistant
-                strategyCode={generatedCode}
-                backtestResult={workspace.lastBacktestResult ?? undefined}
-                currentParameters={currentParameters}
-                onApplyParameter={handleApplyAIParameter}
-                onApplyAllSuggestions={handleApplyAllAISuggestions}
-              />
-            )}
+            {/* Strategy Workbench Panel - combines templates + AI assistant */}
+            <StrategyWorkbenchPanel
+              strategyCode={generatedCode}
+              backtestResult={workspace.lastBacktestResult ?? undefined}
+              currentParameters={currentParameters}
+              onSelectTemplate={handleSelectTemplate}
+              onApplyParameter={handleApplyAIParameter}
+              onApplyAllSuggestions={handleApplyAllAISuggestions}
+            />
           </div>
-        </div>
-
-        {/* Strategy Templates Section / 策略模板区域 */}
-        <div className="mt-8 p-6 bg-surface border border-border rounded-xl">
-          <StrategyTemplateList onSelectTemplate={handleSelectTemplate} />
         </div>
 
         {/* Tips / 使用提示 */}

@@ -86,3 +86,24 @@ Added 6 test files (134 tests) for untested lib/ modules: utils, strategy/parame
 Verification: `bun run test -- --run → 2439 passed, 2 failed (pre-existing in accessibility/, unrelated to 7-4)`
 Remaining: 2 pre-existing failures in color-contrast.test.ts and live-region.test.ts (Story 7-3 scope).
 Status: Done. sprint-status.yaml updated (7-4: done).
+
+---
+
+## 2026-02-27: UI 三项改进 — 工作台合并、代码框修复、K线标记
+1. 新建 `strategy-workbench-panel.tsx`：合并 AIStrategyAssistant + BuiltinTemplateGrid + StrategyTemplateList，Tab 智能切换（无代码→模板库，生成代码后→AI 助手）。
+2. `page.tsx`：右列替换为 StrategyWorkbenchPanel，移除底部独立模板区块。
+3. `code-preview.tsx`：外层容器移除 `h-full`，代码滚动区加 `min-h-[160px]`，修复短代码时黑色残留。
+4. `kline-chart.tsx`：新增 `TradeMarkerInfo` 接口与 `tradeMarkers` prop，`setMarkers()` 渲染买卖箭头，crosshairMove hover 展示交易详情 Tooltip。
+5. `backtest-panel.tsx`：新增"K线分析"按钮，点击展示 KLineChart（含交易标记 + 统计摘要）。
+Verification: `bunx tsc --noEmit → 0 errors`
+Status: ⏳ 待 bun run dev 手动验证。
+
+---
+
+## 2026-02-27: DB 连接修复 — /api/agent/custom 500 错误
+根因：`web-deployment.yaml` 缺少 `DATABASE_URL`，应用回退到 `localhost:5432` 导致所有 DB 查询失败。
+次因：migration 0002 的 4 张表由 `postgres` 拥有，`lurus` 用户无权限。
+修复：① patch `ai-qtrd-secrets` 添加 `DATABASE_URL=postgresql://lurus:...@lurus-pg-rw.database.svc.cluster.local:5432/gushen`；② `web-deployment.yaml` 引用该 secret；③ GRANT ALL ON custom_agents/custom_agent_runs/strategy_versions/user_events TO lurus；④ kubectl apply 触发滚动重启。
+Verification: `curl https://gushen.lurus.cn/api/agent/custom → 401`（非 500）| Pod 日志显示 `[Database] Connecting to: postgresql://lurus:****@lurus-pg-rw.database.svc.cluster.local:5432/gushen`
+Status: 🔧 已部署。⏳ 需用户登录后手动验证"创建并运行" Agent 流程。
+⚠️ 注意：`web-deployment.yaml` 已改动，需 git push 到 main 使 ArgoCD 同步持久化（当前为直接 apply 临时生效）。

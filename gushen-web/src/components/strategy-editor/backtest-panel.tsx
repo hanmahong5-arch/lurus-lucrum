@@ -15,6 +15,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { KLineChart, type TradeMarkerInfo } from "@/components/charts/kline-chart";
 import { EnhancedTradeCard } from "./enhanced-trade-card";
 import { BacktestBasisPanel } from "./backtest-basis-panel";
 import type { BacktestResult, DetailedTrade, BacktestTarget } from "@/lib/backtest/types";
@@ -45,6 +46,12 @@ interface BacktestConfig {
   startDate: string;
   endDate: string;
   timeframe: "1d" | "1w" | "60m" | "30m" | "15m" | "5m" | "1m";
+  // A-share rules
+  enableT1: boolean;
+  enableCircuitBreaker: boolean;
+  stampDuty: number;
+  // Walk-forward
+  wfSplitRatio: 0 | 0.7 | 0.8;
 }
 
 /**
@@ -89,6 +96,13 @@ const TIMEFRAME_OPTIONS = [
   { value: "1w", label: "周线", labelEn: "Weekly" },
 ] as const;
 
+// Primary timeframes shown as 3-segment button group
+const PRIMARY_TIMEFRAMES = [
+  { value: "1d" as const, label: "日K" },
+  { value: "1w" as const, label: "周K" },
+  { value: "60m" as const, label: "时K" },
+] as const;
+
 const PRESET_PERIODS = [
   { label: "1个月", days: 30 },
   { label: "3个月", days: 90 },
@@ -96,6 +110,43 @@ const PRESET_PERIODS = [
   { label: "1年", days: 365 },
   { label: "2年", days: 730 },
   { label: "3年", days: 1095 },
+] as const;
+
+// Date range quick-select chips (approximate)
+const DATE_RANGE_CHIPS = [
+  { label: "近1年", days: 365 },
+  { label: "近3年", days: 1095 },
+  { label: "近5年", days: 1825 },
+] as const;
+
+// Capital quick-select buttons
+const CAPITAL_PRESETS = [
+  { label: "10万", value: 100000 },
+  { label: "50万", value: 500000 },
+  { label: "100万", value: 1000000 },
+  { label: "300万", value: 3000000 },
+] as const;
+
+// Commission quick-select
+const COMMISSION_PRESETS = [
+  { label: "低0.015%", value: 0.00015 },
+  { label: "标准0.03%", value: 0.0003 },
+  { label: "高0.1%", value: 0.001 },
+] as const;
+
+// Slippage quick-select
+const SLIPPAGE_PRESETS = [
+  { label: "无", value: 0 },
+  { label: "低0.05%", value: 0.0005 },
+  { label: "中0.1%", value: 0.001 },
+  { label: "高0.2%", value: 0.002 },
+] as const;
+
+// Walk-forward split options
+const WFO_OPTIONS = [
+  { label: "全量", value: 0 as const },
+  { label: "80/20", value: 0.8 as const },
+  { label: "70/30", value: 0.7 as const },
 ] as const;
 
 // =============================================================================
@@ -153,6 +204,10 @@ export function BacktestPanel({
     startDate: defaultDates.startDate,
     endDate: defaultDates.endDate,
     timeframe: "1d",
+    enableT1: true,
+    enableCircuitBreaker: true,
+    stampDuty: 0.0005,
+    wfSplitRatio: 0,
   });
 
   // Target selector state
@@ -227,6 +282,7 @@ export function BacktestPanel({
   const [showConfig, setShowConfig] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showTrades, setShowTrades] = useState(false);
+  const [showKlineChart, setShowKlineChart] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -614,54 +670,91 @@ export function BacktestPanel({
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            {/* Timeframe / 时间颗粒度 */}
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                时间颗粒度
-                <span className="text-neutral-600 ml-1">Timeframe</span>
-              </label>
+          {/* Timeframe — 3-segment button group / 时间颗粒度三段按钮组 */}
+          <div>
+            <label className="block text-xs text-neutral-400 mb-2 font-medium">
+              时间颗粒度
+              <span className="text-neutral-600 ml-1">Timeframe</span>
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {PRIMARY_TIMEFRAMES.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  onClick={() => setConfig((prev) => ({ ...prev, timeframe: opt.value }))}
+                  className={cn(
+                    "px-3 py-1.5 text-xs rounded-lg font-medium transition-all btn-tactile border",
+                    config.timeframe === opt.value
+                      ? "bg-primary/20 border-primary/50 text-primary"
+                      : "bg-surface border-white/5 text-neutral-400 hover:text-neutral-200 hover:border-white/10",
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+              {/* More timeframes dropdown */}
+              {!PRIMARY_TIMEFRAMES.some((t) => t.value === config.timeframe) && (
+                <span className="px-2 py-1 text-xs bg-primary/20 border border-primary/50 text-primary rounded-lg font-mono">
+                  {TIMEFRAME_OPTIONS.find((t) => t.value === config.timeframe)?.label ?? config.timeframe}
+                </span>
+              )}
               <select
-                value={config.timeframe}
-                onChange={(e) =>
-                  setConfig((prev) => ({
-                    ...prev,
-                    timeframe: e.target.value as BacktestConfig["timeframe"],
-                  }))
-                }
-                className="w-full px-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    setConfig((prev) => ({ ...prev, timeframe: e.target.value as BacktestConfig["timeframe"] }));
+                  }
+                }}
+                className="px-2 py-1 text-xs bg-surface border border-white/5 rounded-lg text-neutral-500 hover:border-white/10 focus:outline-none cursor-pointer"
               >
-                {TIMEFRAME_OPTIONS.map((opt) => (
-                  <option
-                    key={opt.value}
-                    value={opt.value}
-                    className="bg-surface-dark"
-                  >
-                    {opt.label} ({opt.labelEn})
+                <option value="">更多...</option>
+                {TIMEFRAME_OPTIONS.filter((t) => !PRIMARY_TIMEFRAMES.some((p) => p.value === t.value)).map((opt) => (
+                  <option key={opt.value} value={opt.value} className="bg-surface-dark">
+                    {opt.label}
                   </option>
                 ))}
               </select>
             </div>
+          </div>
 
-            {/* Initial Capital / 初始资金 */}
-            <div>
-              <label className="block text-xs text-neutral-400 mb-1.5 font-medium">
-                初始资金
-                <span className="text-neutral-600 ml-1">Capital</span>
-              </label>
+          {/* Initial Capital — button group / 初始资金按钮组 */}
+          <div>
+            <label className="block text-xs text-neutral-400 mb-2 font-medium">
+              初始资金
+              <span className="text-neutral-600 ml-1">Capital</span>
+              <span className="ml-2 text-primary font-mono tabular-nums text-[10px]">
+                ¥{config.initialCapital.toLocaleString()}
+              </span>
+            </label>
+            <div className="flex gap-1.5 flex-wrap">
+              {CAPITAL_PRESETS.map((preset) => (
+                <button
+                  key={preset.value}
+                  type="button"
+                  onClick={() => setConfig((prev) => ({ ...prev, initialCapital: preset.value }))}
+                  className={cn(
+                    "px-3 py-1.5 text-xs rounded-lg font-medium transition-all btn-tactile border",
+                    config.initialCapital === preset.value
+                      ? "bg-primary/20 border-primary/50 text-primary"
+                      : "bg-surface border-white/5 text-neutral-400 hover:text-neutral-200 hover:border-white/10",
+                  )}
+                >
+                  {preset.label}
+                </button>
+              ))}
+              {/* Custom input */}
               <div className="relative">
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">¥</span>
+                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-neutral-500 text-xs">¥</span>
                 <input
                   ref={capitalRef}
                   type="number"
-                  value={config.initialCapital}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      initialCapital: parseInt(e.target.value) || 100000,
-                    }))
-                  }
-                  className="w-full pl-7 pr-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm font-mono tabular-nums focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                  placeholder="自定义"
+                  value={CAPITAL_PRESETS.some((p) => p.value === config.initialCapital) ? "" : config.initialCapital}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value);
+                    if (v > 0) setConfig((prev) => ({ ...prev, initialCapital: v }));
+                  }}
+                  className="w-24 pl-5 pr-2 py-1.5 bg-surface border border-white/5 rounded-lg text-neutral-200 text-xs font-mono tabular-nums focus:outline-none focus:border-primary/50 transition-colors placeholder:text-neutral-600"
                 />
               </div>
             </div>
@@ -673,39 +766,66 @@ export function BacktestPanel({
               回测区间
               <span className="text-neutral-600 ml-1">Date Range</span>
             </label>
-            <div className="flex flex-wrap gap-1.5 mb-3">
-              {PRESET_PERIODS.map((period) => (
+            {/* Quick chips */}
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {DATE_RANGE_CHIPS.map((chip) => (
+                <button
+                  key={chip.days}
+                  type="button"
+                  onClick={() => setPresetPeriod(chip.days)}
+                  className="px-2.5 py-1 text-xs rounded-lg bg-surface border border-white/5 text-neutral-400 hover:text-neutral-200 hover:border-white/10 transition-all btn-tactile"
+                >
+                  {chip.label}
+                </button>
+              ))}
+              {dateRange && (
+                <button
+                  type="button"
+                  onClick={() => setConfig((prev) => ({ ...prev, startDate: dateRange.minDate, endDate: dateRange.maxDate }))}
+                  className="px-2.5 py-1 text-xs rounded-lg bg-source-db/10 border border-source-db/20 text-source-db hover:bg-source-db/20 transition-all btn-tactile"
+                >
+                  全部
+                </button>
+              )}
+              {/* Existing presets as smaller chips */}
+              {PRESET_PERIODS.slice(0, 3).map((period) => (
                 <button
                   key={period.days}
+                  type="button"
                   onClick={() => setPresetPeriod(period.days)}
-                  className="px-2.5 py-1 text-xs rounded-md bg-surface hover:bg-surface-hover text-neutral-400 hover:text-neutral-200 border border-white/5 hover:border-white/10 transition-all btn-tactile"
+                  className="px-2.5 py-1 text-xs rounded-md bg-surface hover:bg-surface-hover text-neutral-500 hover:text-neutral-300 border border-white/5 hover:border-white/10 transition-all btn-tactile"
                 >
                   {period.label}
                 </button>
               ))}
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <input
-                type="date"
-                value={config.startDate}
-                min={dateRange?.minDate}
-                max={dateRange?.maxDate}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, startDate: e.target.value }))
-                }
-                className="px-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-              />
-              <input
-                type="date"
-                value={config.endDate}
-                min={dateRange?.minDate}
-                max={dateRange?.maxDate}
-                onChange={(e) =>
-                  setConfig((prev) => ({ ...prev, endDate: e.target.value }))
-                }
-                className="px-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
-              />
-            </div>
+            {/* Custom date range (collapsible) */}
+            <details className="group">
+              <summary className="text-[10px] text-neutral-600 cursor-pointer hover:text-neutral-400 flex items-center gap-1 transition-colors">
+                <svg className="w-2.5 h-2.5 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+                自定义区间 ({config.startDate} ~ {config.endDate})
+              </summary>
+              <div className="grid grid-cols-2 gap-3 mt-2">
+                <input
+                  type="date"
+                  value={config.startDate}
+                  min={dateRange?.minDate}
+                  max={dateRange?.maxDate}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, startDate: e.target.value }))}
+                  className="px-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                />
+                <input
+                  type="date"
+                  value={config.endDate}
+                  min={dateRange?.minDate}
+                  max={dateRange?.maxDate}
+                  onChange={(e) => setConfig((prev) => ({ ...prev, endDate: e.target.value }))}
+                  className="px-3 py-2 bg-surface border border-white/10 rounded-lg text-neutral-200 text-sm font-mono focus:outline-none focus:border-primary/50 focus:ring-1 focus:ring-primary/20 transition-colors"
+                />
+              </div>
+            </details>
           </div>
 
           {/* Advanced Settings / 高级设置 */}
@@ -716,36 +836,124 @@ export function BacktestPanel({
               </svg>
               高级设置 / Advanced
             </summary>
-            <div className="grid grid-cols-2 gap-3 mt-3 pt-3 border-t border-white/5">
+            <div className="mt-3 pt-3 border-t border-white/5 space-y-3">
+
+              {/* Commission / 手续费率 */}
               <div>
                 <label className="block text-neutral-500 mb-1.5">手续费率</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={config.commission}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      commission: parseFloat(e.target.value) || 0.0003,
-                    }))
-                  }
-                  className="w-full px-3 py-1.5 bg-surface border border-white/10 rounded-lg text-neutral-200 text-xs font-mono tabular-nums focus:outline-none focus:border-primary/50 transition-colors"
-                />
+                <div className="flex gap-1.5 flex-wrap">
+                  {COMMISSION_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, commission: preset.value }))}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md transition-all btn-tactile border",
+                        config.commission === preset.value
+                          ? "bg-primary/20 border-primary/40 text-primary"
+                          : "bg-surface border-white/5 text-neutral-500 hover:text-neutral-300",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
               </div>
+
+              {/* Slippage / 滑点率 */}
               <div>
                 <label className="block text-neutral-500 mb-1.5">滑点率</label>
-                <input
-                  type="number"
-                  step="0.0001"
-                  value={config.slippage}
-                  onChange={(e) =>
-                    setConfig((prev) => ({
-                      ...prev,
-                      slippage: parseFloat(e.target.value) || 0.001,
-                    }))
-                  }
-                  className="w-full px-3 py-1.5 bg-surface border border-white/10 rounded-lg text-neutral-200 text-xs font-mono tabular-nums focus:outline-none focus:border-primary/50 transition-colors"
-                />
+                <div className="flex gap-1.5 flex-wrap">
+                  {SLIPPAGE_PRESETS.map((preset) => (
+                    <button
+                      key={preset.value}
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, slippage: preset.value }))}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md transition-all btn-tactile border",
+                        config.slippage === preset.value
+                          ? "bg-primary/20 border-primary/40 text-primary"
+                          : "bg-surface border-white/5 text-neutral-500 hover:text-neutral-300",
+                      )}
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* A-share rules / A股规则 */}
+              <div>
+                <label className="block text-neutral-500 mb-1.5">A股规则</label>
+                <div className="flex flex-col gap-2">
+                  {/* T+1 toggle */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">T+1 限制（买入当天不可卖出）</span>
+                    <button
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, enableT1: !prev.enableT1 }))}
+                      className={cn(
+                        "relative w-9 h-5 rounded-full transition-colors",
+                        config.enableT1 ? "bg-primary/60" : "bg-surface-hover",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm",
+                          config.enableT1 ? "translate-x-4" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {/* Circuit breaker toggle */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">涨跌停限制（±10%成交失败）</span>
+                    <button
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, enableCircuitBreaker: !prev.enableCircuitBreaker }))}
+                      className={cn(
+                        "relative w-9 h-5 rounded-full transition-colors",
+                        config.enableCircuitBreaker ? "bg-primary/60" : "bg-surface-hover",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform shadow-sm",
+                          config.enableCircuitBreaker ? "translate-x-4" : "translate-x-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+                  {/* Stamp duty — fixed display */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-neutral-500">印花税（仅卖出）</span>
+                    <span className="px-2 py-0.5 text-[10px] rounded bg-surface border border-white/5 text-neutral-400 font-mono">
+                      0.05%（固定）
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Walk-Forward / 样本分割 */}
+              <div>
+                <label className="block text-neutral-500 mb-1.5">样本分割 (Walk-Forward)</label>
+                <div className="flex gap-1.5">
+                  {WFO_OPTIONS.map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setConfig((prev) => ({ ...prev, wfSplitRatio: opt.value }))}
+                      className={cn(
+                        "px-2.5 py-1 rounded-md transition-all btn-tactile border",
+                        config.wfSplitRatio === opt.value
+                          ? "bg-primary/20 border-primary/40 text-primary"
+                          : "bg-surface border-white/5 text-neutral-500 hover:text-neutral-300",
+                      )}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
           </details>
@@ -1101,6 +1309,21 @@ export function BacktestPanel({
                 </span>
               </button>
               <button
+                onClick={() => setShowKlineChart(!showKlineChart)}
+                className={cn(
+                  "flex-1 px-3 py-2 text-sm rounded-lg font-medium transition-all btn-tactile",
+                  "bg-surface hover:bg-surface-hover border border-white/5 hover:border-white/10",
+                  showKlineChart ? "text-accent" : "text-neutral-400 hover:text-neutral-200"
+                )}
+              >
+                <span className="flex items-center justify-center gap-1.5">
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                  </svg>
+                  {showKlineChart ? "隐藏K线" : "K线分析"}
+                </span>
+              </button>
+              <button
                 onClick={handleExport}
                 className="flex-1 px-3 py-2 text-sm rounded-lg font-medium transition-all btn-tactile bg-surface hover:bg-surface-hover border border-white/5 hover:border-white/10 text-neutral-400 hover:text-neutral-200"
               >
@@ -1112,6 +1335,65 @@ export function BacktestPanel({
                 </span>
               </button>
             </div>
+
+            {/* K-line Chart with Trade Markers / K 线图含买卖标记 */}
+            {showKlineChart && effectiveSymbol && (() => {
+              // Build trade markers from detailed trades when available
+              const detailedTrades = displayResult.enhanced?.trades ?? [];
+              const markers: TradeMarkerInfo[] = detailedTrades
+                .filter((t) => t && typeof t === "object" && "triggerReason" in t)
+                .map((t) => ({
+                  timestamp: t.timestamp,
+                  type: t.type,
+                  executePrice: t.executePrice,
+                  signalPrice: t.signalPrice,
+                  quantity: t.actualQuantity,
+                  lots: t.lots,
+                  commission: t.commission,
+                  slippage: t.slippage,
+                  triggerReason: t.triggerReason,
+                  indicatorValues: t.indicatorValues,
+                  pnl: t.pnl,
+                  pnlPercent: t.pnlPercent,
+                  holdingDays: t.holdingDays,
+                }));
+
+              // Trade summary stats
+              const buyCount = markers.filter((m) => m.type === "buy").length;
+              const sellCount = markers.filter((m) => m.type === "sell").length;
+              const profitCount = markers.filter(
+                (m) => m.type === "sell" && (m.pnl ?? 0) > 0
+              ).length;
+              const winRate = sellCount > 0 ? ((profitCount / sellCount) * 100).toFixed(1) : "—";
+
+              return (
+                <div className="mt-4 p-4 bg-surface/50 rounded-lg border border-white/5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="text-sm font-medium text-neutral-200 flex items-center gap-2">
+                      <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                      </svg>
+                      K 线分析
+                    </h4>
+                    {markers.length > 0 && (
+                      <div className="flex items-center gap-3 text-xs font-mono tabular-nums">
+                        <span className="text-profit">▲ 买入 {buyCount}</span>
+                        <span className="text-loss">▼ 卖出 {sellCount}</span>
+                        <span className="text-neutral-400">盈利 {profitCount} / 胜率 {winRate}%</span>
+                      </div>
+                    )}
+                  </div>
+                  <KLineChart
+                    symbol={effectiveSymbol}
+                    initialTimeFrame={config.timeframe}
+                    tradeMarkers={markers.length > 0 ? markers : undefined}
+                    height={400}
+                    showVolume={true}
+                    showMA={true}
+                  />
+                </div>
+              );
+            })()}
           </>
         ) : (
           /* Empty State / 空状态 */

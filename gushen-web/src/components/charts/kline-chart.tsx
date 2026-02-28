@@ -24,6 +24,9 @@ import {
   CrosshairMode,
   ColorType,
   LineData,
+  type SeriesMarker,
+  type SeriesMarkerPosition,
+  type SeriesMarkerShape,
 } from "lightweight-charts";
 import {
   useKLineData,
@@ -71,6 +74,25 @@ export const TIME_FRAMES: { value: TimeFrame; label: string }[] = [
 // TYPES / 类型定义
 // =============================================================================
 
+/**
+ * Trade marker data for displaying buy/sell signals on the K-line chart
+ */
+export interface TradeMarkerInfo {
+  timestamp: number;         // Unix timestamp (seconds)
+  type: "buy" | "sell";
+  executePrice: number;
+  signalPrice: number;
+  quantity: number;
+  lots: number;
+  commission: number;
+  slippage: number;
+  triggerReason: string;
+  indicatorValues: Record<string, number>;
+  pnl?: number;              // Sell trades only
+  pnlPercent?: number;
+  holdingDays?: number;
+}
+
 export interface KLineChartProps {
   // Data source
   symbol: string;
@@ -78,6 +100,9 @@ export interface KLineChartProps {
 
   // External data (optional - if not provided, will fetch internally)
   externalData?: KLineData[];
+
+  // Trade markers from backtest results
+  tradeMarkers?: TradeMarkerInfo[];
 
   // Display options
   height?: number;
@@ -143,6 +168,7 @@ export function KLineChart({
   symbol,
   initialTimeFrame = "1d",
   externalData,
+  tradeMarkers,
   height = 500,
   showVolume = true,
   showMA = true,
@@ -164,6 +190,10 @@ export function KLineChart({
     volume: null,
     time: null,
   });
+
+  // Active trade marker for hover tooltip
+  const [activeTradeMarker, setActiveTradeMarker] = useState<TradeMarkerInfo | null>(null);
+  const [tooltipPosition, setTooltipPosition] = useState<{ x: number; y: number } | null>(null);
 
   // Track whether chart is initialized and hydration complete
   const [chartInitialized, setChartInitialized] = useState(false);
@@ -199,6 +229,22 @@ export function KLineChart({
 
   // Use external data if provided, otherwise use fetched data
   const klineData = externalData ?? fetchedData;
+
+  // Build a lookup map from timestamp → TradeMarkerInfo for crosshair hover
+  const tradesByTime = useMemo(() => {
+    if (!tradeMarkers || tradeMarkers.length === 0) return new Map<number, TradeMarkerInfo>();
+    const map = new Map<number, TradeMarkerInfo>();
+    for (const marker of tradeMarkers) {
+      map.set(marker.timestamp, marker);
+    }
+    return map;
+  }, [tradeMarkers]);
+
+  // Use a ref so the crosshairMove closure always accesses the latest map
+  const tradesByTimeRef = useRef(tradesByTime);
+  useEffect(() => {
+    tradesByTimeRef.current = tradesByTime;
+  }, [tradesByTime]);
 
   // Hydration safety - only run client-side code after mount
   useEffect(() => {
@@ -381,6 +427,8 @@ export function KLineChart({
             volume: null,
             time: null,
           });
+          setActiveTradeMarker(null);
+          setTooltipPosition(null);
           return;
         }
 
@@ -415,6 +463,19 @@ export function KLineChart({
             volume: volumeData?.value ?? null,
             time: timeStr,
           });
+
+          // Check if there's a trade marker at this timestamp
+          const ts = param.time as number;
+          const tradeAtTime = tradesByTimeRef.current.get(ts);
+          if (tradeAtTime) {
+            setActiveTradeMarker(tradeAtTime);
+            setTooltipPosition(
+              param.point ? { x: param.point.x, y: param.point.y } : null
+            );
+          } else {
+            setActiveTradeMarker(null);
+            setTooltipPosition(null);
+          }
         }
       });
 
@@ -476,6 +537,25 @@ export function KLineChart({
     // Clear and set new candlestick data
     candleSeriesRef.current.setData(chartData.candles);
 
+    // Set trade markers (buy/sell signals from backtest)
+    if (tradeMarkers && tradeMarkers.length > 0) {
+      const markers: SeriesMarker<Time>[] = tradeMarkers
+        .filter((m) => m.timestamp > 0)
+        .map((m) => ({
+          time: m.timestamp as Time,
+          position: (m.type === "buy" ? "belowBar" : "aboveBar") as SeriesMarkerPosition,
+          shape: (m.type === "buy" ? "arrowUp" : "arrowDown") as SeriesMarkerShape,
+          color: m.type === "buy" ? "#10b981" : "#ef4444",
+          text: m.type === "buy" ? "B" : "S",
+          size: 1,
+        }))
+        // Sort ascending by time (required by lightweight-charts)
+        .sort((a, b) => (a.time as number) - (b.time as number));
+      candleSeriesRef.current.setMarkers(markers);
+    } else {
+      candleSeriesRef.current.setMarkers([]);
+    }
+
     // Update volume data
     if (showVolume && volumeSeriesRef.current) {
       volumeSeriesRef.current.setData(chartData.volumes);
@@ -506,6 +586,7 @@ export function KLineChart({
     selectedTimeFrame,
     source,
     isMock,
+    tradeMarkers,
   ]);
 
   // Format volume for display
@@ -735,12 +816,120 @@ export function KLineChart({
       {/* Chart container - Fixed height and background to prevent flashing */}
       <div
         ref={chartContainerRef}
-        className="w-full bg-[#0f1117]"
+        className="w-full bg-[#0f1117] relative"
         style={{ height: `${height}px`, minHeight: `${height}px` }}
-      />
+      >
+        {/* Trade marker hover tooltip */}
+        {activeTradeMarker && tooltipPosition && (
+          <div
+            className="absolute z-10 pointer-events-none"
+            style={{
+              left: Math.min(tooltipPosition.x + 12, (chartContainerRef.current?.clientWidth ?? 0) - 260),
+              top: Math.max(tooltipPosition.y - 20, 8),
+            }}
+          >
+            <TradeTooltip marker={activeTradeMarker} />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
 // Re-export types for convenience
 export type { TimeFrame, KLineData };
+
+// =============================================================================
+// TRADE TOOLTIP / 交易标记详情浮层
+// =============================================================================
+
+function TradeTooltip({ marker }: { marker: TradeMarkerInfo }) {
+  const isBuy = marker.type === "buy";
+  const date = new Date(marker.timestamp * 1000).toLocaleDateString("zh-CN");
+
+  const indicatorEntries = Object.entries(marker.indicatorValues).slice(0, 4);
+
+  return (
+    <div className="w-60 rounded-lg border shadow-xl text-xs"
+      style={{
+        background: "rgba(15,17,23,0.97)",
+        borderColor: isBuy ? "rgba(16,185,129,0.5)" : "rgba(239,68,68,0.5)",
+      }}
+    >
+      {/* Header */}
+      <div
+        className="px-3 py-2 rounded-t-lg flex items-center justify-between"
+        style={{ background: isBuy ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)" }}
+      >
+        <span
+          className="font-bold text-sm"
+          style={{ color: isBuy ? "#10b981" : "#ef4444" }}
+        >
+          {isBuy ? "▲ 买入" : "▼ 卖出"}
+        </span>
+        <span className="text-white/50">{date}</span>
+      </div>
+
+      {/* Execution info */}
+      <div className="px-3 py-2 space-y-1 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <div className="flex justify-between">
+          <span className="text-white/40">成交价</span>
+          <span className="text-white font-mono tabular-nums">
+            ¥{marker.executePrice.toFixed(2)}
+            <span className="text-white/30 ml-1 text-[10px]">
+              (信号 ¥{marker.signalPrice.toFixed(2)})
+            </span>
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-white/40">数量</span>
+          <span className="text-white font-mono tabular-nums">
+            {marker.quantity.toLocaleString()} 股（{marker.lots} 手）
+          </span>
+        </div>
+        <div className="flex justify-between">
+          <span className="text-white/40">交易成本</span>
+          <span className="text-white/60 font-mono tabular-nums">
+            ¥{(marker.commission + marker.slippage).toFixed(2)}
+          </span>
+        </div>
+      </div>
+
+      {/* Trigger reason */}
+      <div className="px-3 py-2 space-y-1 border-b" style={{ borderColor: "rgba(255,255,255,0.06)" }}>
+        <div className="text-white/30 text-[10px] uppercase tracking-wide">触发依据</div>
+        <div className="text-white/70 leading-relaxed break-words">
+          {marker.triggerReason || "—"}
+        </div>
+        {indicatorEntries.length > 0 && (
+          <div className="text-white/40 font-mono tabular-nums text-[10px] mt-1">
+            {indicatorEntries.map(([k, v]) => `${k}=${v.toFixed(2)}`).join("  /  ")}
+          </div>
+        )}
+      </div>
+
+      {/* P&L — sell trades only */}
+      {!isBuy && marker.pnl !== undefined && (
+        <div className="px-3 py-2">
+          <div className="text-white/30 text-[10px] uppercase tracking-wide mb-1">盈亏</div>
+          <div className="flex items-center gap-3">
+            {marker.holdingDays !== undefined && (
+              <span className="text-white/40">持仓 {marker.holdingDays} 天</span>
+            )}
+            <span
+              className="font-mono tabular-nums font-medium"
+              style={{ color: (marker.pnl ?? 0) >= 0 ? "#10b981" : "#ef4444" }}
+            >
+              {(marker.pnl ?? 0) >= 0 ? "+" : ""}¥{(marker.pnl ?? 0).toFixed(2)}
+              {marker.pnlPercent !== undefined && (
+                <span className="ml-1">
+                  ({marker.pnlPercent >= 0 ? "+" : ""}{marker.pnlPercent.toFixed(2)}%)
+                </span>
+              )}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
