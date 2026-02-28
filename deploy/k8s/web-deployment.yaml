@@ -69,6 +69,13 @@ spec:
             # Lurus integration
             - name: LURUS_API_URL
               value: "https://api.lurus.cn"
+            - name: LURUS_IDENTITY_URL
+              value: "http://identity-service.lurus-identity.svc.cluster.local:18104"
+            - name: LURUS_IDENTITY_INTERNAL_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-qtrd-secrets
+                  key: LURUS_IDENTITY_INTERNAL_KEY
             - name: TENANT_SLUG
               value: "lurus"
             - name: NEXT_PUBLIC_LURUS_API_URL

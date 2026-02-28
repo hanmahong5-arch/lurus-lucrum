@@ -16,6 +16,8 @@ import { usePathname } from 'next/navigation';
 import { signIn, signOut } from 'next-auth/react';
 import { useCurrentUser } from '@/hooks/use-user-workspace';
 import { AutoSaveIndicator } from '@/components/strategy-editor/auto-save-indicator';
+import { AccountPanel } from '@/components/dashboard/AccountPanel';
+import { useAccountOverview } from '@/hooks/useAccountOverview';
 import {
   useStrategyWorkspaceStore,
   selectAutoSaveStatus,
@@ -138,6 +140,7 @@ export function DashboardHeader() {
 
   const roleInfo = getRoleInfo(user?.role);
   const userInitials = getUserInitials(user?.name, user?.email);
+  const { data: accountOverview } = useAccountOverview();
 
   // Check if any "more" nav item is active
   const moreNavActive = MORE_NAV.some((item) => isNavActive(pathname, item.href));
@@ -261,7 +264,11 @@ export function DashboardHeader() {
                     </Button>
                   </DropdownMenuTrigger>
 
-                  <DropdownMenuContent align="end" className="w-56">
+                  <DropdownMenuContent align="end" className="w-64">
+                    {/* Identity overview: VIP badge + Lubell balance */}
+                    {accountOverview && (
+                      <AccountPanel overview={accountOverview} />
+                    )}
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">
