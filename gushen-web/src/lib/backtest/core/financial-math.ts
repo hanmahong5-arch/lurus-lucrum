@@ -90,7 +90,7 @@ export const A_SHARE_RULES: MarketRules = {
   lotSize: 100,
   commissionRate: 0.0003,    // 0.03% (万三)
   minCommission: 5,          // 5元最低
-  stampDutyRate: 0.001,      // 0.1% 印花税
+  stampDutyRate: 0.0005,     // 0.05% 印花税 (2023-08-28起)
   transferFeeRate: 0.00001,  // 0.001% 过户费
   priceLimit: 0.1,           // 10% 涨跌停
 };

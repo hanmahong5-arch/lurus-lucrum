@@ -527,13 +527,14 @@ export function calculateRiskAdjustedReturns(
   // Sharpe Ratio
   const sharpeRatio = stdDev > 0 ? (avgReturn - riskFreeRate) / stdDev : 0;
 
-  // Sortino Ratio (uses downside deviation)
-  const negativeReturns = returns.filter((r) => r < 0);
-  const downsideDeviation = standardDeviation(negativeReturns);
+  // Sortino Ratio: uses ALL returns with min(r, 0) for downside semi-deviation
+  // 索提诺比率：用全序列 min(r, 0) 计算下行半偏差
+  const downsideSquares = returns.map((r) => Math.pow(Math.min(r - riskFreeRate, 0), 2));
+  const downsideDeviation = Math.sqrt(average(downsideSquares));
   const sortinoRatio =
     downsideDeviation > 0
       ? (avgReturn - riskFreeRate) / downsideDeviation
-      : avgReturn > 0
+      : avgReturn > riskFreeRate
         ? Infinity
         : 0;
 
@@ -1010,33 +1011,50 @@ export function buildRiskMetrics(
     dailyReturns.push(((currEquity - prevEquity) / prevEquity) * 100);
   }
 
-  // Annualized metrics
-  const avgDailyReturn = average(dailyReturns);
-  const annualizedReturn = avgDailyReturn * 252;
+  // Annualized metrics — use compound annualization from equity endpoints
+  // 复利年化：从净值端点计算
+  const firstPoint = equityCurve[0]!;
+  const lastPoint = equityCurve[equityCurve.length - 1]!;
+  const calendarDays =
+    (new Date(lastPoint.date).getTime() - new Date(firstPoint.date).getTime()) /
+    86400000;
+  const compoundAnnualizedReturn =
+    calendarDays > 0
+      ? (Math.pow(lastPoint.equity / firstPoint.equity, 365 / calendarDays) - 1) * 100
+      : 0;
   const annualizedVol = annualizeVolatility(dailyReturns);
   const annualizedRiskFree = riskFreeRate * 100;
 
-  // Sharpe Ratio
+  // Sharpe Ratio: (compound annualized return - risk-free) / annualized vol
+  // 夏普比率：（复利年化收益 - 无风险利率）/ 年化波动率
   const sharpeRatio =
     annualizedVol > 0
-      ? (annualizedReturn - annualizedRiskFree) / annualizedVol
+      ? (compoundAnnualizedReturn - annualizedRiskFree) / annualizedVol
       : 0;
 
-  // Sortino Ratio (downside deviation)
-  const negativeReturns = dailyReturns.filter((r) => r < 0);
-  const downsideVol = annualizeVolatility(negativeReturns);
+  // Sortino Ratio: uses ALL returns with min(r, 0) for downside deviation
+  // 索提诺比率：用全序列 min(r, 0) 计算下行标准差
+  const dailyRiskFree = riskFreeRate / 252 * 100;
+  const downsideSquaredSum = dailyReturns.reduce(
+    (s, r) => s + Math.pow(Math.min(r - dailyRiskFree, 0), 2),
+    0,
+  );
+  const downsideVol =
+    dailyReturns.length > 0
+      ? Math.sqrt((downsideSquaredSum / dailyReturns.length) * 252)
+      : 0;
   const sortinoRatio =
     downsideVol > 0
-      ? (annualizedReturn - annualizedRiskFree) / downsideVol
-      : annualizedReturn > annualizedRiskFree
+      ? (compoundAnnualizedReturn - annualizedRiskFree) / downsideVol
+      : compoundAnnualizedReturn > annualizedRiskFree
         ? Infinity
         : 0;
 
   // Calmar Ratio
   const calmarRatio =
     drawdownAnalysis.maxDrawdown > 0
-      ? annualizedReturn / drawdownAnalysis.maxDrawdown
-      : annualizedReturn > 0
+      ? compoundAnnualizedReturn / drawdownAnalysis.maxDrawdown
+      : compoundAnnualizedReturn > 0
         ? Infinity
         : 0;
 

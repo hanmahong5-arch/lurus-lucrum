@@ -649,20 +649,21 @@ describe('buildTradingMetrics - edge cases', () => {
 });
 
 describe('buildRiskMetrics - uncovered branches', () => {
-  it('should return sortinoRatio=0 when no negative returns and return <= riskFree', () => {
-    // All identical returns with high risk-free rate -> sortino=0 branch (line 1033)
+  it('should return negative sortinoRatio when return is below risk-free rate', () => {
+    // All identical returns with high risk-free rate
     // Equity stays flat -> annualizedReturn ~0, annualizedRiskFree = 5*100 = 500
+    // With corrected Sortino formula (all returns use min(r-rf, 0)):
+    // downside deviation is non-zero because 0% < riskFree, so sortino is negative
     const equityCurve = [
       { date: '2024-01-01', equity: 100 },
       { date: '2024-01-02', equity: 100 },
       { date: '2024-01-03', equity: 100 },
       { date: '2024-01-04', equity: 100 },
     ];
-    // riskFreeRate=5 -> annualizedRiskFree=500, annualizedReturn=0
-    // No negative returns -> downsideVol=0 -> annualizedReturn(0) <= annualizedRiskFree(500) -> sortino=0
     const metrics = buildRiskMetrics(equityCurve, 5);
 
-    expect(metrics.sortinoRatio).toBe(0);
+    // Correct behavior: 0% return with 500% risk-free → deeply negative Sortino
+    expect(metrics.sortinoRatio).toBeLessThan(0);
   });
 
   it('should return calmarRatio=0 when no drawdown and annualizedReturn <= 0', () => {
@@ -852,14 +853,15 @@ describe('calculateRiskAdjustedReturns - sortino ratio edge case (line 538)', ()
     expect(result.sortinoRatio).toBe(0);
   });
 
-  it('should return sortinoRatio=0 for negative average with no negative individual returns impossible scenario', () => {
+  it('should return negative sortinoRatio when all returns are at risk-free threshold', () => {
     // Edge case: all zeros with high risk-free rate
-    // avgReturn - riskFreeRate < 0, but downsideDeviation = 0 -> sortino = 0
+    // With corrected formula (min(r-rf, 0) for all returns):
+    // downside deviation is non-zero since each return (0) < riskFree (5)
     const returns = [0, 0, 0];
     const result = calculateRiskAdjustedReturns(returns, 5); // High risk-free rate
 
-    // downsideDeviation = 0 (no negative returns), avgReturn (0) - riskFree (5) = -5 < 0 -> sortino = 0
-    expect(result.sortinoRatio).toBe(0);
+    // Correct behavior: 0% return with 5% risk-free → negative Sortino ratio
+    expect(result.sortinoRatio).toBeLessThan(0);
   });
 });
 

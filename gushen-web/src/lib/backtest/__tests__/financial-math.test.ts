@@ -339,10 +339,10 @@ describe('transaction cost calculation', () => {
   it('should calculate sell transaction costs correctly', () => {
     const cost = calculateTransactionCost(100000, true, A_SHARE_RULES);
     expect(cost.commission).toBe(30);
-    expect(cost.stampDuty).toBe(100);
+    expect(cost.stampDuty).toBe(50); // 100000 * 0.0005 = 50 (0.05% since 2023-08-28)
     expect(cost.transferFee).toBe(1);
-    expect(cost.total).toBe(131);
-    expect(cost.totalPercent).toBeCloseTo(0.131, 3);
+    expect(cost.total).toBe(81); // 30 + 50 + 1
+    expect(cost.totalPercent).toBeCloseTo(0.081, 3);
   });
 
   it('should verify total equals sum of components', () => {
@@ -356,15 +356,15 @@ describe('round trip cost calculation', () => {
   it('should calculate combined buy and sell costs', () => {
     const cost = calculateRoundTripCost(100000, A_SHARE_RULES);
     // Buy: commission 30 + transfer 1 = 31
-    // Sell: commission 30 + stamp 100 + transfer 1 = 131
-    // Total: 162
-    expect(cost.total).toBe(162);
-    expect(cost.totalPercent).toBeCloseTo(0.162, 3);
+    // Sell: commission 30 + stamp 50 + transfer 1 = 81
+    // Total: 112
+    expect(cost.total).toBe(112);
+    expect(cost.totalPercent).toBeCloseTo(0.112, 3);
   });
 
   it('should include both buy and sell stamp duty', () => {
     const cost = calculateRoundTripCost(100000, A_SHARE_RULES);
-    expect(cost.stampDuty).toBe(100); // Only sell side
+    expect(cost.stampDuty).toBe(50); // Only sell side: 100000 * 0.0005
   });
 
   it('should double commissions and transfer fees', () => {

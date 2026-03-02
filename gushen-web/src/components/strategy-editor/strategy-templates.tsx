@@ -400,23 +400,48 @@ export function StrategyTemplateList({
           </span>
         </button>
 
-        {/* Category Filter / 分类筛选 */}
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-gray-500">筛选:</span>
-          <select
-            value={selectedCategory}
-            onChange={(e) =>
-              setSelectedCategory(e.target.value as StrategyCategory | "all")
-            }
-            className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-sm text-gray-300 focus:outline-none focus:border-blue-500"
+      </div>
+
+      {/* Category Chip Bar — horizontally scrollable */}
+      <div className="overflow-x-auto scrollbar-none -mx-1 px-1">
+        <div className="flex gap-2 py-1" role="radiogroup" aria-label="策略分类筛选" style={{ width: "max-content" }}>
+          <button
+            role="radio"
+            aria-checked={selectedCategory === "all"}
+            onClick={() => setSelectedCategory("all")}
+            className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+              selectedCategory === "all"
+                ? "bg-blue-600/20 text-blue-400 ring-1 ring-blue-500/30"
+                : "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+            }`}
           >
-            <option value="all">全部分类</option>
-            {availableCategories.map((cat) => (
-              <option key={cat} value={cat}>
-                {categoryInfo[cat].icon} {categoryInfo[cat].name}
-              </option>
-            ))}
-          </select>
+            全部
+          </button>
+          {(Object.entries(categoryInfo) as [StrategyCategory, { name: string; nameEn: string; icon: string }][]).map(
+            ([cat, info]) => {
+              const hasStrategies = availableCategories.includes(cat);
+              return (
+                <button
+                  key={cat}
+                  role="radio"
+                  aria-checked={selectedCategory === cat}
+                  aria-disabled={!hasStrategies}
+                  onClick={() => hasStrategies && setSelectedCategory(cat)}
+                  disabled={!hasStrategies}
+                  title={hasStrategies ? undefined : "该类别暂无此类型策略"}
+                  className={`shrink-0 px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    selectedCategory === cat
+                      ? "bg-blue-600/20 text-blue-400 ring-1 ring-blue-500/30"
+                      : hasStrategies
+                        ? "bg-gray-800 text-gray-400 hover:text-white hover:bg-gray-700"
+                        : "bg-gray-800/50 text-gray-600 opacity-40 cursor-not-allowed"
+                  }`}
+                >
+                  {info.icon} {info.name}
+                </button>
+              );
+            }
+          )}
         </div>
       </div>
 

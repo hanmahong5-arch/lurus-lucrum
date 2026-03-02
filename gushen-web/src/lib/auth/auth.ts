@@ -34,22 +34,24 @@ const DEMO_USERS = [
 ];
 
 /**
- * Extract role from Zitadel profile claims.
+ * Extract platform role from Zitadel profile claims.
  * Zitadel encodes project roles under: urn:zitadel:iam:org:project:roles
+ *
+ * Subscription tiers (free/standard/premium) are NOT stored in Zitadel roles —
+ * they are managed by lurus-identity and must be fetched via the internal API:
+ *   GET /internal/v1/accounts/:id/entitlements/lurus-gushen
+ * This avoids stale JWT data when a subscription changes within the token lifetime.
+ *
+ * This function only surfaces platform-level access roles (admin, ops).
+ * All callers receive "free" for subscription-tier decisions; entitlement
+ * checks must call lurus-identity directly.
  */
 function extractZitadelRole(
-  profile: Record<string, unknown> | undefined,
+  _profile: Record<string, unknown> | undefined,
 ): "free" | "standard" | "premium" {
-  if (!profile) return "free";
-
-  // Zitadel role claims key (configured per-project in Zitadel console)
-  const rolesClaim = "urn:zitadel:iam:org:project:roles";
-  const roles = profile[rolesClaim] as Record<string, unknown> | undefined;
-
-  if (!roles) return "free";
-
-  if ("premium" in roles) return "premium";
-  if ("standard" in roles) return "standard";
+  // Subscription tier is not derived from JWT — always return "free" here.
+  // Use lurus-identity GET /internal/v1/accounts/:id/entitlements/lurus-gushen
+  // to determine the actual entitlement level at the API route layer.
   return "free";
 }
 

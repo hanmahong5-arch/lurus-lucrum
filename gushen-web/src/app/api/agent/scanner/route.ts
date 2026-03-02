@@ -15,7 +15,7 @@ import {
   type ScannerEvent,
   type ScanTarget,
 } from "@/lib/agent/scanner-agent";
-import { checkAndConsumeQuota } from "@/lib/middleware/quota-check";
+import { checkAndConsumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { recordUserEvent } from "@/lib/db/queries";
 
 /** Encode a ScannerEvent as an SSE data line */
@@ -104,8 +104,9 @@ export async function POST(request: NextRequest) {
   }
 
   // Quota check (scanner uses ~5000 tokens for insights generation)
+  const accountId = userId ? (await resolveAccountId(userId)) ?? undefined : undefined;
   if (userId) {
-    const quota = await checkAndConsumeQuota(userId, 5000, "agent_scan");
+    const quota = await checkAndConsumeQuota(accountId ?? userId, userId, 5000);
     if (!quota.allowed) {
       return new Response(
         sseError(

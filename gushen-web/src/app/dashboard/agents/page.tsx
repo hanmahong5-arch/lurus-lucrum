@@ -5,12 +5,15 @@
  * Route: /dashboard/agents
  * Auth-guarded. Displays agent grid cards + builder dialog + run panel.
  *
+ * Uses useReducer with discriminated union to prevent illegal intermediate
+ * states (e.g. builderOpen=true but editingAgent=null).
+ *
  * @module app/dashboard/agents/page
  */
 
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useReducer, useState, useCallback } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
@@ -24,6 +27,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { getLimitsForPlan } from "@/lib/config/plan-limits";
+import { showToast } from "@/lib/toast";
 import type { CustomAgentConfig } from "@/lib/agent/custom-agent-types";
 
 // Dynamic imports to avoid SSR issues
@@ -62,6 +66,140 @@ interface AgentData {
 }
 
 // =============================================================================
+// State Machine Types
+// =============================================================================
+
+interface RunContext {
+  agent: AgentData;
+  autoStart: boolean;
+  runKey: number;
+}
+
+type PageView =
+  | { view: "grid" }
+  | { view: "running"; agent: AgentData; autoStart: boolean; runKey: number }
+  | { view: "editing"; agent: AgentData | null; returnTo: "grid" | { kind: "running" } & RunContext };
+
+interface PageState {
+  saving: boolean;
+  current: PageView;
+}
+
+type PageAction =
+  | { type: "OPEN_BUILDER"; agent?: AgentData }
+  | { type: "CLOSE_BUILDER" }
+  | { type: "SET_SAVING"; saving: boolean }
+  | { type: "START_RUN"; agent: AgentData }
+  | { type: "CLOSE_RUN" }
+  | { type: "SAVE_AND_RUN"; agent: AgentData }
+  | { type: "SAVE_KEEP_PANEL" };
+
+let runKeyCounter = 0;
+
+function pageReducer(state: PageState, action: PageAction): PageState {
+  switch (action.type) {
+    case "OPEN_BUILDER": {
+      const agent = action.agent ?? null;
+      if (state.current.view === "running") {
+        // Editing from within the run panel — remember run context
+        return {
+          ...state,
+          current: {
+            view: "editing",
+            agent: agent ?? state.current.agent,
+            returnTo: {
+              kind: "running",
+              agent: state.current.agent,
+              autoStart: state.current.autoStart,
+              runKey: state.current.runKey,
+            },
+          },
+        };
+      }
+      return {
+        ...state,
+        current: { view: "editing", agent, returnTo: "grid" },
+      };
+    }
+
+    case "CLOSE_BUILDER": {
+      if (state.current.view !== "editing") return state;
+      const { returnTo } = state.current;
+      if (returnTo === "grid") {
+        return { ...state, saving: false, current: { view: "grid" } };
+      }
+      // Return to the running panel
+      return {
+        ...state,
+        saving: false,
+        current: {
+          view: "running",
+          agent: returnTo.agent,
+          autoStart: returnTo.autoStart,
+          runKey: returnTo.runKey,
+        },
+      };
+    }
+
+    case "SET_SAVING":
+      return { ...state, saving: action.saving };
+
+    case "START_RUN":
+      return {
+        ...state,
+        current: {
+          view: "running",
+          agent: action.agent,
+          autoStart: false,
+          runKey: ++runKeyCounter,
+        },
+      };
+
+    case "CLOSE_RUN":
+      return { ...state, current: { view: "grid" } };
+
+    case "SAVE_AND_RUN":
+      return {
+        ...state,
+        saving: false,
+        current: {
+          view: "running",
+          agent: action.agent,
+          autoStart: true,
+          runKey: ++runKeyCounter,
+        },
+      };
+
+    case "SAVE_KEEP_PANEL": {
+      // Close builder, keep RunPanel underneath
+      if (state.current.view !== "editing") return { ...state, saving: false };
+      const { returnTo } = state.current;
+      if (returnTo === "grid") {
+        return { ...state, saving: false, current: { view: "grid" } };
+      }
+      return {
+        ...state,
+        saving: false,
+        current: {
+          view: "running",
+          agent: returnTo.agent,
+          autoStart: returnTo.autoStart,
+          runKey: returnTo.runKey,
+        },
+      };
+    }
+
+    default:
+      return state;
+  }
+}
+
+const initialState: PageState = {
+  saving: false,
+  current: { view: "grid" },
+};
+
+// =============================================================================
 // Component
 // =============================================================================
 
@@ -69,15 +207,24 @@ export default function AgentHubPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
 
-  // Agents list
+  // Data state (separate from UI state machine)
   const [agents, setAgents] = useState<AgentData[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // UI state
-  const [builderOpen, setBuilderOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<AgentData | null>(null);
-  const [runningAgent, setRunningAgent] = useState<AgentData | null>(null);
-  const [saving, setSaving] = useState(false);
+  // UI state machine
+  const [state, dispatch] = useReducer(pageReducer, initialState);
+  const { current, saving } = state;
+
+  // Derive run context for RunPanel rendering
+  const runContext: RunContext | null =
+    current.view === "running"
+      ? current
+      : current.view === "editing" && current.returnTo !== "grid"
+        ? current.returnTo
+        : null;
+
+  // Derive editing agent for the builder dialog
+  const editingAgent = current.view === "editing" ? current.agent : null;
 
   // Auth guard
   useEffect(() => {
@@ -107,10 +254,15 @@ export default function AgentHubPage() {
     }
   }, [status, fetchAgents]);
 
+  // Open editor from within the run panel (overlay on top of run panel)
+  const handleEditRequest = useCallback(() => {
+    dispatch({ type: "OPEN_BUILDER" });
+  }, []);
+
   // Create or update agent
   const handleSave = useCallback(
     async (config: CustomAgentConfig, andRun: boolean) => {
-      setSaving(true);
+      dispatch({ type: "SET_SAVING", saving: true });
       try {
         let agentData: AgentData;
 
@@ -144,18 +296,29 @@ export default function AgentHubPage() {
           agentData = data.agent;
         }
 
-        setBuilderOpen(false);
-        setEditingAgent(null);
         await fetchAgents();
 
-        if (andRun) {
-          setRunningAgent(agentData);
+        if (runContext) {
+          // Editing from within the run panel
+          if (andRun) {
+            dispatch({ type: "SAVE_AND_RUN", agent: agentData });
+          } else {
+            dispatch({ type: "SAVE_KEEP_PANEL" });
+            showToast.success("配置已更新，点击「再次运行」生效", { duration: 5000 });
+          }
+        } else {
+          // From agent grid
+          if (andRun) {
+            dispatch({ type: "SAVE_AND_RUN", agent: agentData });
+          } else {
+            dispatch({ type: "CLOSE_BUILDER" });
+          }
         }
       } finally {
-        setSaving(false);
+        dispatch({ type: "SET_SAVING", saving: false });
       }
     },
-    [editingAgent, fetchAgents]
+    [editingAgent, fetchAgents, runContext]
   );
 
   // Delete agent
@@ -204,109 +367,116 @@ export default function AgentHubPage() {
 
   if (!session) return null;
 
-  // If running an agent, show the run panel
-  if (runningAgent) {
-    return (
-      <div className="min-h-screen bg-background text-white flex flex-col">
-        <DashboardHeader />
-        <main className="flex-1 overflow-hidden">
-          <div className="h-[calc(100vh-56px)]">
-            <CustomAgentRunPanel
-              agentId={runningAgent.id}
-              agentName={runningAgent.name}
-              agentColor={runningAgent.color ?? "#6366f1"}
-              onClose={() => {
-                setRunningAgent(null);
-                fetchAgents();
-              }}
-            />
-          </div>
-        </main>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-background text-white flex flex-col">
       <DashboardHeader />
-      <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
-        <div className="max-w-7xl mx-auto">
-          {/* Page header */}
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h1 className="text-xl font-semibold text-white">
-                分析任务
-              </h1>
-              <p className="text-sm text-white/40 mt-0.5">
-                配置分析任务，批量回测多标的，生成综合研究报告
-              </p>
-            </div>
-            <Button
-              onClick={() => {
-                setEditingAgent(null);
-                setBuilderOpen(true);
-              }}
-              className="btn-tactile bg-accent hover:bg-accent/80"
-            >
-              + 新建分析任务
-            </Button>
-          </div>
 
-          {/* Agent grid */}
-          {loading ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {[1, 2, 3].map((i) => (
-                <div
-                  key={i}
-                  className="h-40 rounded-xl bg-surface animate-pulse"
-                />
-              ))}
-            </div>
-          ) : agents.length === 0 ? (
-            /* Empty state with professional illustration */
-            <div className="flex flex-col items-center justify-center py-16 text-white/30">
-              <QuantAnalysisIllustration />
-              <p className="text-sm mt-6 mb-1 text-white/50">还没有创建任何分析任务</p>
-              <p className="text-xs text-white/30 mb-4">配置策略参数，批量回测多标的，一键生成研究报告</p>
+      {/* RunPanel — visible when running OR editing-from-run */}
+      {runContext && (
+        <main className="flex-1 overflow-hidden">
+          <div className="h-[calc(100vh-56px)]">
+            <CustomAgentRunPanel
+              key={runContext.runKey}
+              agentId={runContext.agent.id}
+              agentName={runContext.agent.name}
+              agentColor={runContext.agent.color ?? "#6366f1"}
+              autoStart={runContext.autoStart}
+              onClose={() => {
+                dispatch({ type: "CLOSE_RUN" });
+                fetchAgents();
+              }}
+              onEditRequest={handleEditRequest}
+            />
+          </div>
+        </main>
+      )}
+
+      {/* Grid — only when view=grid */}
+      {current.view === "grid" && (
+        <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+          <div className="max-w-7xl mx-auto">
+            {/* Page header */}
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h1 className="text-xl font-semibold text-white">
+                  分析任务
+                </h1>
+                <p className="text-sm text-white/40 mt-0.5">
+                  配置分析任务，批量回测多标的，生成综合研究报告
+                </p>
+              </div>
               <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setBuilderOpen(true)}
+                onClick={() => dispatch({ type: "OPEN_BUILDER" })}
+                className="btn-tactile bg-accent hover:bg-accent/80"
               >
-                创建第一个分析任务
+                + 新建分析任务
               </Button>
             </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {agents.map((agent) => (
-                <AgentCard
-                  key={agent.id}
-                  agent={agent}
-                  onRun={() => setRunningAgent(agent)}
-                  onEdit={() => {
-                    setEditingAgent(agent);
-                    setBuilderOpen(true);
-                  }}
-                  onDelete={() => handleDelete(agent.id)}
-                  onTogglePin={() => handleTogglePin(agent)}
-                />
-              ))}
-            </div>
-          )}
 
-          {/* Tier info */}
-          {limits.customAgent.maxAgents !== -1 && (
-            <div className="mt-6 text-xs text-white/30 text-center">
-              已创建 {agents.length} / {limits.customAgent.maxAgents} 个任务 ·
-              今日可运行 {limits.customAgent.runsPerDay} 次 ·
-              单次最多 {limits.customAgent.maxStocks} 只标的
-            </div>
-          )}
-        </div>
-      </main>
+            {/* Agent grid */}
+            {loading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {[1, 2, 3].map((i) => (
+                  <div
+                    key={i}
+                    className="h-40 rounded-xl bg-surface animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : agents.length === 0 ? (
+              /* Guided empty state */
+              <div className="flex flex-col items-center justify-center py-16">
+                <div className="text-4xl mb-4">🔍</div>
+                <h2 className="text-base font-medium text-white mb-2">
+                  你的第一个分析任务从这里开始
+                </h2>
+                <p className="text-sm text-white/40 text-center max-w-sm mb-6 leading-relaxed">
+                  告诉 Agent 你想分析哪些股票、用哪些策略，
+                  <br />
+                  它会自动回测并给出综合研判，帮你找到值得关注的机会。
+                </p>
+                <Button
+                  onClick={() => dispatch({ type: "OPEN_BUILDER" })}
+                  className="btn-tactile bg-accent hover:bg-accent/80"
+                >
+                  + 创建分析任务
+                </Button>
+                <p className="text-xs text-white/30 mt-4">
+                  💡 新手建议：先试试「全市场 + 双均线」，只需 30 秒配置
+                </p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {agents.map((agent) => (
+                  <AgentCard
+                    key={agent.id}
+                    agent={agent}
+                    onRun={() => dispatch({ type: "START_RUN", agent })}
+                    onEdit={() => dispatch({ type: "OPEN_BUILDER", agent })}
+                    onDelete={() => handleDelete(agent.id)}
+                    onTogglePin={() => handleTogglePin(agent)}
+                  />
+                ))}
+              </div>
+            )}
 
-      {/* Builder Dialog — full-screen on mobile, max-w-2xl on desktop */}
-      <Dialog open={builderOpen} onOpenChange={setBuilderOpen}>
+            {/* Tier info */}
+            {limits.customAgent.maxAgents !== -1 && (
+              <div className="mt-6 text-xs text-white/30 text-center">
+                已创建 {agents.length} / {limits.customAgent.maxAgents} 个任务 ·
+                今日可运行 {limits.customAgent.runsPerDay} 次 ·
+                单次最多 {limits.customAgent.maxStocks} 只标的
+              </div>
+            )}
+          </div>
+        </main>
+      )}
+
+      {/* Builder Dialog — overlays on top of whatever is behind */}
+      <Dialog
+        open={current.view === "editing"}
+        onOpenChange={() => dispatch({ type: "CLOSE_BUILDER" })}
+      >
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto bg-surface border-border w-full sm:max-w-2xl max-sm:h-full max-sm:max-h-full max-sm:rounded-none max-sm:border-0">
           <DialogHeader>
             <DialogTitle>
@@ -335,60 +505,6 @@ export default function AgentHubPage() {
         </DialogContent>
       </Dialog>
     </div>
-  );
-}
-
-// =============================================================================
-// Empty State Illustration — Professional quantitative analysis SVG
-// =============================================================================
-
-function QuantAnalysisIllustration() {
-  return (
-    <svg
-      className="w-32 h-24"
-      viewBox="0 0 128 96"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      {/* Grid lines (background) */}
-      <line x1="16" y1="20" x2="16" y2="80" className="stroke-white/5" strokeWidth="1" />
-      <line x1="40" y1="20" x2="40" y2="80" className="stroke-white/5" strokeWidth="1" />
-      <line x1="64" y1="20" x2="64" y2="80" className="stroke-white/5" strokeWidth="1" />
-      <line x1="88" y1="20" x2="88" y2="80" className="stroke-white/5" strokeWidth="1" />
-      <line x1="112" y1="20" x2="112" y2="80" className="stroke-white/5" strokeWidth="1" />
-      <line x1="16" y1="35" x2="112" y2="35" className="stroke-white/5" strokeWidth="1" />
-      <line x1="16" y1="50" x2="112" y2="50" className="stroke-white/5" strokeWidth="1" />
-      <line x1="16" y1="65" x2="112" y2="65" className="stroke-white/5" strokeWidth="1" />
-      <line x1="16" y1="80" x2="112" y2="80" className="stroke-white/10" strokeWidth="1" />
-
-      {/* Bar chart (loss color) */}
-      <rect x="22" y="55" width="8" height="25" rx="1" className="fill-loss/20" />
-      <rect x="34" y="45" width="8" height="35" rx="1" className="fill-loss/25" />
-      <rect x="46" y="50" width="8" height="30" rx="1" className="fill-loss/20" />
-      <rect x="58" y="38" width="8" height="42" rx="1" className="fill-loss/30" />
-      <rect x="70" y="42" width="8" height="38" rx="1" className="fill-loss/25" />
-      <rect x="82" y="48" width="8" height="32" rx="1" className="fill-loss/20" />
-      <rect x="94" y="35" width="8" height="45" rx="1" className="fill-loss/30" />
-
-      {/* Trend line (accent color) */}
-      <polyline
-        points="26,58 38,48 50,52 62,36 74,40 86,32 98,28"
-        className="stroke-accent"
-        strokeWidth="2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        fill="none"
-      />
-
-      {/* Data points (profit color) */}
-      <circle cx="26" cy="58" r="2.5" className="fill-accent" />
-      <circle cx="38" cy="48" r="2.5" className="fill-accent" />
-      <circle cx="50" cy="52" r="2.5" className="fill-accent" />
-      <circle cx="62" cy="36" r="2.5" className="fill-profit" />
-      <circle cx="74" cy="40" r="2.5" className="fill-accent" />
-      <circle cx="86" cy="32" r="2.5" className="fill-profit" />
-      <circle cx="98" cy="28" r="2.5" className="fill-profit" />
-    </svg>
   );
 }
 

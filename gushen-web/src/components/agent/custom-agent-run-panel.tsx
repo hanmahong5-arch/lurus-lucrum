@@ -12,8 +12,9 @@
 
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { AgentTokenBadge } from "./agent-token-badge";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 import type {
   CustomAgentEvent,
   CustomAgentStep,
@@ -76,6 +77,27 @@ const NODE_ORDER: string[] = [
   "generateInsights",
 ];
 
+const HTTP_STATUS_MESSAGES: Record<number, string> = {
+  400: "请求参数错误",
+  401: "登录已过期，请重新登录",
+  403: "无权限执行此操作",
+  429: "请求过于频繁，请稍后再试",
+  500: "服务内部错误，请稍后再试",
+  502: "服务暂时不可用，请稍后再试",
+  503: "系统维护中，请稍后再试",
+  504: "请求超时，请检查网络后重试",
+};
+
+// =============================================================================
+// Types
+// =============================================================================
+
+interface AgentError {
+  message: string;
+  code?: string;
+  metadata?: Record<string, unknown>;
+}
+
 // =============================================================================
 // Props
 // =============================================================================
@@ -85,6 +107,125 @@ interface CustomAgentRunPanelProps {
   agentName: string;
   agentColor?: string;
   onClose?: () => void;
+  /** Callback to open the editor for this agent */
+  onEditRequest?: () => void;
+  /** When true, automatically start the run on mount */
+  autoStart?: boolean;
+}
+
+// =============================================================================
+// AgentErrorPanel Sub-component
+// =============================================================================
+
+interface AgentErrorPanelProps {
+  error: AgentError;
+  onRetry: () => void;
+  onEditRequest?: () => void;
+  onClose?: () => void;
+}
+
+function AgentErrorPanel({ error, onRetry, onEditRequest, onClose }: AgentErrorPanelProps) {
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [hasSeenUpgrade, setHasSeenUpgrade] = useState(false);
+
+  const handleUpgradeClose = (open: boolean) => {
+    setUpgradeOpen(open);
+    if (!open) setHasSeenUpgrade(true);
+  };
+
+  const isQuotaError = error.code === "DAILY_LIMIT" || error.code === "QUOTA_EXCEEDED";
+  const isValidationError = error.code === "VALIDATION_FAILED";
+
+  let title: string;
+  let description: string;
+
+  if (error.code === "DAILY_LIMIT") {
+    const used = error.metadata?.used as number | undefined;
+    const limit = error.metadata?.limit as number | undefined;
+    title = used !== undefined && limit !== undefined
+      ? `今日运行次数已达上限（${used}/${limit}）`
+      : "今日运行次数已达上限";
+    description = "免费版每天可运行有限次分析任务。明天将自动重置，或升级计划后立即恢复。";
+  } else if (error.code === "QUOTA_EXCEEDED") {
+    title = "AI Token 配额不足";
+    description = "当前计划的 AI Token 已用完。升级后可立即继续使用。";
+  } else if (isValidationError) {
+    title = "配置验证失败";
+    description = error.message;
+  } else {
+    title = "运行中断";
+    description = error.message;
+  }
+
+  const iconChar = isQuotaError ? "⏸" : isValidationError ? "⚠️" : "⚡";
+
+  return (
+    <div role="alert" aria-label={title} className="mb-4 rounded-lg border border-loss/20 bg-loss/5 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-3 mb-3">
+          <span className="text-lg mt-0.5 select-none">{iconChar}</span>
+          <div className="flex-1 min-w-0">
+            <h4 className="text-sm font-medium text-white">{title}</h4>
+            <p className="text-xs text-white/50 mt-1 leading-relaxed">{description}</p>
+          </div>
+        </div>
+
+        {isQuotaError && hasSeenUpgrade && (
+          <p className="text-xs text-white/40 mt-2 leading-relaxed">
+            已了解升级方案？完成升级后刷新页面即可恢复使用。
+          </p>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          {isQuotaError && (
+            <button
+              aria-label="升级计划"
+              onClick={() => setUpgradeOpen(true)}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-accent text-white hover:bg-accent/80 transition btn-tactile"
+            >
+              ↑ 升级计划
+            </button>
+          )}
+          {onEditRequest && (
+            <button
+              aria-label="修改参数"
+              onClick={onEditRequest}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white/80 hover:bg-white/15 transition"
+            >
+              ✏️ 修改参数
+            </button>
+          )}
+          {!isQuotaError && !isValidationError && (
+            <button
+              aria-label="再试一次"
+              onClick={onRetry}
+              className="px-3 py-1.5 rounded text-xs font-medium bg-white/10 text-white/80 hover:bg-white/15 transition"
+            >
+              再试一次
+            </button>
+          )}
+          {isQuotaError && onClose && (
+            <button
+              aria-label="明天再来"
+              onClick={onClose}
+              className="px-3 py-1.5 rounded text-xs font-medium text-white/40 hover:text-white/60 transition"
+            >
+              → 明天再来
+            </button>
+          )}
+        </div>
+      </div>
+
+      <UpgradeDialog
+        open={upgradeOpen}
+        onOpenChange={handleUpgradeClose}
+        variant="limit"
+        featureName="custom_agent_run"
+        used={error.metadata?.used as number | undefined}
+        limit={error.metadata?.limit as number | undefined}
+      />
+    </div>
+  );
 }
 
 // =============================================================================
@@ -96,6 +237,8 @@ export function CustomAgentRunPanel({
   agentName,
   agentColor = "#6366f1",
   onClose,
+  onEditRequest,
+  autoStart = false,
 }: CustomAgentRunPanelProps) {
   // Run state
   const [running, setRunning] = useState(false);
@@ -114,14 +257,14 @@ export function CustomAgentRunPanel({
   const [results, setResults] = useState<StockResult[]>([]);
   const [insights, setInsights] = useState("");
   const [summary, setSummary] = useState<RunSummary | null>(null);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<AgentError | null>(null);
 
   // Abort controller
   const abortRef = useRef<AbortController | null>(null);
 
   const handleStart = useCallback(async () => {
     setRunning(true);
-    setError("");
+    setError(null);
     setResults([]);
     setInsights("");
     setSummary(null);
@@ -145,14 +288,18 @@ export function CustomAgentRunPanel({
         const text = await res.text();
         const match = text.match(/data: (.+)/);
         if (match?.[1]) {
-          const evt = JSON.parse(match[1]) as CustomAgentEvent;
-          if (evt.type === "error") {
-            setError(evt.message);
-            setRunning(false);
-            return;
+          try {
+            const evt = JSON.parse(match[1]) as CustomAgentEvent;
+            if (evt.type === "error") {
+              setError({ message: evt.message, code: evt.code, metadata: evt.metadata });
+              setRunning(false);
+              return;
+            }
+          } catch {
+            // fall through to generic error
           }
         }
-        setError(`HTTP ${res.status}: 请求失败`);
+        setError({ message: HTTP_STATUS_MESSAGES[res.status] ?? `请求失败 (${res.status})` });
         setRunning(false);
         return;
       }
@@ -197,13 +344,13 @@ export function CustomAgentRunPanel({
             setSummary(event.summary);
             break;
           case "error":
-            setError(event.message);
+            setError({ message: event.message, code: event.code, metadata: event.metadata });
             break;
         }
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        setError(err instanceof Error ? err.message : "运行失败");
+        setError({ message: err instanceof Error ? err.message : "运行失败" });
       }
     } finally {
       setRunning(false);
@@ -216,8 +363,20 @@ export function CustomAgentRunPanel({
     setRunning(false);
   }, []);
 
+  // Auto-start on mount if requested (e.g. after editing config and clicking "Save & Run")
+  const hasAutoStartedRef = useRef(false);
+  useEffect(() => {
+    if (autoStart && !hasAutoStartedRef.current) {
+      hasAutoStartedRef.current = true;
+      void handleStart();
+    }
+  }, [autoStart, handleStart]);
+
   // Sort results by score descending
   const sortedResults = [...results].sort((a, b) => b.score - a.score);
+
+  // Button label based on state
+  const runButtonLabel = error ? "再次运行" : summary ? "重新运行" : "开始运行";
 
   return (
     <div className="flex flex-col h-full">
@@ -261,7 +420,7 @@ export function CustomAgentRunPanel({
               onClick={handleStart}
               className="px-4 py-1.5 rounded-lg text-sm font-medium bg-accent hover:bg-accent/80 text-white btn-tactile transition"
             >
-              {summary ? "重新运行" : "开始运行"}
+              {runButtonLabel}
             </button>
           ) : (
             <button
@@ -269,6 +428,22 @@ export function CustomAgentRunPanel({
               className="px-4 py-1.5 rounded-lg text-sm font-medium bg-loss/20 text-loss hover:bg-loss/30 transition"
             >
               停止
+            </button>
+          )}
+
+          {/* Edit parameters button — always visible */}
+          {onEditRequest && (
+            <button
+              onClick={() => {
+                if (running) handleStop();
+                onEditRequest();
+              }}
+              className="p-1.5 rounded text-white/50 hover:text-white hover:bg-white/10 transition"
+              title="修改参数"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+              </svg>
             </button>
           )}
 
@@ -367,11 +542,14 @@ export function CustomAgentRunPanel({
 
         {/* Right: Results */}
         <div className="flex-1 overflow-y-auto p-4">
-          {/* Error */}
+          {/* Structured error card */}
           {error && (
-            <div className="mb-4 p-3 rounded-lg bg-loss/10 border border-loss/20 text-loss text-sm">
-              {error}
-            </div>
+            <AgentErrorPanel
+              error={error}
+              onRetry={handleStart}
+              onEditRequest={onEditRequest}
+              onClose={onClose}
+            />
           )}
 
           {/* Results Table */}
@@ -498,3 +676,5 @@ export function CustomAgentRunPanel({
 }
 
 export default CustomAgentRunPanel;
+export { AgentErrorPanel };
+export type { AgentError, AgentErrorPanelProps };

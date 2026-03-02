@@ -60,8 +60,8 @@ export interface RoundTripCost {
  */
 export const DEFAULT_COSTS: TransactionCosts = {
   commission: 0.0003, // 0.03% (typical online broker rate)
-  stampDuty: 0.001, // 0.1% (sell only, as of 2023-08-28)
-  transferFee: 0.00002, // 0.002% (both buy and sell)
+  stampDuty: 0.0005, // 0.05% (sell only, reduced since 2023-08-28)
+  transferFee: 0.00001, // 0.001% (both buy and sell)
   slippage: 0.001, // 0.1% (estimated market impact)
   minCommission: 5, // 5 CNY minimum commission
 };
@@ -84,8 +84,8 @@ export const ZERO_COSTS: TransactionCosts = {
  */
 export const CONSERVATIVE_COSTS: TransactionCosts = {
   commission: 0.0005, // 0.05%
-  stampDuty: 0.001, // 0.1%
-  transferFee: 0.00002, // 0.002%
+  stampDuty: 0.0005, // 0.05%
+  transferFee: 0.00001, // 0.001%
   slippage: 0.002, // 0.2%
   minCommission: 5, // 5 CNY
 };

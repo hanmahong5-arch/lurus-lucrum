@@ -71,8 +71,26 @@ export default function AccountPage() {
       const response = await fetch("/api/backend/account/summary");
       const data = await response.json();
 
-      if (data.success) {
-        setAccount(data.summary);
+      if (data.success && data.summary) {
+        // Normalize all numeric fields to prevent toLocaleString on undefined
+        const s = data.summary;
+        setAccount({
+          initial_capital: s.initial_capital ?? 0,
+          balance: s.balance ?? 0,
+          frozen: s.frozen ?? 0,
+          available: s.available ?? 0,
+          total_pnl: s.total_pnl ?? 0,
+          realized_pnl: s.realized_pnl ?? 0,
+          unrealized_pnl: s.unrealized_pnl ?? 0,
+          total_commission: s.total_commission ?? 0,
+          return_pct: s.return_pct ?? 0,
+          total_trades: s.total_trades ?? 0,
+          winning_trades: s.winning_trades ?? 0,
+          losing_trades: s.losing_trades ?? 0,
+          win_rate: s.win_rate ?? 0,
+          max_drawdown: s.max_drawdown ?? 0,
+          sharpe_ratio: s.sharpe_ratio ?? 0,
+        });
         setError(null);
       } else {
         // Fallback to basic account info
@@ -80,10 +98,18 @@ export default function AccountPage() {
         const basicResponse = await fetch("/api/backend/account/info");
         const basicData = await basicResponse.json();
         if (basicData.success && basicData.account) {
+          const a = basicData.account;
           setAccount({
-            ...basicData.account,
-            realized_pnl: basicData.account.total_pnl || 0,
+            initial_capital: a.initial_capital ?? 0,
+            balance: a.balance ?? 0,
+            frozen: a.frozen ?? 0,
+            available: a.available ?? 0,
+            total_pnl: a.total_pnl ?? 0,
+            realized_pnl: a.total_pnl ?? 0,
             unrealized_pnl: 0,
+            total_commission: a.total_commission ?? 0,
+            return_pct: a.return_pct ?? 0,
+            total_trades: a.total_trades ?? 0,
             winning_trades: 0,
             losing_trades: 0,
             win_rate: 0,
@@ -132,17 +158,19 @@ export default function AccountPage() {
     }
   };
 
-  // Format currency
-  // 格式化货币
-  const formatCurrency = (value: number) => {
-    return `¥${value.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}`;
+  // Format currency — defensive against undefined/null from API failures
+  // 格式化货币 — 防御上游返回空值
+  const formatCurrency = (value: number | null | undefined) => {
+    const n = typeof value === "number" && Number.isFinite(value) ? value : 0;
+    return `¥${n.toLocaleString("zh-CN", { minimumFractionDigits: 2 })}`;
   };
 
-  // Format percentage
+  // Format percentage — defensive against undefined/null
   // 格式化百分比
-  const formatPercent = (value: number) => {
-    const pct = (value * 100).toFixed(2);
-    return value >= 0 ? `+${pct}%` : `${pct}%`;
+  const formatPercent = (value: number | null | undefined) => {
+    const v = typeof value === "number" && Number.isFinite(value) ? value : 0;
+    const pct = (v * 100).toFixed(2);
+    return v >= 0 ? `+${pct}%` : `${pct}%`;
   };
 
   return (

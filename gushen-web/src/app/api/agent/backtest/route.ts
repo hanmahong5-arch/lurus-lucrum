@@ -10,7 +10,7 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
 import { streamBacktestAgent, type AgentStreamEvent } from "@/lib/agent/backtest-agent";
-import { checkAndConsumeQuota } from "@/lib/middleware/quota-check";
+import { checkAndConsumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { recordUserEvent } from "@/lib/db/queries";
 
 /** Maximum allowed message length */
@@ -65,9 +65,10 @@ export async function POST(request: NextRequest) {
   }
 
   // Check quota before running the agent
+  const accountId = userId ? (await resolveAccountId(userId)) ?? undefined : undefined;
   if (userId) {
     const estimatedTokens = 3000; // Agent backtest uses ~3000 tokens per run
-    const quota = await checkAndConsumeQuota(userId, estimatedTokens, "agent_backtest");
+    const quota = await checkAndConsumeQuota(accountId ?? userId, userId, estimatedTokens);
     if (!quota.allowed) {
       return new Response(
         sseEvent({

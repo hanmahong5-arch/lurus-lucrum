@@ -24,17 +24,17 @@ describe('calculateTradeCost', () => {
     // stampDuty = 0 for buy
     expect(result.stampDuty).toBe(0);
 
-    // transferFee = 100000 * 0.00002 = 2
-    expect(result.transferFee).toBe(2);
+    // transferFee = 100000 * 0.00001 = 1
+    expect(result.transferFee).toBe(1);
 
     // slippage = 100000 * 0.001 = 100
     expect(result.slippage).toBe(100);
 
-    // totalCost = 30 + 0 + 2 + 100 = 132
-    expect(result.totalCost).toBe(132);
+    // totalCost = 30 + 0 + 1 + 100 = 131
+    expect(result.totalCost).toBe(131);
 
-    // costRate = 132 / 100000 = 0.00132
-    expect(result.costRate).toBeCloseTo(0.00132, 5);
+    // costRate = 131 / 100000 = 0.00131
+    expect(result.costRate).toBeCloseTo(0.00131, 5);
   });
 
   it('calculates sell trade costs correctly for 100000 value', () => {
@@ -43,20 +43,20 @@ describe('calculateTradeCost', () => {
     // commission = max(100000 * 0.0003, 5) = 30
     expect(result.commission).toBeCloseTo(30, 2);
 
-    // stampDuty = 100000 * 0.001 = 100 for sell
-    expect(result.stampDuty).toBe(100);
+    // stampDuty = 100000 * 0.0005 = 50 for sell
+    expect(result.stampDuty).toBe(50);
 
-    // transferFee = 100000 * 0.00002 = 2
-    expect(result.transferFee).toBe(2);
+    // transferFee = 100000 * 0.00001 = 1
+    expect(result.transferFee).toBe(1);
 
     // slippage = 100000 * 0.001 = 100
     expect(result.slippage).toBe(100);
 
-    // totalCost = 30 + 100 + 2 + 100 = 232
-    expect(result.totalCost).toBe(232);
+    // totalCost = 30 + 50 + 1 + 100 = 181
+    expect(result.totalCost).toBe(181);
 
-    // costRate = 232 / 100000 = 0.00232
-    expect(result.costRate).toBeCloseTo(0.00232, 5);
+    // costRate = 181 / 100000 = 0.00181
+    expect(result.costRate).toBeCloseTo(0.00181, 5);
   });
 
   it('applies minimum commission for zero value trade', () => {

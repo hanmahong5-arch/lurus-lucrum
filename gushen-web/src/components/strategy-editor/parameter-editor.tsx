@@ -12,6 +12,7 @@
 
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { Slider } from "@/components/ui/slider";
 import {
   parseStrategyParameters,
   updateStrategyCode,
@@ -608,92 +609,107 @@ function ParameterInput({
       </div>
 
       {/* Input based on type */}
-      {type === "number" && (
-        <div className="flex items-center gap-2">
-          {/* Decrement button */}
-          <button
-            type="button"
-            onClick={handleDecrement}
-            disabled={
-              readOnly ||
-              (range?.min !== undefined && (value as number) <= range.min)
-            }
-            className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M20 12H4"
-              />
-            </svg>
-          </button>
+      {type === "number" && (() => {
+        // Use Slider when range is defined and span ≤ 200 (e.g. SMA period 1-200)
+        const useSlider =
+          !readOnly &&
+          range?.min !== undefined &&
+          range?.max !== undefined &&
+          (range.max - range.min) <= 200;
 
-          {/* Number input */}
-          <div className="flex-1 relative">
-            <input
-              type="number"
-              id={`param-${name}`}
-              value={value as number}
-              onChange={handleNumberChange}
-              onFocus={handleFocusEvent}
-              onBlur={handleBlurEvent}
-              min={range?.min}
-              max={range?.max}
-              step={step ?? 1}
-              disabled={readOnly}
-              className={cn(
-                "w-full px-3 py-2 bg-primary/50 border rounded text-sm text-white text-center",
-                "focus:outline-none focus:ring-2 focus:ring-accent/50",
-                "disabled:opacity-50 disabled:cursor-not-allowed",
-                error
-                  ? "border-loss focus:ring-loss/50"
-                  : isModified
-                    ? "border-accent/50"
-                    : "border-border",
+        if (useSlider) {
+          // Generate sensible quick-select ticks (up to 5) within range
+          const rangeSpan = range!.max! - range!.min!;
+          const tickStep = rangeSpan <= 20 ? 5 : rangeSpan <= 60 ? 10 : rangeSpan <= 120 ? 20 : 60;
+          const rawTicks: number[] = [];
+          for (let t = range!.min!; t <= range!.max!; t += tickStep) {
+            rawTicks.push(t);
+          }
+          const ticks = rawTicks.slice(0, 6);
+
+          return (
+            <div onFocus={handleFocusEvent} onBlur={handleBlurEvent}>
+              <Slider
+                value={value as number}
+                onValueChange={(v) => onChange(name, v)}
+                min={range!.min!}
+                max={range!.max!}
+                step={step ?? 1}
+                ticks={ticks}
+                disabled={readOnly}
+                className={cn(error ? "opacity-80" : "")}
+              />
+            </div>
+          );
+        }
+
+        // Fallback: +/- buttons + number input
+        return (
+          <div className="flex items-center gap-2">
+            {/* Decrement button */}
+            <button
+              type="button"
+              onClick={handleDecrement}
+              disabled={
+                readOnly ||
+                (range?.min !== undefined && (value as number) <= range.min)
+              }
+              className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
+              </svg>
+            </button>
+
+            {/* Number input */}
+            <div className="flex-1 relative">
+              <input
+                type="number"
+                id={`param-${name}`}
+                value={value as number}
+                onChange={handleNumberChange}
+                onFocus={handleFocusEvent}
+                onBlur={handleBlurEvent}
+                min={range?.min}
+                max={range?.max}
+                step={step ?? 1}
+                disabled={readOnly}
+                className={cn(
+                  "w-full px-3 py-2 bg-primary/50 border rounded text-sm text-white text-center",
+                  "focus:outline-none focus:ring-2 focus:ring-accent/50",
+                  "disabled:opacity-50 disabled:cursor-not-allowed",
+                  error
+                    ? "border-loss focus:ring-loss/50"
+                    : isModified
+                      ? "border-accent/50"
+                      : "border-border",
+                )}
+              />
+              {range && (range.min !== undefined || range.max !== undefined) && (
+                <div className="absolute -bottom-4 left-0 right-0 flex justify-between text-[10px] text-white/30">
+                  <span>{range.min ?? "∞"}</span>
+                  <span>{range.max ?? "∞"}</span>
+                </div>
               )}
-            />
-            {/* Range indicator */}
-            {range && (range.min !== undefined || range.max !== undefined) && (
-              <div className="absolute -bottom-4 left-0 right-0 flex justify-between text-[10px] text-white/30">
-                <span>{range.min ?? "∞"}</span>
-                <span>{range.max ?? "∞"}</span>
-              </div>
-            )}
-          </div>
+            </div>
 
-          {/* Increment button */}
-          <button
-            type="button"
-            onClick={handleIncrement}
-            disabled={
-              readOnly ||
-              (range?.max !== undefined && (value as number) >= range.max)
-            }
-            className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
+            {/* Increment button */}
+            <button
+              type="button"
+              onClick={handleIncrement}
+              disabled={
+                readOnly ||
+                (range?.max !== undefined && (value as number) >= range.max)
+              }
+              className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-          </button>
-        </div>
-      )}
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
+          </div>
+        );
+      })()}
 
       {type === "boolean" && (
         <button

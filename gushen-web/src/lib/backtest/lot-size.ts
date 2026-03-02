@@ -206,6 +206,15 @@ export function detectAssetType(symbol: string): AssetType {
 }
 
 /**
+ * Check if a stock symbol belongs to STAR Market (科创板)
+ * 判断是否为科创板股票 (688xxx)
+ */
+export function isStarMarket(symbol: string): boolean {
+  const clean = symbol.replace(/\D/g, "");
+  return clean.startsWith("688");
+}
+
+/**
  * Get lot size configuration for a symbol
  * 获取代码的手数配置
  */
@@ -215,6 +224,12 @@ export function getLotSizeConfig(
 ): LotSizeConfig {
   const assetType = overrideAssetType ?? detectAssetType(symbol);
   const config = { ...LOT_SIZE_CONFIGS[assetType] };
+
+  // STAR Market (科创板 688xxx): 200 shares per lot minimum
+  if (assetType === "stock" && isStarMarket(symbol)) {
+    config.lotSize = 200;
+    config.description = "科创板股票: 200股/手 (买入必须是200的整数倍)";
+  }
 
   // Special handling for futures - use contract multiplier
   if (assetType === "futures") {

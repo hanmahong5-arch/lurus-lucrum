@@ -962,6 +962,94 @@ export const customAgentRuns = pgTable(
 );
 
 // ============================================================================
+// Strategy Marketplace Tables (策略市场)
+// ============================================================================
+
+/**
+ * Marketplace strategies table - Published strategies available for purchase/subscription
+ * 策略市场表 - 用户发布的可购买/订阅策略
+ */
+export const marketplaceStrategies = pgTable(
+  'marketplace_strategies',
+  {
+    id: serial('id').primaryKey(),
+    /** Reference to the strategy version being published */
+    strategyHistoryId: integer('strategy_history_id')
+      .notNull()
+      .references(() => strategyHistory.id),
+    /** Publishing author */
+    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    /** Display title for the marketplace listing */
+    title: varchar('title', { length: 100 }).notNull(),
+    /** Detailed description shown on listing page */
+    description: text('description'),
+    /** Pricing model: free / per_run / subscription */
+    priceType: varchar('price_type', { length: 20 }).notNull(),
+    /** LB per single run (0 for free/subscription) */
+    pricePerRun: real('price_per_run').default(0),
+    /** LB per month for subscription pricing */
+    priceMonthly: real('price_monthly').default(0),
+    /** lurus-identity account ID of the author (captured at publish time for wallet transfers) */
+    authorIdentityAccountId: varchar('author_identity_account_id', { length: 32 }),
+    /** AI-generated grade score (A/B/C/D from existing scorer) */
+    gradeScore: varchar('grade_score', { length: 2 }),
+    /** Total times this strategy has been run by other users */
+    totalRuns: integer('total_runs').default(0),
+    /** Total active subscribers */
+    totalSubscribers: integer('total_subscribers').default(0),
+    /** LB staked by author to prevent spam listings */
+    stakedLb: real('staked_lb').default(10),
+    /** Listing status: active / suspended / pending */
+    status: varchar('status', { length: 20 }).default('active'),
+    publishedAt: timestamp('published_at').defaultNow(),
+  },
+  (table) => ({
+    authorIdx: index('idx_marketplace_author').on(table.authorUserId),
+    statusIdx: index('idx_marketplace_status').on(table.status),
+    priceTypeIdx: index('idx_marketplace_price_type').on(table.priceType),
+  })
+);
+
+/**
+ * Strategy subscriptions table - Records of marketplace purchases and subscriptions
+ * 策略订阅记录表 - 市场购买/订阅记录
+ */
+export const strategySubscriptions = pgTable(
+  'strategy_subscriptions',
+  {
+    id: serial('id').primaryKey(),
+    /**
+     * Buyer's lurus-identity account ID (numeric string, e.g. "42").
+     * We store the identity account ID rather than the local users.id UUID
+     * because Zitadel-authenticated users have no row in the local users table.
+     */
+    subscriberIdentityAccountId: varchar('subscriber_identity_account_id', { length: 32 }),
+    /** The marketplace listing */
+    marketplaceStrategyId: integer('marketplace_strategy_id').references(
+      () => marketplaceStrategies.id
+    ),
+    /** Transaction type: per_run / subscription */
+    type: varchar('type', { length: 20 }).notNull(),
+    /** Total LB paid by subscriber */
+    lbPaid: real('lb_paid').notNull(),
+    /** Platform fee rate (30%) */
+    platformFeeRate: real('platform_fee_rate').default(0.30),
+    /** LB transferred to strategy author (70%) */
+    authorRevenueLb: real('author_revenue_lb').notNull(),
+    /** Subscription period start (null for per_run) */
+    periodStart: timestamp('period_start'),
+    /** Subscription period end (null for per_run) */
+    periodEnd: timestamp('period_end'),
+    createdAt: timestamp('created_at').defaultNow(),
+  },
+  (table) => ({
+    subscriberIdx: index('idx_strategy_subs_subscriber').on(table.subscriberIdentityAccountId),
+    strategyIdx: index('idx_strategy_subs_strategy').on(table.marketplaceStrategyId),
+    createdIdx: index('idx_strategy_subs_created').on(table.createdAt),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -1040,3 +1128,10 @@ export type NewCustomAgent = typeof customAgents.$inferInsert;
 
 export type CustomAgentRun = typeof customAgentRuns.$inferSelect;
 export type NewCustomAgentRun = typeof customAgentRuns.$inferInsert;
+
+// Marketplace types
+export type MarketplaceStrategy = typeof marketplaceStrategies.$inferSelect;
+export type NewMarketplaceStrategy = typeof marketplaceStrategies.$inferInsert;
+
+export type StrategySubscription = typeof strategySubscriptions.$inferSelect;
+export type NewStrategySubscription = typeof strategySubscriptions.$inferInsert;

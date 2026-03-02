@@ -1039,7 +1039,8 @@ class MACDDetail:
     expect(result.enhanced).toBeDefined();
     expect(result.enhanced!.dailyLogs.length).toBeGreaterThan(0);
     expect(result.enhanced!.strategy.indicators).toContain('MACD');
-    expect(result.enhanced!.summary.tradingDays).toBe(klines.length);
+    // tradingDays = endIndex - startIndex; startIndex=1 for pending-order, so it's klines.length-1
+    expect(result.enhanced!.summary.tradingDays).toBe(klines.length - 1);
   });
 
   it('multiple indicator strategy processes all signal branches', async () => {

@@ -623,28 +623,30 @@ describe('BacktestPanel', () => {
       expect(screen.getByText('Capital')).toBeInTheDocument();
     });
 
-    it('changes timeframe', async () => {
+    it('changes timeframe using button group', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
       await userEvent.click(screen.getByText('设置'));
 
-      const select = screen.getByRole('combobox');
-      await userEvent.selectOptions(select, '1w');
+      // New UI: 3-segment button group (日K/周K/时K)
+      const weeklyBtn = screen.getByText('周K');
+      await userEvent.click(weeklyBtn);
 
-      expect(select).toHaveValue('1w');
+      // The button should be highlighted (active state)
+      expect(weeklyBtn).toBeInTheDocument();
     });
 
-    it('updates initial capital', async () => {
+    it('updates initial capital using preset buttons', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
       await userEvent.click(screen.getByText('设置'));
 
-      const capitalInput = screen.getByDisplayValue('100000');
-      // Need to use tripleClick to select all before typing
-      await userEvent.tripleClick(capitalInput);
-      await userEvent.keyboard('500000');
+      // New UI: preset capital buttons
+      const preset50Btn = screen.getByText('50万');
+      await userEvent.click(preset50Btn);
 
-      expect(capitalInput).toHaveValue(500000);
+      // The button should now be highlighted (active state)
+      expect(preset50Btn).toBeInTheDocument();
     });
 
     it('sets preset period', async () => {

@@ -135,6 +135,7 @@ interface ErrorEvent {
   type: 'error';
   message: string;
   code?: string;
+  metadata?: Record<string, unknown>;
 }
 
 export type CustomAgentEvent =

@@ -15,7 +15,7 @@ import { db } from "@/lib/db";
 import { customAgents, customAgentRuns } from "@/lib/db/schema";
 import { eq, and, sql } from "drizzle-orm";
 import { streamCustomAgent } from "@/lib/agent/custom-agent";
-import { checkAndConsumeQuota, consumeQuota } from "@/lib/middleware/quota-check";
+import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { checkUsage, incrementUsage } from "@/lib/middleware/usage-tracker";
 import { getLimitsForPlan } from "@/lib/config/plan-limits";
 import { recordUserEvent } from "@/lib/db/queries";
@@ -28,8 +28,8 @@ function sseEvent(event: CustomAgentEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
 }
 
-function sseError(code: string, message: string): string {
-  return sseEvent({ type: "error", message, code });
+function sseError(code: string, message: string, metadata?: Record<string, unknown>): string {
+  return sseEvent({ type: "error", message, code, ...(metadata && { metadata }) });
 }
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -73,7 +73,8 @@ export async function POST(
     return new Response(
       sseError(
         "DAILY_LIMIT",
-        `今日 Agent 运行次数已达上限（${usage.used}/${usage.limit}），请明天再试或升级计划`
+        `今日 Agent 运行次数已达上限（${usage.used}/${usage.limit}），请明天再试或升级计划`,
+        { used: usage.used, limit: usage.limit }
       ),
       { status: 429, headers: { "Content-Type": "text/event-stream" } }
     );
@@ -82,18 +83,20 @@ export async function POST(
   // Token quota check (for standard/deep analysis)
   const depth = agent.analysisDepth as keyof typeof TOKEN_ESTIMATES;
   const estimatedTokens = TOKEN_ESTIMATES[depth] ?? 1500;
+  const accountId = await resolveAccountId(userId) ?? undefined;
 
   if (estimatedTokens > 0) {
     const quota = await checkAndConsumeQuota(
+      accountId ?? userId,
       userId,
       estimatedTokens,
-      "custom_agent_run"
     );
     if (!quota.allowed) {
       return new Response(
         sseError(
           "QUOTA_EXCEEDED",
-          `AI Token 配额不足（剩余 ${quota.remaining}），请升级计划继续使用`
+          `AI Token 配额不足（剩余 ${quota.remaining}），请升级计划继续使用`,
+          { remaining: quota.remaining }
         ),
         { status: 429, headers: { "Content-Type": "text/event-stream" } }
       );
@@ -251,6 +254,7 @@ export async function POST(
         // Report actual token consumption
         if (totalTokenCost > 0) {
           consumeQuota({
+            accountId,
             userId,
             tokens: totalTokenCost,
             operationType: "custom_agent_run",

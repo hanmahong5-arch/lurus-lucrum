@@ -37,6 +37,15 @@ export interface BacktestConfig {
   startDate: string; // ISO date string
   endDate: string; // ISO date string
   timeframe: "1d" | "1w" | "60m" | "30m" | "15m" | "5m" | "1m";
+  // A-share market rules
+  enableT1?: boolean; // T+1 constraint: cannot sell on same day as buy (default true)
+  enableCircuitBreaker?: boolean; // Limit up/down (涨跌停) constraint (default true)
+  stampDuty?: number; // Stamp duty rate on sell side only, e.g. 0.0005 = 0.05% (default 0.0005, since 2023-08-28)
+  transferFee?: number; // Transfer fee rate (bilateral), e.g. 0.00001 = 0.001% (default 0.00001)
+  // Walk-forward analysis
+  wfSplitRatio?: 0 | 0.7 | 0.8; // 0 = full sample, 0.8 = 80% in-sample (default 0)
+  // Benchmark comparison
+  benchmarkKlines?: BacktestKline[]; // Benchmark K-line data (e.g., CSI 300)
 }
 
 /**
@@ -220,6 +229,17 @@ export interface BacktestSummary {
   totalSlippage: number;
   totalTradingCost: number;
   tradingCostPercent: number;
+
+  // Benchmark comparison / 基准对比
+  benchmarkReturn?: number; // Benchmark buy-and-hold return (基准买持收益)
+  alpha?: number; // Strategy return - benchmark return (超额收益)
+  beta?: number; // Regression coefficient vs benchmark (回归系数)
+  informationRatio?: number; // Excess return / tracking error (信息比率)
+
+  // Walk-forward analysis / Walk-Forward 样本分割
+  inSampleMetrics?: BacktestSummary; // In-sample (training) period metrics
+  outOfSampleMetrics?: BacktestSummary; // Out-of-sample (test) period metrics
+  splitDate?: string; // Date splitting in-sample and out-of-sample
 }
 
 /**

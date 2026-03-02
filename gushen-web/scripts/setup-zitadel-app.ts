@@ -12,7 +12,7 @@ import { writeFileSync, readFileSync } from "fs";
 import { resolve } from "path";
 
 const ZITADEL_URL = "https://auth.lurus.cn";
-const ADMIN_EMAIL = "admin@lurus.cn";
+const ADMIN_EMAIL = "zitadel-admin@zitadel.auth.lurus.cn";
 const ADMIN_PASSWORD = "Lurus@ops";
 const APP_NAME = "gushen-web";
 

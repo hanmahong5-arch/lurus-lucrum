@@ -25,7 +25,7 @@ import {
 } from "@/lib/advisor/agent/agent-orchestrator";
 import { recommendAnalyst } from "@/lib/advisor/agent/analyst-agents";
 import { INVESTMENT_ADVISOR_SYSTEM_PROMPT } from "@/lib/investment-context/conversation-templates";
-import { checkAndConsumeQuota, consumeQuota } from "@/lib/middleware/quota-check";
+import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { recordUserEvent } from "@/lib/db/queries";
 
 // lurus-api configuration
@@ -74,6 +74,15 @@ function buildSystemPrompt(
   legacyContext: AdvisorChatRequest["context"],
   mode: ChatMode,
 ): string {
+  // Instruction to generate follow-up questions at the end of each response
+  // 要求在每条回复末尾生成后续问题标记
+  const followUpInstruction = `
+
+## Follow-up Questions Requirement
+At the END of your response, append a hidden marker containing 3 follow-up questions that would naturally continue this conversation. Format exactly as:
+<!--QUESTIONS:["question 1 in Chinese","question 2 in Chinese","question 3 in Chinese"]-->
+Do NOT show this marker visually in the main text. Questions must be in Chinese, concise (≤20 characters), and highly relevant to what was just discussed.`;
+
   // If advisor context is provided, use new dynamic context builder
   // 如果提供了顾问上下文，使用新的动态上下文构建器
   if (advisorContext) {
@@ -88,7 +97,7 @@ function buildSystemPrompt(
       `[Advisor API] Built dynamic context with ${built.includedSections.length} sections, ~${built.tokenBudget.total} tokens`,
     );
 
-    return built.systemPrompt;
+    return built.systemPrompt + followUpInstruction;
   }
 
   // Fallback to legacy system prompt
@@ -123,7 +132,7 @@ function buildSystemPrompt(
     }
   }
 
-  return prompt;
+  return prompt + followUpInstruction;
 }
 
 /**
@@ -184,8 +193,9 @@ export async function POST(request: NextRequest) {
 
     // Check quota for authenticated users
     // 对已认证用户执行配额检查
+    const accountId = userId ? (await resolveAccountId(userId)) ?? undefined : undefined;
     if (userId) {
-      const quota = await checkAndConsumeQuota(userId, maxTokens, "advisor_chat");
+      const quota = await checkAndConsumeQuota(accountId ?? userId, userId, maxTokens);
       if (!quota.allowed) {
         return NextResponse.json(
           {
@@ -321,13 +331,35 @@ export async function POST(request: NextRequest) {
     );
 
     const data = await response.json();
-    const advisorResponse = data.choices?.[0]?.message?.content || "";
+    let advisorResponse: string = data.choices?.[0]?.message?.content || "";
 
     if (!advisorResponse) {
       return NextResponse.json(
         { error: "Empty response from advisor" },
         { status: 500 },
       );
+    }
+
+    // Extract suggested follow-up questions from hidden marker
+    // Format: <!--QUESTIONS:["q1","q2","q3"]-->
+    // 解析隐藏标记中的后续问题建议
+    let suggestedQuestions: string[] = [];
+    const questionsMatch = advisorResponse.match(
+      /<!--QUESTIONS:([\s\S]*?)-->/,
+    );
+    if (questionsMatch?.[1]) {
+      try {
+        const parsed: unknown = JSON.parse(questionsMatch[1]);
+        if (Array.isArray(parsed)) {
+          suggestedQuestions = parsed
+            .filter((q): q is string => typeof q === "string" && q.length > 0)
+            .slice(0, 5);
+        }
+      } catch {
+        // Ignore parse errors, questions are optional
+      }
+      // Remove the marker from the visible response
+      advisorResponse = advisorResponse.replace(/\s*<!--QUESTIONS:[\s\S]*?-->\s*/, "").trim();
     }
 
     const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? maxTokens;
@@ -348,12 +380,13 @@ export async function POST(request: NextRequest) {
 
     // Consume actual tokens (in addition to estimated already consumed in checkAndConsumeQuota)
     if (userId && actualTokens > maxTokens) {
-      consumeQuota({ userId, tokens: actualTokens - maxTokens, operationType: "advisor_chat" });
+      consumeQuota({ accountId, userId, tokens: actualTokens - maxTokens, operationType: "advisor_chat" });
     }
 
     return NextResponse.json({
       success: true,
       response: advisorResponse,
+      suggestedQuestions,
       usage: data.usage,
       metadata: {
         mode,

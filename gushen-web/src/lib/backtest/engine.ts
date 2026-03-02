@@ -429,74 +429,125 @@ function generateSignal(
 }
 
 // =============================================================================
-// BACKTEST ENGINE / 回测引擎
+// A-SHARE MARKET CONSTANTS / A股市场常量
 // =============================================================================
 
+/** China 1-year deposit benchmark rate as risk-free rate / 中国1年期存款基准利率作为无风险利率 */
+const CHINA_RISK_FREE_RATE = 0.02;
+/** Daily risk-free rate / 每日无风险利率 */
+const DAILY_RISK_FREE_RATE = CHINA_RISK_FREE_RATE / 252;
 /**
- * Run backtest with given strategy and data
- * 使用给定策略和数据运行回测
+ * Get circuit breaker (price limit) thresholds based on stock symbol / board type
+ * 根据股票代码/板块类型获取涨跌停阈值
  *
- * Enhanced version with:
- * - Lot size rules (一手规则)
- * - Detailed trade records (详细交易记录)
- * - Daily logs (每日日志)
+ * 主板: ±10%, 科创板(688xxx): ±20%, 创业板(300xxx/301xxx): ±20%,
+ * 北交所(8xxxxx/4xxxxx/9xxxxx): ±30%, ST股票: ±5%
  */
-export async function runBacktest(
-  strategyCode: string,
+function getCircuitBreakerLimits(symbol: string): { limitUp: number; limitDown: number } {
+  const s = symbol.replace(/\D/g, ""); // Strip non-digits
+  const name = symbol.toUpperCase();
+
+  // ST stocks: ±5%
+  if (name.includes("ST")) {
+    return { limitUp: 1.05, limitDown: 0.95 };
+  }
+  // STAR Market (科创板): 688xxx → ±20%
+  if (s.startsWith("688")) {
+    return { limitUp: 1.20, limitDown: 0.80 };
+  }
+  // ChiNext (创业板): 300xxx / 301xxx → ±20%
+  if (s.startsWith("300") || s.startsWith("301")) {
+    return { limitUp: 1.20, limitDown: 0.80 };
+  }
+  // BSE (北交所): 8xxxxx / 4xxxxx / 9xxxxx → ±30%
+  if (s.startsWith("8") || s.startsWith("4") || s.startsWith("9")) {
+    return { limitUp: 1.30, limitDown: 0.70 };
+  }
+  // Main board default: ±10%
+  return { limitUp: 1.10, limitDown: 0.90 };
+}
+/** Default stamp duty rate (sell only, reduced to 0.05% since 2023-08-28) / 默认印花税率（仅卖出，2023-08-28起降至0.05%） */
+const DEFAULT_STAMP_DUTY = 0.0005;
+/** Default transfer fee rate (bilateral, 0.001%) / 默认过户费率（双向收取，0.001%） */
+const DEFAULT_TRANSFER_FEE = 0.00001;
+/** Minimum commission per trade in CNY / 每笔交易最低佣金（元） */
+const MIN_COMMISSION_CNY = 5;
+
+// =============================================================================
+// HELPER: RUN A SINGLE BACKTEST SEGMENT / 运行单段回测
+// =============================================================================
+
+interface SegmentResult {
+  summary: BacktestSummary;
+  equityCurve: EquityPoint[];
+  trades: BacktestTrade[];
+  detailedTrades: DetailedTrade[];
+  dailyLogs: BacktestDailyLog[];
+  finalCash: number;
+  peakEquity: number;
+}
+
+function runBacktestSegment(
+  strategy: ReturnType<typeof parseStrategyCode>,
   klines: BacktestKline[],
   config: BacktestConfig,
-): Promise<BacktestResult> {
-  const startTime = Date.now();
+  lotSizeConfigArg: ReturnType<typeof getLotSizeConfig>,
+  assetType: string,
+  indicators: {
+    sma5: number[];
+    sma10: number[];
+    sma20: number[];
+    sma60: number[];
+    rsi: number[];
+    macd: { dif: number[]; dea: number[]; histogram: number[] };
+    boll: { upper: number[]; middle: number[]; lower: number[] };
+  },
+  startIndex: number,
+  endIndex: number,
+  executionStartTime: number,
+): SegmentResult {
+  const enableT1 = config.enableT1 !== false; // default true
+  const enableCircuitBreaker = config.enableCircuitBreaker !== false; // default true
+  const stampDuty = config.stampDuty ?? DEFAULT_STAMP_DUTY;
+  const transferFee = config.transferFee ?? DEFAULT_TRANSFER_FEE;
+  const { limitUp, limitDown } = getCircuitBreakerLimits(config.symbol);
 
-  // Parse strategy
-  const strategy = parseStrategyCode(strategyCode);
-
-  // Get lot size configuration
-  const lotSizeConfig = getLotSizeConfig(config.symbol);
-  const assetType = detectAssetType(config.symbol);
-
-  // Initialize state
   let cash = config.initialCapital;
   let position = 0;
   let positionPrice = 0;
   let entryTradeId: string | null = null;
   let entryTime = 0;
+  let heldSinceDate = ""; // Date when current position was entered (for T+1)
   const trades: BacktestTrade[] = [];
   const detailedTrades: DetailedTrade[] = [];
   const dailyLogs: BacktestDailyLog[] = [];
   const equityCurve: EquityPoint[] = [];
 
-  // Pre-calculate indicators
-  const prices = klines.map((k) => k.close);
-  const indicators = {
-    sma5: calculateSMA(prices, 5),
-    sma10: calculateSMA(prices, 10),
-    sma20: calculateSMA(prices, 20),
-    sma60: calculateSMA(prices, 60),
-    rsi: calculateRSI(prices, 14),
-    macd: calculateMACD(prices),
-    boll: calculateBollingerBands(prices),
-  };
-
-  // Track for metrics
   let peakEquity = config.initialCapital;
   let maxDrawdown = 0;
+  let maxDrawdownDuration = 0;
+  let drawdownStartIndex: number | null = null;
   const dailyReturns: number[] = [];
   let prevEquity = config.initialCapital;
-
-  // Track trading costs
   let totalCommission = 0;
   let totalSlippage = 0;
 
-  // Run through each bar
-  for (let i = 1; i < klines.length; i++) {
+  // Pending order: signal generated at bar[i-1], executed at bar[i].open
+  // 挂单机制: 信号在 bar[i-1] 收盘时生成，在 bar[i] 开盘时执行
+  let pendingSignal: ReturnType<typeof generateSignal> | null = null;
+
+  for (let i = startIndex; i < endIndex; i++) {
     const bar = klines[i];
     if (!bar) continue;
 
-    const currentPrice = bar.close;
+    const prevBar = klines[i - 1];
     const date = new Date(bar.time * 1000).toISOString().split("T")[0] ?? "";
 
-    // Get current indicator values
+    // Execution price is today's OPEN (fix look-ahead bias)
+    // 成交价为今日开盘价（修正前瞻偏差）
+    const execPrice = bar.open;
+    const prevClose = prevBar?.close ?? bar.open;
+
     const currentIndicators = {
       sma5: indicators.sma5[i],
       sma10: indicators.sma10[i],
@@ -511,214 +562,234 @@ export async function runBacktest(
       bollLower: indicators.boll.lower[i],
     };
 
-    // Generate signal
-    const signal = generateSignal(strategy, klines, i, position, indicators);
-
-    // Track action for daily log
     let action = "持有";
     let actionDetail = "";
 
-    // Execute signal
-    if (signal.action === "buy" && position === 0 && cash > 0) {
-      // Calculate position size using lot size rules
-      const slippageAmount = currentPrice * config.slippage;
-      const buyPrice = currentPrice + slippageAmount;
+    // ---------- Execute pending order from yesterday's signal ----------
+    if (pendingSignal && pendingSignal.action === "buy" && position === 0 && cash > 0) {
+      // Circuit breaker: if limit-up, cannot buy
+      // 涨停检查: 若股价涨停，买入失败
+      const isLimitUp = enableCircuitBreaker && bar.high >= prevClose * limitUp;
+      if (isLimitUp) {
+        action = "涨停，买入失败";
+        actionDetail = `开盘价${execPrice.toFixed(2)}, 昨收${prevClose.toFixed(2)}, 触及涨停`;
+      } else {
+        const slippageAmount = execPrice * config.slippage;
+        const buyPrice = execPrice + slippageAmount;
 
-      // Use lot size calculation
-      const lotCalc = calculateMaxAffordableLots(
-        cash,
-        buyPrice,
-        config.symbol,
-        config.commission,
-      );
+        const lotCalc = calculateMaxAffordableLots(
+          cash,
+          buyPrice,
+          config.symbol,
+          config.commission,
+        );
 
-      if (lotCalc.actualQuantity > 0) {
-        const buySize = lotCalc.actualQuantity;
-        const cost = buySize * buyPrice;
-        const commission = cost * config.commission;
-        const totalCost = cost + commission;
+        if (lotCalc.actualQuantity > 0) {
+          const buySize = lotCalc.actualQuantity;
+          const cost = buySize * buyPrice;
+          // Enforce minimum commission (5 yuan) + transfer fee (bilateral)
+          const commission = Math.max(cost * config.commission, MIN_COMMISSION_CNY);
+          const buyTransferFee = cost * transferFee;
+          const totalCost = cost + commission + buyTransferFee;
 
-        // Record state before trade
+          const cashBefore = cash;
+          const positionBefore = position;
+          const portfolioValueBefore = cash + position * execPrice;
+
+          cash -= totalCost;
+          position = buySize;
+          positionPrice = buyPrice;
+          entryTime = bar.time;
+          heldSinceDate = date;
+          entryTradeId = `T${trades.length + 1}`;
+
+          totalCommission += commission;
+          totalSlippage += slippageAmount * buySize;
+
+          trades.push({
+            id: entryTradeId,
+            type: "buy",
+            price: buyPrice,
+            size: buySize,
+            timestamp: bar.time,
+            reason: pendingSignal.reason ?? "Buy signal",
+          });
+
+          const currentLotSizeConfig = getLotSizeConfig(config.symbol);
+          detailedTrades.push({
+            id: entryTradeId,
+            timestamp: bar.time,
+            date,
+            type: "buy",
+            symbol: config.symbol,
+            symbolName: getSymbolName(config.symbol),
+            market: getMarketName(config.symbol),
+            signalPrice: prevBar?.close ?? execPrice,
+            executePrice: buyPrice,
+            slippage: slippageAmount * buySize,
+            slippagePercent: config.slippage * 100,
+            commission,
+            commissionPercent: config.commission * 100,
+            totalCost: commission + slippageAmount * buySize,
+            lotCalculation: lotCalc,
+            requestedQuantity: lotCalc.requestedQuantity,
+            actualQuantity: buySize,
+            lots: lotCalc.actualLots,
+            lotSize: currentLotSizeConfig.lotSize,
+            quantityUnit: getQuantityUnit(config.symbol),
+            orderValue: buySize * buyPrice,
+            cashBefore,
+            cashAfter: cash,
+            positionBefore,
+            positionAfter: position,
+            portfolioValueBefore,
+            portfolioValueAfter: cash + position * execPrice,
+            triggerReason: pendingSignal.reason ?? "Buy signal",
+            indicatorValues: currentIndicators as Record<string, number>,
+            strategyName: strategy.name,
+          });
+
+          action = `买入${formatQuantityWithUnit(buySize, config.symbol)}`;
+          actionDetail = `开盘价${buyPrice.toFixed(2)}, 手续费${commission.toFixed(2)}, 滑点${(slippageAmount * buySize).toFixed(2)}`;
+        }
+      }
+    } else if (pendingSignal && pendingSignal.action === "sell" && position > 0) {
+      // T+1 check: cannot sell on the same day as purchase
+      // T+1 检查: 不能在买入当天卖出
+      const t1Blocked = enableT1 && date <= heldSinceDate;
+      // Circuit breaker: if limit-down, cannot sell
+      // 跌停检查: 若股价跌停，卖出失败
+      const isLimitDown = enableCircuitBreaker && bar.low <= prevClose * limitDown;
+
+      if (t1Blocked) {
+        action = "T+1限制，卖出失败";
+        actionDetail = `买入日${heldSinceDate}, 今日${date}, 需次日方可卖出`;
+      } else if (isLimitDown) {
+        action = "跌停，卖出失败";
+        actionDetail = `开盘价${execPrice.toFixed(2)}, 昨收${prevClose.toFixed(2)}, 触及跌停`;
+      } else {
+        const slippageAmount = execPrice * config.slippage;
+        const sellPrice = execPrice - slippageAmount;
+        const sellValue = position * sellPrice;
+        // Apply stamp duty on sell side + transfer fee (bilateral) + min commission
+        // 卖出时加收印花税 + 过户费（双向） + 最低佣金
+        const sellStampDuty = sellValue * stampDuty;
+        const sellTransferFee = sellValue * transferFee;
+        const commission = Math.max(sellValue * config.commission, MIN_COMMISSION_CNY);
+        const revenue = sellValue - sellStampDuty - sellTransferFee;
+
+        const pnl = revenue - commission - position * positionPrice;
+        const pnlPercent = (pnl / (position * positionPrice)) * 100;
+        const holdingDays = (bar.time - entryTime) / 86400;
+
         const cashBefore = cash;
         const positionBefore = position;
-        const portfolioValueBefore = cash + position * currentPrice;
+        const portfolioValueBefore = cash + position * execPrice;
 
-        cash -= totalCost;
-        position = buySize;
-        positionPrice = buyPrice;
-        entryTime = bar.time;
-        entryTradeId = `T${trades.length + 1}`;
+        cash += revenue - commission;
 
-        // Track costs
         totalCommission += commission;
-        totalSlippage += slippageAmount * buySize;
+        totalSlippage += slippageAmount * position;
 
-        // Create legacy trade record
+        const sellTradeId = `T${trades.length + 1}`;
+
         trades.push({
-          id: entryTradeId,
-          type: "buy",
-          price: buyPrice,
-          size: buySize,
+          id: sellTradeId,
+          type: "sell",
+          price: sellPrice,
+          size: position,
           timestamp: bar.time,
-          reason: signal.reason ?? "Buy signal",
+          reason: pendingSignal.reason ?? "Sell signal",
+          pnl,
+          pnlPercent,
         });
 
-        // Create detailed trade record with enhanced symbol info (Phase 7)
-        const lotSizeConfig = getLotSizeConfig(config.symbol);
+        const sellLotCalc = roundToLot(position, config.symbol, "sell");
+        const sellLotSizeConfig = getLotSizeConfig(config.symbol);
+
         detailedTrades.push({
-          id: entryTradeId,
+          id: sellTradeId,
           timestamp: bar.time,
           date,
-          type: "buy",
-          // Phase 7: Symbol info
+          type: "sell",
           symbol: config.symbol,
           symbolName: getSymbolName(config.symbol),
           market: getMarketName(config.symbol),
-          // Execution details
-          signalPrice: currentPrice,
-          executePrice: buyPrice,
-          slippage: slippageAmount * buySize,
+          signalPrice: prevBar?.close ?? execPrice,
+          executePrice: sellPrice,
+          slippage: slippageAmount * position,
           slippagePercent: config.slippage * 100,
           commission,
           commissionPercent: config.commission * 100,
-          totalCost: commission + slippageAmount * buySize,
-          // Quantity info
-          lotCalculation: lotCalc,
-          requestedQuantity: lotCalc.requestedQuantity,
-          actualQuantity: buySize,
-          // Phase 7: Enhanced quantity display
-          lots: lotCalc.actualLots,
-          lotSize: lotSizeConfig.lotSize,
+          totalCost: commission + slippageAmount * position,
+          lotCalculation: sellLotCalc,
+          requestedQuantity: position,
+          actualQuantity: position,
+          lots: sellLotCalc.actualLots,
+          lotSize: sellLotSizeConfig.lotSize,
           quantityUnit: getQuantityUnit(config.symbol),
-          orderValue: buySize * buyPrice,
-          // Position changes
+          orderValue: position * sellPrice,
           cashBefore,
           cashAfter: cash,
           positionBefore,
-          positionAfter: position,
+          positionAfter: 0,
           portfolioValueBefore,
-          portfolioValueAfter: cash + position * currentPrice,
-          // Signal info
-          triggerReason: signal.reason ?? "Buy signal",
+          portfolioValueAfter: cash,
+          pnl,
+          pnlPercent,
+          holdingDays,
+          entryTradeId: entryTradeId ?? undefined,
+          triggerReason: pendingSignal.reason ?? "Sell signal",
           indicatorValues: currentIndicators as Record<string, number>,
           strategyName: strategy.name,
         });
 
-        action = `买入${formatQuantityWithUnit(buySize, config.symbol)}`;
-        actionDetail = `价格${buyPrice.toFixed(2)}, 手续费${commission.toFixed(2)}, 滑点${(slippageAmount * buySize).toFixed(2)}`;
+        action = `卖出${formatQuantityWithUnit(position, config.symbol)}`;
+        actionDetail = `开盘价${sellPrice.toFixed(2)}, 盈亏${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%)`;
+
+        position = 0;
+        positionPrice = 0;
+        entryTradeId = null;
+        entryTime = 0;
+        heldSinceDate = "";
       }
-    } else if (signal.action === "sell" && position > 0) {
-      // Sell position
-      const slippageAmount = currentPrice * config.slippage;
-      const sellPrice = currentPrice - slippageAmount;
-      const revenue = position * sellPrice;
-      const commission = revenue * config.commission;
-
-      const pnl = revenue - commission - position * positionPrice;
-      const pnlPercent = (pnl / (position * positionPrice)) * 100;
-      const holdingDays = (bar.time - entryTime) / 86400;
-
-      // Record state before trade
-      const cashBefore = cash;
-      const positionBefore = position;
-      const portfolioValueBefore = cash + position * currentPrice;
-
-      cash += revenue - commission;
-
-      // Track costs
-      totalCommission += commission;
-      totalSlippage += slippageAmount * position;
-
-      const sellTradeId = `T${trades.length + 1}`;
-
-      // Create legacy trade record
-      trades.push({
-        id: sellTradeId,
-        type: "sell",
-        price: sellPrice,
-        size: position,
-        timestamp: bar.time,
-        reason: signal.reason ?? "Sell signal",
-        pnl,
-        pnlPercent,
-      });
-
-      // Create lot calculation for sell
-      const sellLotCalc = roundToLot(position, config.symbol, "sell");
-      const sellLotSizeConfig = getLotSizeConfig(config.symbol);
-
-      // Create detailed trade record with enhanced symbol info (Phase 7)
-      detailedTrades.push({
-        id: sellTradeId,
-        timestamp: bar.time,
-        date,
-        type: "sell",
-        // Phase 7: Symbol info
-        symbol: config.symbol,
-        symbolName: getSymbolName(config.symbol),
-        market: getMarketName(config.symbol),
-        // Execution details
-        signalPrice: currentPrice,
-        executePrice: sellPrice,
-        slippage: slippageAmount * position,
-        slippagePercent: config.slippage * 100,
-        commission,
-        commissionPercent: config.commission * 100,
-        totalCost: commission + slippageAmount * position,
-        // Quantity info
-        lotCalculation: sellLotCalc,
-        requestedQuantity: position,
-        actualQuantity: position,
-        // Phase 7: Enhanced quantity display
-        lots: sellLotCalc.actualLots,
-        lotSize: sellLotSizeConfig.lotSize,
-        quantityUnit: getQuantityUnit(config.symbol),
-        orderValue: position * sellPrice,
-        // Position changes
-        cashBefore,
-        cashAfter: cash,
-        positionBefore,
-        positionAfter: 0,
-        portfolioValueBefore,
-        portfolioValueAfter: cash,
-        // P&L info
-        pnl,
-        pnlPercent,
-        holdingDays,
-        entryTradeId: entryTradeId ?? undefined,
-        // Signal info
-        triggerReason: signal.reason ?? "Sell signal",
-        indicatorValues: currentIndicators as Record<string, number>,
-        strategyName: strategy.name,
-      });
-
-      action = `卖出${formatQuantityWithUnit(position, config.symbol)}`;
-      actionDetail = `价格${sellPrice.toFixed(2)}, 盈亏${pnl >= 0 ? "+" : ""}${pnl.toFixed(2)} (${pnlPercent >= 0 ? "+" : ""}${pnlPercent.toFixed(2)}%)`;
-
-      position = 0;
-      positionPrice = 0;
-      entryTradeId = null;
-      entryTime = 0;
     }
 
-    // Calculate equity
-    const equity = cash + position * currentPrice;
-    const positionValue = position * currentPrice;
+    // Generate signal for TOMORROW's execution (using today's close data)
+    // 用今日收盘数据生成信号，明日开盘执行
+    pendingSignal = generateSignal(strategy, klines, i, position, indicators);
 
-    // Track drawdown
+    // Calculate equity using today's CLOSE for end-of-day valuation
+    const closingPrice = bar.close;
+    const equity = cash + position * closingPrice;
+    const positionValue = position * closingPrice;
+
+    // Track drawdown and MDD duration
     if (equity > peakEquity) {
+      // New high: update peak and close any drawdown period
+      if (drawdownStartIndex !== null) {
+        const duration = i - drawdownStartIndex;
+        if (duration > maxDrawdownDuration) {
+          maxDrawdownDuration = duration;
+        }
+        drawdownStartIndex = null;
+      }
       peakEquity = equity;
+    } else {
+      // In drawdown: record start if not already tracking
+      if (drawdownStartIndex === null && equity < peakEquity) {
+        drawdownStartIndex = i;
+      }
     }
-    const drawdown = (peakEquity - equity) / peakEquity;
+
+    const drawdown = peakEquity > 0 ? (peakEquity - equity) / peakEquity : 0;
     if (drawdown > maxDrawdown) {
       maxDrawdown = drawdown;
     }
 
-    // Track daily return
-    const dailyReturn = (equity - prevEquity) / prevEquity;
+    const dailyReturn = prevEquity > 0 ? (equity - prevEquity) / prevEquity : 0;
     dailyReturns.push(dailyReturn);
 
-    // Create daily log entry
     dailyLogs.push({
       bar: i,
       date,
@@ -729,16 +800,15 @@ export async function runBacktest(
       close: bar.close,
       volume: bar.volume,
       indicators: currentIndicators,
-      signal: signal.action !== "hold" ? signal.action : null,
-      signalReason: signal.action !== "hold" ? (signal.reason ?? null) : null,
+      signal: pendingSignal.action !== "hold" ? pendingSignal.action : null,
+      signalReason: pendingSignal.action !== "hold" ? (pendingSignal.reason ?? null) : null,
       action,
       actionDetail,
       cash,
       position,
       positionValue,
       portfolioValue: equity,
-      portfolioReturn:
-        ((equity - config.initialCapital) / config.initialCapital) * 100,
+      portfolioReturn: ((equity - config.initialCapital) / config.initialCapital) * 100,
       dailyReturn: dailyReturn * 100,
       drawdown: drawdown * 100,
       peakValue: peakEquity,
@@ -746,7 +816,6 @@ export async function runBacktest(
 
     prevEquity = equity;
 
-    // Record equity point
     equityCurve.push({
       date,
       equity,
@@ -755,13 +824,16 @@ export async function runBacktest(
     });
   }
 
-  // Close any remaining position at last price
+  // Close any remaining position at last bar's close
   if (position > 0) {
-    const lastBar = klines[klines.length - 1];
+    const lastBar = klines[endIndex - 1];
     if (lastBar) {
       const finalPrice = lastBar.close;
-      const revenue = position * finalPrice;
-      const commission = revenue * config.commission;
+      const closeValue = position * finalPrice;
+      const stampDutyAmount = closeValue * stampDuty;
+      const closeTransferFee = closeValue * transferFee;
+      const revenue = closeValue - stampDutyAmount - closeTransferFee;
+      const commission = Math.max(closeValue * config.commission, MIN_COMMISSION_CNY);
       const pnl = revenue - commission - position * positionPrice;
       const holdingDays = (lastBar.time - entryTime) / 86400;
 
@@ -780,24 +852,20 @@ export async function runBacktest(
         timestamp: lastBar.time,
         reason: "回测结束平仓",
         pnl,
-        pnlPercent: (pnl / (position * positionPrice)) * 100,
+        pnlPercent: position * positionPrice > 0 ? (pnl / (position * positionPrice)) * 100 : 0,
       });
 
-      // Create lot calculation for final sell
       const sellLotCalc = roundToLot(position, config.symbol, "sell");
       const finalLotSizeConfig = getLotSizeConfig(config.symbol);
 
-      // Create detailed trade record with enhanced symbol info (Phase 7)
       detailedTrades.push({
         id: sellTradeId,
         timestamp: lastBar.time,
         date,
         type: "sell",
-        // Phase 7: Symbol info
         symbol: config.symbol,
         symbolName: getSymbolName(config.symbol),
         market: getMarketName(config.symbol),
-        // Execution details
         signalPrice: finalPrice,
         executePrice: finalPrice,
         slippage: 0,
@@ -805,29 +873,23 @@ export async function runBacktest(
         commission,
         commissionPercent: config.commission * 100,
         totalCost: commission,
-        // Quantity info
         lotCalculation: sellLotCalc,
         requestedQuantity: position,
         actualQuantity: position,
-        // Phase 7: Enhanced quantity display
         lots: sellLotCalc.actualLots,
         lotSize: finalLotSizeConfig.lotSize,
         quantityUnit: getQuantityUnit(config.symbol),
         orderValue: position * finalPrice,
-        // Position changes
         cashBefore: cash - revenue + commission,
         cashAfter: cash,
         positionBefore: position,
         positionAfter: 0,
-        portfolioValueBefore:
-          cash - revenue + commission + position * finalPrice,
+        portfolioValueBefore: cash - revenue + commission + position * finalPrice,
         portfolioValueAfter: cash,
-        // P&L info
         pnl,
-        pnlPercent: (pnl / (position * positionPrice)) * 100,
+        pnlPercent: position * positionPrice > 0 ? (pnl / (position * positionPrice)) * 100 : 0,
         holdingDays,
         entryTradeId: entryTradeId ?? undefined,
-        // Signal info
         triggerReason: "回测结束平仓",
         indicatorValues: {},
         strategyName: strategy.name,
@@ -835,108 +897,84 @@ export async function runBacktest(
     }
   }
 
-  // Calculate final metrics
   const finalEquity = cash;
-  const totalReturn =
-    ((finalEquity - config.initialCapital) / config.initialCapital) * 100;
+  const totalReturn = ((finalEquity - config.initialCapital) / config.initialCapital) * 100;
 
-  // Calculate annualized return
-  const tradingDays = klines.length;
-  const years = tradingDays / 252;
-  const annualizedReturn =
-    years > 0
-      ? (Math.pow(finalEquity / config.initialCapital, 1 / years) - 1) * 100
-      : 0;
+  // Compound annualized return using calendar days (not trading days)
+  // 使用日历天数复利年化（非交易日数）
+  const firstBar = klines[startIndex];
+  const lastBarForCalc = klines[endIndex - 1];
+  const calendarDays = firstBar && lastBarForCalc
+    ? (lastBarForCalc.time - firstBar.time) / 86400
+    : 0;
+  const annualizedReturn = calendarDays > 0
+    ? (Math.pow(finalEquity / config.initialCapital, 365 / calendarDays) - 1) * 100
+    : 0;
 
-  // Calculate win rate and other trade metrics
-  const completedTrades = trades.filter(
-    (t) => t.type === "sell" && t.pnl !== undefined,
-  );
+  const completedTrades = trades.filter((t) => t.type === "sell" && t.pnl !== undefined);
   const winningTrades = completedTrades.filter((t) => (t.pnl ?? 0) > 0);
   const losingTrades = completedTrades.filter((t) => (t.pnl ?? 0) <= 0);
 
-  const winRate =
-    completedTrades.length > 0
-      ? (winningTrades.length / completedTrades.length) * 100
-      : 0;
+  const winRate = completedTrades.length > 0
+    ? (winningTrades.length / completedTrades.length) * 100
+    : 0;
 
-  const avgWin =
-    winningTrades.length > 0
-      ? winningTrades.reduce((sum, t) => sum + (t.pnlPercent ?? 0), 0) /
-        winningTrades.length
-      : 0;
-  const avgLoss =
-    losingTrades.length > 0
-      ? Math.abs(
-          losingTrades.reduce((sum, t) => sum + (t.pnlPercent ?? 0), 0) /
-            losingTrades.length,
-        )
-      : 0;
+  const avgWin = winningTrades.length > 0
+    ? winningTrades.reduce((sum, t) => sum + (t.pnlPercent ?? 0), 0) / winningTrades.length
+    : 0;
+  const avgLoss = losingTrades.length > 0
+    ? Math.abs(losingTrades.reduce((sum, t) => sum + (t.pnlPercent ?? 0), 0) / losingTrades.length)
+    : 0;
 
-  const profitFactor =
-    avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
+  const profitFactor = avgLoss > 0 ? avgWin / avgLoss : avgWin > 0 ? Infinity : 0;
 
-  const maxSingleWin = Math.max(
-    ...completedTrades.map((t) => t.pnlPercent ?? 0),
-    0,
-  );
-  const maxSingleLoss = Math.min(
-    ...completedTrades.map((t) => t.pnlPercent ?? 0),
-    0,
-  );
+  const maxSingleWin = completedTrades.length > 0
+    ? Math.max(...completedTrades.map((t) => t.pnlPercent ?? 0), 0)
+    : 0;
+  const maxSingleLoss = completedTrades.length > 0
+    ? Math.min(...completedTrades.map((t) => t.pnlPercent ?? 0), 0)
+    : 0;
 
-  // Find dates for max win/loss
-  const maxWinTrade = completedTrades.find(
-    (t) => t.pnlPercent === maxSingleWin,
-  );
-  const maxLossTrade = completedTrades.find(
-    (t) => t.pnlPercent === maxSingleLoss,
-  );
+  const maxWinTrade = completedTrades.find((t) => t.pnlPercent === maxSingleWin);
+  const maxLossTrade = completedTrades.find((t) => t.pnlPercent === maxSingleLoss);
   const maxSingleWinDate = maxWinTrade
     ? (new Date(maxWinTrade.timestamp * 1000).toISOString().split("T")[0] ?? "")
     : "";
   const maxSingleLossDate = maxLossTrade
-    ? (new Date(maxLossTrade.timestamp * 1000).toISOString().split("T")[0] ??
-      "")
+    ? (new Date(maxLossTrade.timestamp * 1000).toISOString().split("T")[0] ?? "")
     : "";
 
-  // Calculate Sharpe ratio (simplified, using daily returns)
-  const avgReturn =
-    dailyReturns.length > 0
-      ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
-      : 0;
-  const stdReturn =
-    dailyReturns.length > 1
-      ? Math.sqrt(
-          dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) /
-            (dailyReturns.length - 1),
-        )
-      : 0;
-  const sharpeRatio =
-    stdReturn > 0 ? (avgReturn * 252) / (stdReturn * Math.sqrt(252)) : 0;
+  // Correct Sharpe: (annualized excess return) / (annualized volatility)
+  // 正确的夏普比率：（年化超额收益）/（年化波动率）
+  const avgDailyReturn = dailyReturns.length > 0
+    ? dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+    : 0;
+  const stdReturn = dailyReturns.length > 1
+    ? Math.sqrt(
+        dailyReturns.reduce((sum, r) => sum + Math.pow(r - avgDailyReturn, 2), 0) /
+          (dailyReturns.length - 1),
+      )
+    : 0;
+  const annualizedVol = stdReturn * Math.sqrt(252) * 100;
 
-  // Calculate Sortino ratio (using downside deviation)
-  const downsideReturns = dailyReturns.filter((r) => r < 0);
-  const downsideDeviation =
-    downsideReturns.length > 1
-      ? Math.sqrt(
-          downsideReturns.reduce((sum, r) => sum + Math.pow(r, 2), 0) /
-            downsideReturns.length,
-        )
-      : 0;
-  const sortinoRatio =
-    downsideDeviation > 0
-      ? (avgReturn * 252) / (downsideDeviation * Math.sqrt(252))
-      : 0;
+  // Annualized excess return over risk-free rate
+  const excessAnnualReturn = annualizedReturn - CHINA_RISK_FREE_RATE * 100;
+  const sharpeRatio = annualizedVol > 0 ? excessAnnualReturn / annualizedVol : 0;
 
-  // Calculate Calmar ratio
-  const calmarRatio =
-    maxDrawdown > 0 ? annualizedReturn / (maxDrawdown * 100) : 0;
+  // Correct Sortino: uses ALL returns with min(r, 0) for downside deviation
+  // 正确的索提诺比率：用全序列的 min(r, 0) 计算下行偏差
+  const downsideSquaredSum = dailyReturns.reduce(
+    (sum, r) => sum + Math.pow(Math.min(r - DAILY_RISK_FREE_RATE, 0), 2),
+    0,
+  );
+  const downsideDeviation = dailyReturns.length > 0
+    ? Math.sqrt((downsideSquaredSum / dailyReturns.length) * 252) * 100
+    : 0;
+  const sortinoRatio = downsideDeviation > 0 ? excessAnnualReturn / downsideDeviation : 0;
 
-  // Calculate volatility
-  const volatility = stdReturn * Math.sqrt(252) * 100;
+  const calmarRatio = maxDrawdown > 0 ? annualizedReturn / (maxDrawdown * 100) : 0;
+  const volatility = annualizedVol;
 
-  // Calculate consecutive wins/losses
   let maxConsecutiveWins = 0;
   let maxConsecutiveLosses = 0;
   let currentWins = 0;
@@ -950,34 +988,30 @@ export async function runBacktest(
     } else {
       currentLosses++;
       currentWins = 0;
-      if (currentLosses > maxConsecutiveLosses)
-        maxConsecutiveLosses = currentLosses;
+      if (currentLosses > maxConsecutiveLosses) maxConsecutiveLosses = currentLosses;
     }
   }
 
-  // Calculate average holding period
   const holdingPeriods: number[] = [];
   let lastBuyTime = 0;
   for (const trade of trades) {
     if (trade.type === "buy") {
       lastBuyTime = trade.timestamp;
     } else if (trade.type === "sell" && lastBuyTime > 0) {
-      holdingPeriods.push((trade.timestamp - lastBuyTime) / 86400); // Convert to days
+      holdingPeriods.push((trade.timestamp - lastBuyTime) / 86400);
       lastBuyTime = 0;
     }
   }
-  const avgHoldingPeriod =
-    holdingPeriods.length > 0
-      ? holdingPeriods.reduce((a, b) => a + b, 0) / holdingPeriods.length
-      : 0;
+  const avgHoldingPeriod = holdingPeriods.length > 0
+    ? holdingPeriods.reduce((a, b) => a + b, 0) / holdingPeriods.length
+    : 0;
 
-  const executionTime = Date.now() - startTime;
+  const tradingDays = endIndex - startIndex;
+  const executionTime = Date.now() - executionStartTime;
 
-  // Calculate trading cost percentage
   const totalTradingCost = totalCommission + totalSlippage;
   const tradingCostPercent = (totalTradingCost / config.initialCapital) * 100;
 
-  // Build enhanced result
   const summary: BacktestSummary = {
     startDate: config.startDate,
     endDate: config.endDate,
@@ -990,9 +1024,9 @@ export async function runBacktest(
     totalReturn,
     annualizedReturn,
     monthlyReturn: annualizedReturn / 12,
-    dailyReturn: avgReturn * 100,
+    dailyReturn: avgDailyReturn * 100,
     maxDrawdown: maxDrawdown * 100,
-    maxDrawdownDuration: 0, // TODO: Calculate actual duration
+    maxDrawdownDuration,
     volatility,
     sharpeRatio,
     sortinoRatio,
@@ -1018,18 +1052,138 @@ export async function runBacktest(
     tradingCostPercent,
   };
 
+  return {
+    summary,
+    equityCurve,
+    trades,
+    detailedTrades,
+    dailyLogs,
+    finalCash: cash,
+    peakEquity,
+  };
+}
+
+// =============================================================================
+// BACKTEST ENGINE / 回测引擎
+// =============================================================================
+
+/**
+ * Run backtest with given strategy and data
+ * 使用给定策略和数据运行回测
+ *
+ * Enhanced version with:
+ * - Lot size rules (一手规则)
+ * - Detailed trade records (详细交易记录)
+ * - Daily logs (每日日志)
+ * - Fix: No look-ahead bias (signal at bar[i-1] close, execute at bar[i] open)
+ * - Fix: T+1 A-share rule
+ * - Fix: Correct Sharpe/Sortino with China risk-free rate
+ * - Fix: Circuit breaker (limit up/down) constraint
+ * - Fix: Stamp duty on sell side
+ * - Fix: Max drawdown duration
+ * - Support: Walk-forward in/out-of-sample split
+ * - Support: Benchmark comparison
+ */
+export async function runBacktest(
+  strategyCode: string,
+  klines: BacktestKline[],
+  config: BacktestConfig,
+): Promise<BacktestResult> {
+  const startTime = Date.now();
+
+  if (klines.length < 2) {
+    throw new Error("Insufficient K-line data for backtesting (need at least 2 bars)");
+  }
+
+  const strategy = parseStrategyCode(strategyCode);
+  const lotSizeConfig = getLotSizeConfig(config.symbol);
+  const assetType = detectAssetType(config.symbol);
+
+  // Pre-calculate indicators once for full dataset
+  const prices = klines.map((k) => k.close);
+  const indicators = {
+    sma5: calculateSMA(prices, 5),
+    sma10: calculateSMA(prices, 10),
+    sma20: calculateSMA(prices, 20),
+    sma60: calculateSMA(prices, 60),
+    rsi: calculateRSI(prices, 14),
+    macd: calculateMACD(prices),
+    boll: calculateBollingerBands(prices),
+  };
+
+  // Determine walk-forward split
+  const wfSplitRatio = config.wfSplitRatio ?? 0;
+  const splitIndex = wfSplitRatio > 0
+    ? Math.floor(klines.length * wfSplitRatio)
+    : klines.length;
+
+  // Run full sample (always)
+  const fullResult = runBacktestSegment(
+    strategy, klines, config, lotSizeConfig, assetType,
+    indicators, 1, klines.length, startTime,
+  );
+
+  // Walk-forward: run in-sample and out-of-sample separately
+  let inSampleMetrics: BacktestSummary | undefined;
+  let outOfSampleMetrics: BacktestSummary | undefined;
+  let splitDate: string | undefined;
+
+  if (wfSplitRatio > 0 && splitIndex > 1 && splitIndex < klines.length - 1) {
+    const splitBar = klines[splitIndex];
+    splitDate = splitBar ? (new Date(splitBar.time * 1000).toISOString().split("T")[0] ?? undefined) : undefined;
+
+    const inSampleResult = runBacktestSegment(
+      strategy, klines, config, lotSizeConfig, assetType,
+      indicators, 1, splitIndex, startTime,
+    );
+    inSampleMetrics = inSampleResult.summary;
+
+    const outOfSampleResult = runBacktestSegment(
+      strategy, klines, config, lotSizeConfig, assetType,
+      indicators, splitIndex, klines.length, startTime,
+    );
+    outOfSampleMetrics = outOfSampleResult.summary;
+  }
+
+  // Benchmark comparison: buy-and-hold
+  let benchmarkReturn: number | undefined;
+  let alpha: number | undefined;
+  let beta: number | undefined;
+  let informationRatio: number | undefined;
+
+  if (config.benchmarkKlines && config.benchmarkKlines.length >= 2) {
+    const bklines = config.benchmarkKlines;
+    const bFirst = bklines[0]!;
+    const bLast = bklines[bklines.length - 1]!;
+    benchmarkReturn = ((bLast.close - bFirst.close) / bFirst.close) * 100;
+    alpha = fullResult.summary.totalReturn - benchmarkReturn;
+    beta = 1; // Simplified; full beta requires correlation calculation
+    informationRatio = fullResult.summary.volatility > 0
+      ? alpha / fullResult.summary.volatility
+      : 0;
+  }
+
+  const summary: BacktestSummary = {
+    ...fullResult.summary,
+    benchmarkReturn,
+    alpha,
+    beta,
+    informationRatio,
+    inSampleMetrics,
+    outOfSampleMetrics,
+    splitDate,
+  };
+
   const enhancedResult: EnhancedBacktestResult = {
     summary,
-    equityCurve: equityCurve.map((e) => ({
+    equityCurve: fullResult.equityCurve.map((e) => ({
       ...e,
-      cash:
-        e.equity -
-        (e.position > 0
-          ? e.position * (klines[klines.length - 1]?.close ?? 0)
-          : 0),
+      cash: e.equity - (e.position > 0
+        ? e.position * (klines[klines.length - 1]?.close ?? 0)
+        : 0),
     })),
-    trades: detailedTrades,
-    dailyLogs,
+    trades: fullResult.detailedTrades,
+    dailyLogs: fullResult.dailyLogs,
     config,
     strategy,
     lotSizeInfo: {
@@ -1039,28 +1193,27 @@ export async function runBacktest(
     },
   };
 
-  // Return backward-compatible result with enhanced data
   return {
-    totalReturn,
-    annualizedReturn,
-    maxDrawdown: maxDrawdown * 100,
-    sharpeRatio,
-    sortinoRatio,
-    winRate,
-    totalTrades: completedTrades.length,
-    profitFactor,
-    avgWin,
-    avgLoss,
-    maxConsecutiveWins,
-    maxConsecutiveLosses,
-    avgHoldingPeriod,
-    maxSingleWin,
-    maxSingleLoss,
-    equityCurve,
-    trades,
+    totalReturn: summary.totalReturn,
+    annualizedReturn: summary.annualizedReturn,
+    maxDrawdown: summary.maxDrawdown,
+    sharpeRatio: summary.sharpeRatio,
+    sortinoRatio: summary.sortinoRatio,
+    winRate: summary.winRate,
+    totalTrades: summary.totalTrades,
+    profitFactor: summary.profitFactor,
+    avgWin: summary.avgWin,
+    avgLoss: summary.avgLoss,
+    maxConsecutiveWins: summary.maxConsecutiveWins,
+    maxConsecutiveLosses: summary.maxConsecutiveLosses,
+    avgHoldingPeriod: summary.avgHoldingPeriod,
+    maxSingleWin: summary.maxSingleWin,
+    maxSingleLoss: summary.maxSingleLoss,
+    equityCurve: fullResult.equityCurve,
+    trades: fullResult.trades,
     config,
     strategy,
-    executionTime,
+    executionTime: summary.executionTime,
     enhanced: enhancedResult,
   };
 }

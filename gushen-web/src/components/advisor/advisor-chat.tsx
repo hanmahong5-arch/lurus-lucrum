@@ -25,6 +25,7 @@ import { SmartQuestionChips } from "./smart-question-chips";
 import { ApplySuggestionButton } from "./apply-suggestion-button";
 import { TokenBudgetIndicator } from "./token-budget-indicator";
 import { ConversationHistory } from "./conversation-history";
+import { FollowUpChips } from "./follow-up-chips";
 import type { QuestionContext } from "@/lib/advisor/question-generator";
 import { parseSuggestions } from "@/lib/advisor/suggestion-parser";
 
@@ -150,6 +151,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   timestamp: Date;
+  suggestedQuestions?: string[];
   metadata?: {
     mode?: string;
     responseTime?: number;
@@ -350,6 +352,9 @@ export function AdvisorChat({
           role: "assistant",
           content: data.response,
           timestamp: new Date(),
+          suggestedQuestions: Array.isArray(data.suggestedQuestions)
+            ? (data.suggestedQuestions as string[])
+            : [],
           metadata: {
             ...data.metadata,
             agentId: advisorContext.masterAgent,
@@ -650,6 +655,9 @@ export function AdvisorChat({
               role: "assistant",
               content: data.response,
               timestamp: new Date(),
+              suggestedQuestions: Array.isArray(data.suggestedQuestions)
+                ? (data.suggestedQuestions as string[])
+                : [],
               metadata: {
                 ...data.metadata,
                 agentId: advisorContext.masterAgent,
@@ -816,7 +824,7 @@ export function AdvisorChat({
         {messages.length === 0 && (
           <>
             <WelcomeMessage
-              onSuggestionClick={setInput}
+              onSuggestionClick={(text) => handleSmartQuestionSelect(text)}
               masterAgent={
                 advisorContext.masterAgent
                   ? getMasterAgentById(advisorContext.masterAgent)
@@ -834,7 +842,11 @@ export function AdvisorChat({
 
         {/* Message list */}
         {messages.map((message) => (
-          <MessageBubble key={message.id} message={message} />
+          <MessageBubble
+            key={message.id}
+            message={message}
+            onFollowUp={handleSmartQuestionSelect}
+          />
         ))}
 
         {/* Debate View (if in debate mode with active session) */}
@@ -935,7 +947,8 @@ export function AdvisorChat({
 }
 
 /**
- * Welcome Message Component
+ * Welcome Message Component with opening question groups
+ * 欢迎消息组件，含开场问题分组（零打字模式）
  */
 function WelcomeMessage({
   onSuggestionClick,
@@ -949,46 +962,99 @@ function WelcomeMessage({
   };
 }) {
   return (
-    <div className="text-center py-8">
-      <div className="text-4xl mb-4">🏛️</div>
-      <h3 className="text-xl font-semibold text-white mb-2">
-        欢迎使用谷神投资顾问
-      </h3>
-      {masterAgent ? (
-        <p className="text-gray-400 text-sm max-w-md mx-auto mb-4">
-          当前视角：<span className="text-[#f5a623]">{masterAgent.name}</span>
-          <br />
-          将以
-          {masterAgent.philosophy === "value"
-            ? "价值投资"
-            : masterAgent.philosophy}
-          的理念为您分析。
-        </p>
-      ) : (
-        <p className="text-gray-400 text-sm max-w-md mx-auto mb-4">
-          基于多Agent协作的智能投资分析系统。
-          <br />
-          支持多种投资流派、多空辩论、大师视角。
-        </p>
-      )}
-      <div className="flex flex-wrap justify-center gap-2 mt-4">
-        <SuggestionButton
-          onClick={() => onSuggestionClick("帮我分析一下当前A股市场的整体状态")}
-          label="市场概览"
+    <div className="py-6">
+      <div className="text-center mb-5">
+        <div className="text-3xl mb-3">🏛️</div>
+        <h3 className="text-lg font-semibold text-white mb-1.5">
+          欢迎使用谷神投资顾问
+        </h3>
+        {masterAgent ? (
+          <p className="text-gray-400 text-xs max-w-sm mx-auto">
+            当前视角：<span className="text-[#f5a623]">{masterAgent.name}</span>
+            &nbsp;·&nbsp;
+            {masterAgent.philosophy === "value"
+              ? "价值投资"
+              : masterAgent.philosophy}
+            理念
+          </p>
+        ) : (
+          <p className="text-gray-400 text-xs max-w-sm mx-auto">
+            点击下方按钮即可开始，无需打字
+          </p>
+        )}
+      </div>
+
+      {/* Opening question groups — zero-typing mode */}
+      {/* 开场问题分组——零打字模式 */}
+      <div className="space-y-3">
+        {/* Analysis dimension */}
+        <QuestionRow
+          label="分析维度"
+          questions={[
+            { label: "综合分析", text: "请对当前A股市场做一个综合分析，涵盖基本面、技术面和宏观面" },
+            { label: "基本面", text: "从基本面角度分析当前A股市场的投资价值" },
+            { label: "技术面", text: "从技术分析角度，当前A股市场处于什么阶段？" },
+            { label: "宏观面", text: "当前宏观经济环境对A股市场有哪些影响？" },
+          ]}
+          onSelect={onSuggestionClick}
         />
-        <SuggestionButton
-          onClick={() => onSuggestionClick("我想了解新能源板块最近的投资机会")}
-          label="行业分析"
+
+        {/* Time frame */}
+        <QuestionRow
+          label="时间框架"
+          questions={[
+            { label: "短线 <1月", text: "近期1个月内，A股有哪些短线交易机会？" },
+            { label: "中线 1-6月", text: "未来3-6个月，哪些板块和个股值得中线布局？" },
+            { label: "长线 >1年", text: "从长线投资角度，A股有哪些值得长期持有的优质标的？" },
+          ]}
+          onSelect={onSuggestionClick}
         />
-        <SuggestionButton
-          onClick={() => onSuggestionClick("帮我分析贵州茅台的投资价值")}
-          label="个股分析"
+
+        {/* Focus direction */}
+        <QuestionRow
+          label="关注方向"
+          questions={[
+            { label: "风险评估", text: "当前市场有哪些主要风险需要注意？如何控制回撤？" },
+            { label: "入场时机", text: "现在是入场布局的好时机吗？有哪些信号可以参考？" },
+            { label: "止损建议", text: "如何设置合理的止损位？有哪些止损策略推荐？" },
+            { label: "仓位建议", text: "当前市场环境下，建议如何配置仓位？" },
+          ]}
+          onSelect={onSuggestionClick}
         />
-        <SuggestionButton
-          onClick={() => onSuggestionClick("贵州茅台是否值得长期持有？")}
-          label="多空辩论"
-          highlight
-        />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Question row with label and chips
+ * 带标签的问题按钮行
+ */
+function QuestionRow({
+  label,
+  questions,
+  onSelect,
+}: {
+  label: string;
+  questions: { label: string; text: string }[];
+  onSelect: (text: string) => void;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <span className="text-[10px] text-gray-500 w-14 shrink-0 pt-1.5 text-right">
+        {label}
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {questions.map((q) => (
+          <button
+            key={q.label}
+            type="button"
+            onClick={() => onSelect(q.text)}
+            className="px-2.5 py-1 text-xs rounded-lg bg-[#1a1f36] text-gray-300 hover:bg-[#2a2f46] hover:text-white transition-colors border border-white/5 hover:border-white/10"
+          >
+            {q.label}
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -997,15 +1063,22 @@ function WelcomeMessage({
 /**
  * Message Bubble Component
  * Renders AI parameter suggestions inline when detected in assistant messages.
+ * Renders follow-up question chips below assistant messages.
  */
-function MessageBubble({ message }: { message: Message }) {
+function MessageBubble({
+  message,
+  onFollowUp,
+}: {
+  message: Message;
+  onFollowUp?: (q: string) => void;
+}) {
   const isUser = message.role === "user";
 
   // Parse suggestions from assistant messages
   const suggestions = !isUser ? parseSuggestions(message.content) : [];
 
   return (
-    <div className={cn("flex", isUser ? "justify-end" : "justify-start")}>
+    <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
       <div
         className={cn(
           "max-w-[85%] rounded-lg px-4 py-3",
@@ -1043,6 +1116,18 @@ function MessageBubble({ message }: { message: Message }) {
           </div>
         )}
       </div>
+
+      {/* Follow-up question chips below assistant messages */}
+      {!isUser &&
+        onFollowUp &&
+        message.suggestedQuestions &&
+        message.suggestedQuestions.length > 0 && (
+          <FollowUpChips
+            questions={message.suggestedQuestions}
+            onSelect={onFollowUp}
+            className="max-w-[85%] mt-1"
+          />
+        )}
     </div>
   );
 }
