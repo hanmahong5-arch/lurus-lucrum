@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { KLineChart, type TradeMarkerInfo } from "@/components/charts/kline-chart";
 import { EnhancedTradeCard } from "./enhanced-trade-card";
+import { TradeTableView } from "./trade-table-view";
 import { BacktestBasisPanel } from "./backtest-basis-panel";
 import type { BacktestResult, DetailedTrade, BacktestTarget } from "@/lib/backtest/types";
 import { TargetSelector } from "@/components/backtest/target-selector";
@@ -282,6 +283,7 @@ export function BacktestPanel({
   const [showConfig, setShowConfig] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [showTrades, setShowTrades] = useState(false);
+  const [tradeView, setTradeView] = useState<"card" | "table">("card");
   const [showKlineChart, setShowKlineChart] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
@@ -1149,9 +1151,45 @@ export function BacktestPanel({
                       交易记录
                       <span className="text-neutral-600 text-xs font-normal">Trade History</span>
                     </h4>
-                    <span className="px-2 py-0.5 text-[10px] bg-surface rounded-full text-neutral-500 font-mono">
-                      共 {displayResult.trades.length} 笔（最近20笔）
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {/* Adjustment type badge */}
+                      <span className="px-1.5 py-0.5 text-[10px] bg-surface rounded border border-white/5 text-neutral-400 font-mono">
+                        前复权
+                      </span>
+                      {/* Total count */}
+                      <span className="px-2 py-0.5 text-[10px] bg-surface rounded-full text-neutral-500 font-mono">
+                        共 {displayResult.trades.length} 笔
+                      </span>
+                      {/* View toggle: card / table */}
+                      <div className="flex items-center rounded bg-surface border border-white/5 overflow-hidden">
+                        <button
+                          onClick={() => setTradeView("card")}
+                          className={cn(
+                            "px-2 py-1 text-[10px] transition-colors",
+                            tradeView === "card"
+                              ? "bg-white/10 text-neutral-200"
+                              : "text-neutral-500 hover:text-neutral-300"
+                          )}
+                          aria-label="卡片视图"
+                          title="卡片视图"
+                        >
+                          ⊞
+                        </button>
+                        <button
+                          onClick={() => setTradeView("table")}
+                          className={cn(
+                            "px-2 py-1 text-[10px] transition-colors",
+                            tradeView === "table"
+                              ? "bg-white/10 text-neutral-200"
+                              : "text-neutral-500 hover:text-neutral-300"
+                          )}
+                          aria-label="表格视图"
+                          title="表格视图"
+                        >
+                          ☰
+                        </button>
+                      </div>
+                    </div>
                   </div>
                   <div className="max-h-[600px] overflow-y-auto space-y-3">
                     {(() => {
@@ -1168,9 +1206,21 @@ export function BacktestPanel({
                           );
                         }
 
-                        // Safe slice and map with validation
+                        // Table view: use TradeTableView if trades are DetailedTrade
+                        if (tradeView === "table" && displayResult.enhanced?.trades) {
+                          const dataIncomplete =
+                            (displayResult.backtestMeta?.dataQuality?.completeness ?? 1) < 1;
+                          return (
+                            <TradeTableView
+                              trades={displayResult.enhanced.trades}
+                              dataIncomplete={dataIncomplete}
+                            />
+                          );
+                        }
+
+                        // Card view: show all trades without limit
                         return tradesToDisplay
-                          .slice(-20)
+                          .slice(0)
                           .filter(trade => trade && typeof trade === "object")
                           .map((trade, index) => {
                             try {

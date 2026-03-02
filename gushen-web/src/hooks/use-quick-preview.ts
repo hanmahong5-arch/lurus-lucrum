@@ -144,7 +144,7 @@ export function useQuickPreview(): UseQuickPreviewReturn {
           executionTime: backtestResult.executionTime,
           initialCapital: config.initialCapital,
           finalCapital:
-            config.initialCapital * (1 + backtestResult.totalReturn),
+            config.initialCapital * (1 + backtestResult.totalReturn / 100),
           peakCapital: config.initialCapital,
           troughCapital: config.initialCapital,
           totalReturn: backtestResult.totalReturn,

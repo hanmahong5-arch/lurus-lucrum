@@ -149,8 +149,8 @@ export function QuickPreviewResult({
     const drawdownValue = parseFloat(data.maxDrawdown);
     const isPositiveReturn = returnValue > POSITIVE_RETURN_THRESHOLD;
 
-    const returnDisplay = (returnValue * 100).toFixed(2) + "%";
-    const drawdownDisplay = (drawdownValue * 100).toFixed(2) + "%";
+    const returnDisplay = (returnValue >= 0 ? "+" : "") + returnValue.toFixed(2) + "%";
+    const drawdownDisplay = "-" + Math.abs(drawdownValue).toFixed(2) + "%";
 
     return (
       <div

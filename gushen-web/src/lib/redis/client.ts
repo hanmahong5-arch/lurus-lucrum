@@ -42,10 +42,12 @@ export function getRedis(): Redis | null {
       keyPrefix: "gw:", // GuShen Web prefix
       retryStrategy: (times) => {
         if (times > 5) {
-          console.warn("[Redis] Max reconnection attempts reached, giving up");
-          return null; // Stop retrying
+          console.warn("[Redis] Max reconnection attempts reached, resetting singleton");
+          // Reset so next getRedis() call creates a fresh connection
+          redis = null;
+          return null;
         }
-        return Math.min(times * 100, 3000); // Exponential backoff, max 3s
+        return Math.min(times * 200, 3000); // Exponential backoff, max 3s
       },
       maxRetriesPerRequest: 3,
       lazyConnect: true,
@@ -56,6 +58,12 @@ export function getRedis(): Redis | null {
 
     redis.on("error", (err) => {
       console.error("[Redis] Connection error:", err.message);
+      // If the connection is permanently closed, reset so next call reconnects
+      if (err.message?.includes("Connection is closed") || err.message?.includes("ECONNREFUSED")) {
+        if (redis?.status === "end") {
+          redis = null;
+        }
+      }
     });
 
     redis.on("connect", () => {
