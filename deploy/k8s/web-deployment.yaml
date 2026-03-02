@@ -15,7 +15,6 @@ metadata:
     app.kubernetes.io/component: web
     app.kubernetes.io/managed-by: argocd
 spec:
-  replicas: 1
   selector:
     matchLabels:
       app: ai-qtrd-web
@@ -34,9 +33,24 @@ spec:
         app.kubernetes.io/managed-by: argocd
         app.kubernetes.io/part-of: lurus
     spec:
-      # Schedule on worker node (cloud-ubuntu-3-2c2g)
-      nodeSelector:
-        kubernetes.io/hostname: cloud-ubuntu-3-2c2g
+      # Prefer worker node, but allow scheduling on master if worker is unavailable
+      affinity:
+        nodeAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 50
+              preference:
+                matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values: [cloud-ubuntu-3-2c2g]
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: ai-qtrd-web
+                topologyKey: kubernetes.io/hostname
 
       securityContext:
         runAsNonRoot: true
