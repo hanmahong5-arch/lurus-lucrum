@@ -365,3 +365,79 @@ export interface SavedAdvisorPreferences {
   feedbackHistory: UserFeedback[];
   lastUpdated: Date;
 }
+
+// ============================================================================
+// Institution Role Types (Buy-side Fund)
+// 机构岗位类型（买方基金）
+// ============================================================================
+
+/**
+ * Institution role IDs / 机构岗位 ID 枚举
+ */
+export type InstitutionRoleId =
+  | "fund_manager"       // 基金经理
+  | "head_researcher"    // 首席研究员
+  | "analyst"            // 行业研究员
+  | "quant"              // 量化研究员
+  | "cro"                // 首席风控官
+  | "macro_strategist"   // 宏观策略师
+  | "head_trader";       // 首席交易员
+
+/**
+ * Institution role definition / 机构岗位定义
+ */
+export interface InstitutionRole {
+  id: InstitutionRoleId;
+  title: string;      // 中文职称
+  titleEn: string;    // English title
+  reportTo: InstitutionRoleId[];  // 汇报关系
+  icon: string;       // emoji icon
+  description: string;  // 职责简述
+  systemPrompt: string; // LLM system prompt
+  outputFormat: string; // 输出格式说明
+  temperature: number;  // LLM temperature
+  maxTokens: number;    // max output tokens
+}
+
+/**
+ * Workflow step status / 工作流步骤状态
+ */
+export type WorkflowStepStatus = "pending" | "running" | "completed" | "error";
+
+/**
+ * Workflow step result / 工作流步骤结果
+ */
+export interface WorkflowStepResult {
+  roleId: InstitutionRoleId;
+  roleTitle: string;
+  content: string;
+  status: WorkflowStepStatus;
+  startedAt?: number;
+  completedAt?: number;
+  error?: string;
+}
+
+/**
+ * Institution workflow chain definition / 机构工作流链路定义
+ */
+export interface InstitutionWorkflow {
+  id: "single_stock" | "buy_decision" | "portfolio_review";
+  name: string;          // 工作流名称
+  description: string;   // 使用场景
+  steps: InstitutionRoleId[][];  // 每组可并行执行，组间串行
+  icon: string;
+}
+
+/**
+ * Advisor panel mode / 顾问面板模式
+ */
+export type AdvisorPanelMode = "master" | "institution";
+
+/**
+ * Strategy drag payload / 策略拖拽数据
+ */
+export interface StrategyDragPayload {
+  symbol: string;
+  name: string;
+  strategyCode?: string;
+}

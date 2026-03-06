@@ -6,8 +6,13 @@
  *
  * Main page for the 3-Dao 6-Shu investment decision framework
  * 三道六术投资决策框架的主页面
+ *
+ * Supports URL params: ?symbol=600519&name=贵州茅台
+ * to pre-inject stock context (from drag-and-drop or cross-page navigation)
  */
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 import dynamic from "next/dynamic";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
@@ -22,7 +27,11 @@ const AdvisorChat = dynamic(() => import("@/components/advisor/advisor-chat"), {
   ),
 });
 
-export default function AdvisorPage() {
+function AdvisorPageContent() {
+  const searchParams = useSearchParams();
+  const symbol = searchParams.get("symbol") ?? undefined;
+  const name = searchParams.get("name") ?? undefined;
+
   return (
     <div className="min-h-screen bg-background text-white">
       {/* Unified Dashboard Header with account status */}
@@ -40,11 +49,27 @@ export default function AdvisorPage() {
           {/* Chat Interface */}
           {/* 聊天界面 */}
           <div className="flex-1 min-h-0">
-            <AdvisorChat className="h-full" />
+            <AdvisorChat
+              className="h-full"
+              initialSymbol={symbol}
+              initialSymbolName={name}
+            />
           </div>
         </div>
       </main>
     </div>
+  );
+}
+
+export default function AdvisorPage() {
+  return (
+    <Suspense fallback={
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <div className="text-gray-400">加载中...</div>
+      </div>
+    }>
+      <AdvisorPageContent />
+    </Suspense>
   );
 }
 

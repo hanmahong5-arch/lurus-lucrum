@@ -14,7 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
-import type { AdvisorContext, ChatMode } from "@/lib/advisor/agent/types";
+import type { AdvisorContext, ChatMode, InstitutionRoleId } from "@/lib/advisor/agent/types";
 import {
   buildAdvisorSystemPrompt,
   normalizeContext,
@@ -27,6 +27,7 @@ import { recommendAnalyst } from "@/lib/advisor/agent/analyst-agents";
 import { INVESTMENT_ADVISOR_SYSTEM_PROMPT } from "@/lib/investment-context/conversation-templates";
 import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { recordUserEvent } from "@/lib/db/queries";
+import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
 
 // lurus-api configuration
 // 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
@@ -53,6 +54,10 @@ interface AdvisorChatRequest {
   // 新增: 用于基于流派分析的顾问上下文
   advisorContext?: Partial<AdvisorContext>;
 
+  // New: Institution role for buy-side fund analysis
+  // 新增: 买方基金机构角色
+  institutionRole?: InstitutionRoleId;
+
   // Legacy context (kept for backward compatibility)
   // 旧版上下文 (保持向后兼容)
   context?: {
@@ -63,6 +68,32 @@ interface AdvisorChatRequest {
     riskTolerance?: string;
     marketData?: string;
   };
+}
+
+/**
+ * Build system prompt for an institution role.
+ * Prepends the role's systemPrompt + outputFormat to the base instruction.
+ */
+function buildInstitutionSystemPrompt(
+  roleId: InstitutionRoleId,
+  legacyContext: AdvisorChatRequest["context"],
+): string {
+  const role = getInstitutionRoleById(roleId);
+
+  const followUpInstruction = `
+
+## Follow-up Questions Requirement
+At the END of your response, append a hidden marker containing 3 follow-up questions. Format exactly as:
+<!--QUESTIONS:["question 1 in Chinese","question 2 in Chinese","question 3 in Chinese"]-->
+Do NOT show this marker visually. Questions must be in Chinese, concise (≤20 characters).`;
+
+  let contextSection = "";
+  if (legacyContext?.symbol) {
+    const name = legacyContext.symbolName || legacyContext.symbol;
+    contextSection = `\n\n## 分析标的\n股票代码：${legacyContext.symbol}，公司名称：${name}`;
+  }
+
+  return `${role.systemPrompt}\n\n## 输出要求\n${role.outputFormat}${contextSection}${followUpInstruction}`;
 }
 
 /**
@@ -169,6 +200,7 @@ export async function POST(request: NextRequest) {
       mode = "deep",
       stream = false,
       advisorContext,
+      institutionRole,
       context,
     } = body;
 
@@ -189,7 +221,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get mode-specific configuration (temperature + maxTokens)
-    const { temperature, maxTokens } = getModeConfig(mode);
+    // Institution roles override temperature and maxTokens from their definition
+    const modeConfig = getModeConfig(mode);
+    const { temperature, maxTokens } = institutionRole
+      ? {
+          temperature: getInstitutionRoleById(institutionRole).temperature,
+          maxTokens: getInstitutionRoleById(institutionRole).maxTokens,
+        }
+      : modeConfig;
 
     // Check quota for authenticated users
     // 对已认证用户执行配额检查
@@ -210,9 +249,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build system prompt with new or legacy context
-    // 使用新或旧上下文构建系统提示词
-    const systemPrompt = buildSystemPrompt(advisorContext, context, mode);
+    // Build system prompt: institution role takes priority, then advisor context, then legacy
+    // 系统提示词优先级：机构角色 > 顾问上下文 > 旧版上下文
+    const systemPrompt = institutionRole
+      ? buildInstitutionSystemPrompt(institutionRole, context)
+      : buildSystemPrompt(advisorContext, context, mode);
 
     // Build messages array
     // 构建消息数组
@@ -224,9 +265,11 @@ export async function POST(request: NextRequest) {
 
     // Log request details
     // 记录请求详情
-    const contextInfo = advisorContext
-      ? `philosophy=${advisorContext.corePhilosophy}, methods=${advisorContext.analysisMethods?.join(",")}`
-      : "legacy context";
+    const contextInfo = institutionRole
+      ? `institution_role=${institutionRole}`
+      : advisorContext
+        ? `philosophy=${advisorContext.corePhilosophy}, methods=${advisorContext.analysisMethods?.join(",")}`
+        : "legacy context";
     console.log(
       `[Advisor API] Processing ${mode} mode request (stream: ${stream}), ${contextInfo}, history: ${history.length} messages`,
     );
@@ -392,9 +435,10 @@ export async function POST(request: NextRequest) {
         mode,
         responseTime,
         model: data.model,
-        contextType: advisorContext ? "agentic" : "legacy",
+        contextType: institutionRole ? "institution" : advisorContext ? "agentic" : "legacy",
         philosophy: advisorContext?.corePhilosophy,
         masterAgent: advisorContext?.masterAgent,
+        institutionRole,
       },
     });
   } catch (error) {

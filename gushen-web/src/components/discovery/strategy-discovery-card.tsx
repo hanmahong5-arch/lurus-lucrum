@@ -108,12 +108,23 @@ export function StrategyDiscoveryCard({
     }
   };
 
+  const handleDragStart = (e: React.DragEvent<HTMLDivElement>) => {
+    const payload = JSON.stringify({
+      symbol: strategy.name,
+      name: strategy.name,
+    });
+    e.dataTransfer.setData("gushen/strategy", payload);
+    e.dataTransfer.effectAllowed = "copy";
+  };
+
   return (
     <div
       role="button"
       tabIndex={0}
+      draggable
       onClick={handleClick}
       onKeyDown={handleKeyDown}
+      onDragStart={handleDragStart}
       className={cn(
         "group relative rounded-lg border border-neutral-800 bg-surface p-4",
         "hover:border-neutral-600 hover:bg-surface-hover",

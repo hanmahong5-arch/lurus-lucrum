@@ -9,6 +9,8 @@
  * - Investment philosophy selection
  * - Debate mode (Bull vs Bear)
  * - Dynamic context building
+ * - Institution buy-side fund roles + workflows
+ * - Drag-and-drop strategy card input
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
@@ -26,6 +28,7 @@ import { ApplySuggestionButton } from "./apply-suggestion-button";
 import { TokenBudgetIndicator } from "./token-budget-indicator";
 import { ConversationHistory } from "./conversation-history";
 import { FollowUpChips } from "./follow-up-chips";
+import { InstitutionRoleSelector } from "./institution-role-selector";
 import type { QuestionContext } from "@/lib/advisor/question-generator";
 import { parseSuggestions } from "@/lib/advisor/suggestion-parser";
 
@@ -41,10 +44,14 @@ import { showToast } from "@/lib/toast";
 // Import types and utilities
 import type {
   AdvisorContext,
+  AdvisorPanelMode,
   ChatMode,
   DebateSession,
   DebateArgument,
+  InstitutionRoleId,
   InvestmentPhilosophy,
+  StrategyDragPayload,
+  WorkflowStepResult,
 } from "@/lib/advisor/agent/types";
 import {
   getDefaultAdvisorContext,
@@ -54,6 +61,7 @@ import {
   getMasterAgentSummaries,
   getMasterAgentById,
 } from "@/lib/advisor/agent/master-agents";
+import { executeWorkflow } from "@/lib/advisor/institution-workflow";
 
 // =============================================================================
 // VALIDATION HELPERS / 数据验证辅助函数
@@ -167,6 +175,10 @@ interface AdvisorChatProps {
   initialContext?: Partial<AdvisorContext>;
   /** Question context for SmartQuestionChips (from backtest results) */
   questionContext?: QuestionContext | null;
+  /** Pre-filled stock symbol from URL param or drag */
+  initialSymbol?: string;
+  /** Pre-filled stock name from URL param or drag */
+  initialSymbolName?: string;
 }
 
 /**
@@ -178,6 +190,8 @@ export function AdvisorChat({
   defaultMode = "quick",
   initialContext,
   questionContext,
+  initialSymbol,
+  initialSymbolName,
 }: AdvisorChatProps) {
   // State management
   const [messages, setMessages] = useState<Message[]>([]);
@@ -195,6 +209,33 @@ export function AdvisorChat({
   const [debateSession, setDebateSession] = useState<DebateSession | null>(
     null,
   );
+
+  // Advisor panel mode (master vs institution)
+  const [panelMode, setPanelMode] = useState<AdvisorPanelMode>("master");
+
+  // Institution mode state
+  const [selectedRole, setSelectedRole] = useState<InstitutionRoleId | null>(null);
+  const [activeWorkflowId, setActiveWorkflowId] = useState<string | null>(null);
+  const [workflowResults, setWorkflowResults] = useState<WorkflowStepResult[]>([]);
+  const [isWorkflowRunning, setIsWorkflowRunning] = useState(false);
+
+  // Drag-and-drop state
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [draggedStock, setDraggedStock] = useState<StrategyDragPayload | null>(null);
+
+  // URL param / drag injection
+  const [stockContext, setStockContext] = useState<{ symbol: string; name: string } | null>(
+    initialSymbol ? { symbol: initialSymbol, name: initialSymbolName || initialSymbol } : null,
+  );
+
+  // Pre-fill input when stock context is injected from URL or drag
+  useEffect(() => {
+    if (stockContext && !input) {
+      setInput(`分析策略【${stockContext.name}】`);
+      textareaRef.current?.focus();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stockContext]);
 
   // Conversation persistence
   const conversationStore = useConversationStore();
@@ -285,6 +326,107 @@ export function AdvisorChat({
     }
   }, []);
 
+  // Handle drop zone drag events
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    if (e.dataTransfer.types.includes("gushen/strategy")) {
+      e.preventDefault();
+      setIsDragOver(true);
+    }
+  }, []);
+
+  const handleDragLeave = useCallback(() => {
+    setIsDragOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    setIsDragOver(false);
+    const raw = e.dataTransfer.getData("gushen/strategy");
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(raw) as StrategyDragPayload;
+      setStockContext({ symbol: payload.symbol, name: payload.name });
+      setInput(`分析策略【${payload.name}】`);
+      setDraggedStock(payload);
+      setTimeout(() => textareaRef.current?.focus(), 0);
+    } catch {
+      // ignore malformed drag data
+    }
+  }, []);
+
+  // Handle institution workflow launch
+  const handleWorkflowStart = useCallback(
+    (workflowId: string) => {
+      if (isWorkflowRunning) return;
+      if (!input.trim()) {
+        showToast.warning("请先输入分析问题，再启动决策流");
+        textareaRef.current?.focus();
+        return;
+      }
+
+      setActiveWorkflowId(workflowId);
+      setWorkflowResults([]);
+      setIsWorkflowRunning(true);
+      setError(null);
+
+      // Add user message
+      const userMsg: Message = {
+        id: generateId(),
+        role: "user",
+        content: input.trim(),
+        timestamp: new Date(),
+        metadata: { mode: "institution_workflow" },
+      };
+      setMessages((prev) => [...prev, userMsg]);
+      setInput("");
+
+      executeWorkflow(workflowId, {
+        userMessage: userMsg.content,
+        symbol: stockContext?.symbol,
+        symbolName: stockContext?.name,
+        onStepStart: (roleId) => {
+          setWorkflowResults((prev) => {
+            const existing = prev.find((r) => r.roleId === roleId);
+            if (existing) return prev;
+            return [
+              ...prev,
+              {
+                roleId,
+                roleTitle: roleId,
+                content: "",
+                status: "running",
+              },
+            ];
+          });
+        },
+        onStepComplete: (result) => {
+          setWorkflowResults((prev) =>
+            prev.map((r) => (r.roleId === result.roleId ? result : r)),
+          );
+        },
+        onComplete: (results) => {
+          setIsWorkflowRunning(false);
+          const fundManagerResult = results.find((r) => r.roleId === "fund_manager" && r.status === "completed");
+          if (fundManagerResult) {
+            const assistantMsg: Message = {
+              id: generateId(),
+              role: "assistant",
+              content: `【基金经理决策】\n\n${fundManagerResult.content}`,
+              timestamp: new Date(),
+              metadata: { mode: "institution_workflow", agentName: "基金经理" },
+            };
+            setMessages((prev) => [...prev, assistantMsg]);
+          }
+        },
+        onError: (err) => {
+          setIsWorkflowRunning(false);
+          setError(`工作流执行失败: ${err}`);
+        },
+      });
+    },
+    [isWorkflowRunning, input, stockContext, messages],
+  );
+
   // Send message to advisor API
   const sendMessage = useCallback(async () => {
     if (!input.trim() || isLoading) return;
@@ -333,7 +475,9 @@ export function AdvisorChat({
             message: userMessage.content,
             history,
             mode,
-            advisorContext,
+            advisorContext: panelMode === "master" ? advisorContext : undefined,
+            institutionRole: panelMode === "institution" ? selectedRole : undefined,
+            context: stockContext ? { symbol: stockContext.symbol, symbolName: stockContext.name } : undefined,
           }),
         });
 
@@ -357,10 +501,15 @@ export function AdvisorChat({
             : [],
           metadata: {
             ...data.metadata,
-            agentId: advisorContext.masterAgent,
-            agentName: advisorContext.masterAgent
-              ? getMasterAgentById(advisorContext.masterAgent)?.name
-              : undefined,
+            agentId: panelMode === "institution" ? selectedRole : advisorContext.masterAgent,
+            agentName:
+              panelMode === "institution" && selectedRole
+                ? data.metadata?.institutionRole
+                  ? undefined // will be shown via institutionRole in metadata
+                  : undefined
+                : advisorContext.masterAgent
+                  ? getMasterAgentById(advisorContext.masterAgent)?.name
+                  : undefined,
           },
         };
 
@@ -580,6 +729,11 @@ export function AdvisorChat({
     setDebateSession(null);
     setError(null);
     warningFiredRef.current = false;
+    setWorkflowResults([]);
+    setActiveWorkflowId(null);
+    setIsWorkflowRunning(false);
+    setStockContext(null);
+    setDraggedStock(null);
 
     // Create a new session for fresh conversation
     const newId = conversationStore.createSession({ mode });
@@ -688,20 +842,67 @@ export function AdvisorChat({
   const contextSummaryText = `${contextSummaryObj.philosophy} + ${contextSummaryObj.methods.join("/")} + ${contextSummaryObj.style}${contextSummaryObj.master ? ` (${contextSummaryObj.master})` : ""}`;
 
   return (
-    <div className={cn("flex flex-col h-full bg-[#0f1117]", className)}>
+    <div
+      className={cn("flex flex-col h-full bg-[#0f1117] relative", className)}
+      onDragOver={handleDragOver}
+      onDragLeave={handleDragLeave}
+      onDrop={handleDrop}
+    >
+      {/* Drag-over highlight overlay */}
+      {isDragOver && (
+        <div className="absolute inset-0 z-50 pointer-events-none border-2 border-dashed border-blue-400 rounded-lg bg-blue-500/10 flex items-center justify-center">
+          <div className="bg-[#0f1117]/90 rounded-xl px-6 py-4 text-blue-300 text-sm font-medium shadow-lg">
+            释放以分析此策略
+          </div>
+        </div>
+      )}
+
       {/* Header with mode and settings */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#1a1f36]">
         <div className="flex items-center gap-2">
           <span className="text-[#f5a623] font-semibold">谷神</span>
           <span className="text-gray-400 text-sm">投资顾问</span>
-          <ModeBadge mode={mode} />
+          {panelMode === "master" && <ModeBadge mode={mode} />}
+          {stockContext && (
+            <span className="text-xs bg-blue-500/20 text-blue-300 px-2 py-0.5 rounded-full">
+              {stockContext.name}
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-2">
-          {/* Mode Selector */}
-          <CompactModeSelector
-            selectedMode={mode}
-            onModeChange={handleModeChange}
-          />
+          {/* Panel Mode Tabs: Master vs Institution */}
+          <div className="flex rounded-lg overflow-hidden border border-[#2a2f46]">
+            <button
+              onClick={() => setPanelMode("master")}
+              className={cn(
+                "px-3 py-1.5 text-xs transition-colors",
+                panelMode === "master"
+                  ? "bg-[#f5a623] text-[#0f1117] font-semibold"
+                  : "bg-[#1a1f36] text-gray-400 hover:text-white",
+              )}
+            >
+              大师视角
+            </button>
+            <button
+              onClick={() => setPanelMode("institution")}
+              className={cn(
+                "px-3 py-1.5 text-xs transition-colors",
+                panelMode === "institution"
+                  ? "bg-[#f5a623] text-[#0f1117] font-semibold"
+                  : "bg-[#1a1f36] text-gray-400 hover:text-white",
+              )}
+            >
+              机构岗位
+            </button>
+          </div>
+
+          {/* Mode Selector (only in master mode) */}
+          {panelMode === "master" && (
+            <CompactModeSelector
+              selectedMode={mode}
+              onModeChange={handleModeChange}
+            />
+          )}
           {/* History Toggle */}
           <button
             onClick={() => setShowHistory(!showHistory)}
@@ -781,8 +982,8 @@ export function AdvisorChat({
         </div>
       )}
 
-      {/* Settings Panel (collapsible) */}
-      {showSettings && (
+      {/* Settings Panel (collapsible, master mode only) */}
+      {showSettings && panelMode === "master" && (
         <div className="border-b border-[#1a1f36] bg-[#1a1f36]/30">
           <div className="p-4">
             <PhilosophySelector
@@ -816,6 +1017,18 @@ export function AdvisorChat({
             当前配置: {contextSummaryText}
           </div>
         </div>
+      )}
+
+      {/* Institution Role Selector (institution mode) */}
+      {panelMode === "institution" && (
+        <InstitutionRoleSelector
+          selectedRole={selectedRole}
+          onRoleSelect={setSelectedRole}
+          onWorkflowStart={handleWorkflowStart}
+          activeWorkflowId={activeWorkflowId}
+          workflowResults={workflowResults}
+          isWorkflowRunning={isWorkflowRunning}
+        />
       )}
 
       {/* Messages area */}
@@ -857,7 +1070,7 @@ export function AdvisorChat({
         )}
 
         {/* Loading indicator */}
-        {isLoading && (
+        {(isLoading || isWorkflowRunning) && (
           <div className="flex items-center gap-2 text-gray-400">
             <div className="flex gap-1">
               <span
@@ -874,7 +1087,11 @@ export function AdvisorChat({
               />
             </div>
             <span className="text-sm">
-              {mode === "debate" ? "多空辩论进行中..." : "谷神正在分析..."}
+              {isWorkflowRunning
+                ? "机构决策流执行中..."
+                : mode === "debate"
+                  ? "多空辩论进行中..."
+                  : "谷神正在分析..."}
             </span>
           </div>
         )}
@@ -908,7 +1125,7 @@ export function AdvisorChat({
           <div className="flex flex-col gap-2">
             <Button
               onClick={sendMessage}
-              disabled={!input.trim() || isLoading}
+              disabled={!input.trim() || isLoading || isWorkflowRunning}
               className="bg-[#f5a623] hover:bg-[#f5a623]/90 text-[#0f1117] font-medium"
             >
               {mode === "debate" ? "开始辩论" : "发送"}
@@ -917,7 +1134,7 @@ export function AdvisorChat({
               onClick={clearChat}
               variant="outline"
               className="border-[#2a2f46] text-gray-400 hover:text-white"
-              disabled={messages.length === 0 && !debateSession}
+              disabled={messages.length === 0 && !debateSession && workflowResults.length === 0}
             >
               清空
             </Button>
@@ -925,19 +1142,29 @@ export function AdvisorChat({
         </div>
         <div className="flex items-center justify-between mt-2 text-xs text-gray-500">
           <span>
-            {advisorContext.masterAgent && (
-              <span className="text-[#f5a623]">
-                {getMasterAgentById(advisorContext.masterAgent)?.name}视角
-                ·{" "}
-              </span>
+            {panelMode === "institution" ? (
+              selectedRole ? (
+                <span className="text-[#f5a623]">
+                  机构模式 · {selectedRole} 视角 ·{" "}
+                </span>
+              ) : (
+                <span>机构模式 · 选择角色或启动决策流 · </span>
+              )
+            ) : (
+              advisorContext.masterAgent && (
+                <span className="text-[#f5a623]">
+                  {getMasterAgentById(advisorContext.masterAgent)?.name}视角
+                  ·{" "}
+                </span>
+              )
             )}
-            {mode === "quick"
+            {panelMode === "master" && (mode === "quick"
               ? "快速分析"
               : mode === "deep"
                 ? "深度分析"
                 : mode === "debate"
                   ? "多空辩论"
-                  : "组合诊断"}
+                  : "组合诊断")}
           </span>
           <span>投资有风险，入市需谨慎</span>
         </div>
