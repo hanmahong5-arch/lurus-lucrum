@@ -1,0 +1,85 @@
+# CI/CD for lurus-ai-qtrd (Python FastAPI backend)
+# Builds Docker image and pushes to GHCR on push to main
+name: lurus-ai-qtrd
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "lurus-ai-qtrd/**"
+      - ".github/workflows/lurus-ai-qtrd.yaml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "lurus-ai-qtrd/**"
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      packages: write
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="main-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Normalize GHCR repository
+        run: echo "GHCR_REPO=ghcr.io/${{ github.repository_owner }}/lurus-ai-qtrd" >> "$GITHUB_ENV"
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.GHCR_REPO }}
+
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./lurus-ai-qtrd
+          file: ./lurus-ai-qtrd/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: |
+            ${{ env.GHCR_REPO }}:main
+            ${{ env.GHCR_REPO }}:${{ steps.version.outputs.value }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ env.GHCR_REPO }}:${{ steps.version.outputs.value }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif

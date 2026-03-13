@@ -34,8 +34,8 @@ spec:
 
       containers:
         - name: web
-          image: gushen-web:v18
-          imagePullPolicy: Never # Use local image imported to containerd
+          image: ghcr.io/hanmahong5-arch/gushen-web:main
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
               name: http

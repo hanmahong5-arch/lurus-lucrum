@@ -10,7 +10,7 @@ AI 量化交易平台，包含两个子项目：
 - 域名：`https://gushen.lurus.cn`
 - 命名空间：`ai-qtrd`
 - Web image：`ghcr.io/hanmahong5-arch/gushen-web:main`（GitOps，推 main 自动同步）
-- API image：`lurus-ai-qtrd:v1.0.4`（本地构建，`imagePullPolicy: Never`）
+- API image：`ghcr.io/hanmahong5-arch/lurus-ai-qtrd:main`（GitOps，推 main 自动同步）
 
 ---
 
@@ -104,11 +104,8 @@ bun run build
 # 本地运行
 python -m uvicorn src.web.app:app --host 0.0.0.0 --port 8000 --reload
 
-# 构建镜像
-docker build -t lurus-ai-qtrd:v1.0.4 .
-
-# 推送到集群（需 k3s 节点访问权限）
-docker save lurus-ai-qtrd:v1.0.4 | ssh root@100.98.57.55 "k3s ctr images import -"
+# 构建镜像（GitOps: push to main triggers CI/CD automatically）
+docker build -t lurus-ai-qtrd:latest .
 ```
 
 ### K8s 运维
