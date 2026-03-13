@@ -2,10 +2,12 @@
 // from React Query hooks (useQuery requires a QueryClientProvider at runtime).
 export const dynamic = "force-dynamic";
 
+import { QueryProvider } from "@/components/providers/query-provider";
+
 export default function DashboardLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  return <>{children}</>;
+  return <QueryProvider>{children}</QueryProvider>;
 }
