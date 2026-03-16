@@ -28,6 +28,7 @@ import { INVESTMENT_ADVISOR_SYSTEM_PROMPT } from "@/lib/investment-context/conve
 import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/middleware/quota-check";
 import { recordUserEvent } from "@/lib/db/queries";
 import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
+import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memorus-client";
 
 // lurus-api configuration
 // 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
@@ -249,11 +250,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Fetch relevant memories for authenticated users (fail-open, parallel with other work)
+    // 为已认证用户获取相关记忆（失败容错，不影响主流程）
+    const memories = userId ? await searchMemories(userId, message) : [];
+    const memorySection = buildMemoryPromptSection(memories);
+
     // Build system prompt: institution role takes priority, then advisor context, then legacy
     // 系统提示词优先级：机构角色 > 顾问上下文 > 旧版上下文
-    const systemPrompt = institutionRole
+    const systemPrompt = (institutionRole
       ? buildInstitutionSystemPrompt(institutionRole, context)
-      : buildSystemPrompt(advisorContext, context, mode);
+      : buildSystemPrompt(advisorContext, context, mode)) + memorySection;
 
     // Build messages array
     // 构建消息数组
@@ -406,6 +412,14 @@ export async function POST(request: NextRequest) {
     }
 
     const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? maxTokens;
+
+    // Store this exchange in memorus for future context recall (fire-and-forget)
+    // Cap response at 600 chars so stored bullets stay concise
+    // 将本轮对话存入记忆引擎，供后续对话召回（即发即忘）
+    if (userId) {
+      const responseSnippet = advisorResponse.slice(0, 600);
+      addMemory(userId, `用户咨询：${message}\n\n顾问建议：${responseSnippet}`);
+    }
 
     // Record user behavior event (async, non-blocking)
     recordUserEvent({

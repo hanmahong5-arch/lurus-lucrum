@@ -119,6 +119,16 @@ spec:
                   name: ai-qtrd-secrets
                   key: DATABASE_URL
 
+            # Memorus memory engine (fail-open: pod starts even if key absent)
+            - name: MEMORUS_SERVICE_URL
+              value: "http://memorus.lurus-system.svc.cluster.local:8880"
+            - name: MEMORUS_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: ai-qtrd-secrets
+                  key: MEMORUS_API_KEY
+                  optional: true
+
             # Redis configuration
             - name: REDIS_ENABLED
               value: "true"
