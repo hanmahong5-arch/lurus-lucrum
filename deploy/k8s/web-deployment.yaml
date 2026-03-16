@@ -84,7 +84,7 @@ spec:
             - name: LURUS_API_URL
               value: "https://api.lurus.cn"
             - name: LURUS_IDENTITY_URL
-              value: "http://identity-service.lurus-identity.svc.cluster.local:18104"
+              value: "http://platform-core.lurus-platform.svc.cluster.local:18104"
             - name: LURUS_IDENTITY_INTERNAL_KEY
               valueFrom:
                 secretKeyRef:
