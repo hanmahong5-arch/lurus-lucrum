@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import { useAsyncTask } from "@/hooks/use-async-task";
 import Link from "next/link";
 import { StrategyInput } from "@/components/strategy-editor/strategy-input";
 import { CodePreview } from "@/components/strategy-editor/code-preview";
@@ -56,6 +57,7 @@ export default function DashboardPage() {
   // Local error state (not persisted)
   // 本地错误状态（不持久化）
   const [error, setError] = useState<string | null>(null);
+  const generateTask = useAsyncTask();
 
   // Onboarding import hook for tiered demo flows (Story 3.4)
   const {
@@ -221,6 +223,10 @@ export default function DashboardPage() {
     setError(null);
     setGenerationError(null);
     updateStrategyInput(prompt);
+    generateTask.registerTask({
+      type: 'generate',
+      title: `策略生成 — ${prompt.slice(0, 25)}${prompt.length > 25 ? '...' : ''}`,
+    });
 
     try {
       // Call real API endpoint
@@ -251,6 +257,7 @@ export default function DashboardPage() {
 
       if (data.success && data.code) {
         updateGeneratedCode(data.code);
+        generateTask.complete({ codeLength: data.code.length });
         // ✨ Immediately save draft after code generation
         // 代码生成后立即保存草稿
         setTimeout(() => saveDraft(), 0);
@@ -267,6 +274,7 @@ export default function DashboardPage() {
       const errorMsg = err instanceof Error ? err.message : "Unknown error occurred";
       setError(errorMsg);
       setGenerationError(errorMsg);
+      generateTask.fail(errorMsg);
 
       // Fallback to mock code if API fails
       // 如果 API 失败，使用模拟代码作为后备
@@ -399,9 +407,7 @@ export default function DashboardPage() {
           </p>
         </div>
 
-        {/* Strategy Guide Card (Phase 4 UX enhancement) */}
-        <StrategyGuideCard currentStep={currentWorkflowStep} className="mb-6" />
-n        {/* Tiered onboarding demo selector - shown when no code exists (Story 3.4) */}
+        {/* Tiered onboarding demo selector - shown when no code exists (Story 3.4) */}
         {!generatedCode && !isGenerating && (
           <TieredDemoSelector
             onSimple={fillAndRunSimple}
@@ -489,39 +495,6 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
           </div>
         </div>
 
-        {/* Tips / 使用提示 */}
-        <div className="mt-8 p-4 bg-accent/5 border border-accent/20 rounded-xl">
-          <h3 className="text-sm font-medium text-accent mb-3">
-            💡 使用指南 / Usage Guide
-          </h3>
-          <div className="grid md:grid-cols-3 gap-4 text-sm text-white/60">
-            <div className="space-y-2">
-              <h4 className="text-white/80 font-medium">📝 描述策略</h4>
-              <ul className="space-y-1 pl-4">
-                <li>• 使用具体的技术指标名称：均线、RSI、MACD、布林带等</li>
-                <li>• 明确买入/卖出条件和触发时机</li>
-                <li>• 指定参数范围：周期、阈值、止损比例</li>
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-white/80 font-medium">⚙️ 参数调优</h4>
-              <ul className="space-y-1 pl-4">
-                <li>• 生成代码后可视化编辑参数</li>
-                <li>• 实时预览参数变化对代码的影响</li>
-                <li>• 支持快速重新回测验证效果</li>
-              </ul>
-            </div>
-            <div className="space-y-2">
-              <h4 className="text-white/80 font-medium">📊 回测验证</h4>
-              <ul className="space-y-1 pl-4">
-                <li>• 选择不同时间周期和日期范围</li>
-                <li>• 关注夏普比率、最大回撤等风险指标</li>
-                <li>• 实盘前建议多周期、多品种测试</li>
-              </ul>
-            </div>
-          </div>
-        </div>
-
         {/* Risk Disclaimer / 风险提示 */}
         <div className="mt-4 p-4 bg-loss/5 border border-loss/20 rounded-xl">
           <h3 className="text-sm font-medium text-loss mb-2">
@@ -544,6 +517,9 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
           </p>
         </div>
       </main>
+
+      {/* Floating strategy workflow guide (sidecar) */}
+      <StrategyGuideCard currentStep={currentWorkflowStep} />
 
       {/* Bottom status bar */}
       {user?.id && (

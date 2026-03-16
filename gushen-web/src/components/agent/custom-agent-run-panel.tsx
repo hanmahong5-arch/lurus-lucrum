@@ -15,6 +15,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { AgentTokenBadge } from "./agent-token-badge";
 import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
+import { useAsyncTask } from "@/hooks/use-async-task";
 import type {
   CustomAgentEvent,
   CustomAgentStep,
@@ -261,6 +262,7 @@ export function CustomAgentRunPanel({
 
   // Abort controller
   const abortRef = useRef<AbortController | null>(null);
+  const task = useAsyncTask();
 
   const handleStart = useCallback(async () => {
     setRunning(true);
@@ -273,6 +275,8 @@ export function CustomAgentRunPanel({
     setNodeMessages({});
     setProgress({ current: 0, total: 0, symbol: "" });
     setTokenUsed(0);
+
+    task.registerTask({ type: 'agent', title: `分析任务 — ${agentName}` });
 
     const ac = new AbortController();
     abortRef.current = ac;
@@ -327,6 +331,10 @@ export function CustomAgentRunPanel({
               total: event.total,
               symbol: event.symbol ?? "",
             });
+            task.updateProgress(
+              event.total > 0 ? Math.round((event.current / event.total) * 100) : 0,
+              `${event.current}/${event.total} ${event.symbol ?? ''}`
+            );
             break;
           case "stock_result":
             setResults((prev) => [...prev, event.data]);
@@ -342,26 +350,33 @@ export function CustomAgentRunPanel({
             // Mark all nodes as completed
             setCompletedNodes(new Set(NODE_ORDER));
             setSummary(event.summary);
+            task.complete({ summary: event.summary, resultCount: results.length });
             break;
           case "error":
             setError({ message: event.message, code: event.code, metadata: event.metadata });
+            task.fail(event.message);
             break;
         }
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        setError({ message: err instanceof Error ? err.message : "运行失败" });
+        const errMsg = err instanceof Error ? err.message : "运行失败";
+        setError({ message: errMsg });
+        task.fail(errMsg);
+      } else {
+        task.cancel();
       }
     } finally {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [agentId]);
+  }, [agentId, agentName, task, results.length]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
     setRunning(false);
-  }, []);
+    task.cancel();
+  }, [task]);
 
   // Auto-start on mount if requested (e.g. after editing config and clicking "Save & Run")
   const hasAutoStartedRef = useRef(false);

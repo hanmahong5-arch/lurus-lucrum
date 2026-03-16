@@ -13,6 +13,7 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useAsyncTask } from "@/hooks/use-async-task";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { KLineChart, type TradeMarkerInfo } from "@/components/charts/kline-chart";
@@ -289,6 +290,7 @@ export function BacktestPanel({
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<DataSourceInfo | null>(null);
+  const backtestTask = useAsyncTask();
 
   const displayResult = externalResult ?? result;
   const running = externalIsRunning || isRunning;
@@ -427,6 +429,10 @@ export function BacktestPanel({
     setIsRunning(true);
     setError(null);
     onBacktestStart?.();
+    backtestTask.registerTask({
+      type: 'backtest',
+      title: `回测 — ${effectiveSymbol || '未知标的'}`,
+    });
 
     try {
       if (onRunBacktest) {
@@ -449,6 +455,7 @@ export function BacktestPanel({
 
         if (data.success && data.data) {
           setResult(data.data);
+          backtestTask.complete({ symbol: effectiveSymbol });
           // Store data source info from API response
           if (data.meta?.dataSource) {
             setDataSourceInfo(data.meta.dataSource);
@@ -465,14 +472,17 @@ export function BacktestPanel({
           // Server-side quota exceeded
           setUpgradeVariant("limit");
           setUpgradeDialogOpen(true);
+          backtestTask.fail('配额超限');
         } else {
-          setError(data.error?.message ?? data.error ?? "回测失败 / Backtest failed");
+          const errMsg = data.error?.message ?? data.error ?? "回测失败 / Backtest failed";
+          setError(errMsg);
+          backtestTask.fail(errMsg);
         }
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "回测出错 / Backtest error",
-      );
+      const errMsg = err instanceof Error ? err.message : "回测出错 / Backtest error";
+      setError(errMsg);
+      backtestTask.fail(errMsg);
     } finally {
       setIsRunning(false);
       onBacktestEnd?.();

@@ -14,6 +14,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2, TrendingUp, BarChart2, Activity } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { BacktestAgentResult } from "@/lib/agent/backtest-agent";
+import { useAsyncTask } from "@/hooks/use-async-task";
 
 // =============================================================================
 // Types
@@ -310,6 +311,7 @@ export function BacktestAgentPanel() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const task = useAsyncTask();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -329,6 +331,7 @@ export function BacktestAgentPanel() {
     setReport(undefined);
 
     addMessage({ role: "user", content: text, timestamp: Date.now() });
+    task.registerTask({ type: 'agent', title: `AI 回测 — ${text.slice(0, 30)}${text.length > 30 ? '...' : ''}` });
 
     try {
       const response = await fetch("/api/agent/backtest", {
@@ -370,6 +373,7 @@ export function BacktestAgentPanel() {
               });
             } else if (event.type === "result" && event.backtestResult) {
               setBacktestResult(event.backtestResult);
+              task.updateProgress(80, '回测完成，生成报告...');
             } else if (event.type === "report" && event.content) {
               setReport(event.content);
               addMessage({
@@ -377,24 +381,28 @@ export function BacktestAgentPanel() {
                 content: "回测完成！右栏已显示详细结果和分析报告。",
                 timestamp: Date.now(),
               });
+              task.complete({ hasResult: true, reportLength: event.content.length });
             } else if (event.type === "error") {
               addMessage({
                 role: "agent",
                 content: `出现错误: ${event.message ?? "请重试"}`,
                 timestamp: Date.now(),
               });
+              task.fail(event.message ?? '回测失败');
             }
           } catch {
             // Ignore JSON parse errors for partial lines
           }
         }
       }
-    } catch (error) {
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : "请重试";
       addMessage({
         role: "agent",
-        content: `连接失败: ${error instanceof Error ? error.message : "请重试"}`,
+        content: `连接失败: ${errMsg}`,
         timestamp: Date.now(),
       });
+      task.fail(`连接失败: ${errMsg}`);
     } finally {
       setIsLoading(false);
     }

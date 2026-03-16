@@ -9,6 +9,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { BatchBacktestResult, BatchSSEEvent, BatchBacktestRequest } from "@/lib/backtest/parallel/batch-backtest-types";
 import type { BatchStatus } from "@/components/strategy-validation/batch-progress-bar";
+import { useAsyncTask } from "@/hooks/use-async-task";
 
 export interface BatchBacktestState {
   status: BatchStatus;
@@ -36,6 +37,7 @@ export function useBatchBacktest() {
   const [state, setState] = useState<BatchBacktestState>(INITIAL_STATE);
   const abortRef = useRef<AbortController | null>(null);
   const readerRef = useRef<ReadableStreamDefaultReader<Uint8Array> | null>(null);
+  const task = useAsyncTask();
 
   // Cleanup on unmount
   useEffect(() => {
@@ -57,6 +59,11 @@ export function useBatchBacktest() {
       ...INITIAL_STATE,
       status: "running",
       total: request.symbols.length,
+    });
+
+    task.registerTask({
+      type: 'batch-backtest',
+      title: `批量回测 — ${request.symbols.length} 只股票`,
     });
 
     try {
@@ -108,6 +115,10 @@ export function useBatchBacktest() {
                   currentItem: event.currentItem,
                   elapsedMs: event.elapsedMs,
                 }));
+                task.updateProgress(
+                  event.total > 0 ? Math.round((event.completed / event.total) * 100) : 0,
+                  `${event.completed}/${event.total} ${event.currentItem}`
+                );
                 break;
               case "complete":
                 setState((prev) => ({
@@ -116,6 +127,7 @@ export function useBatchBacktest() {
                   completed: prev.total,
                   result: event.result,
                 }));
+                task.complete({ resultCount: event.result?.results?.length ?? 0 });
                 break;
               case "cancelled":
                 setState((prev) => ({
@@ -123,6 +135,7 @@ export function useBatchBacktest() {
                   status: "cancelled",
                   result: event.result,
                 }));
+                task.cancel();
                 break;
               case "error":
                 setState((prev) => ({
@@ -130,20 +143,26 @@ export function useBatchBacktest() {
                   status: "error",
                   error: event.message,
                 }));
+                task.fail(event.message);
                 break;
             }
           } catch { /* skip malformed event */ }
         }
       }
     } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") return;
+      if (err instanceof DOMException && err.name === "AbortError") {
+        task.cancel();
+        return;
+      }
+      const errMsg = err instanceof Error ? err.message : String(err);
       setState((prev) => ({
         ...prev,
         status: "error",
-        error: err instanceof Error ? err.message : String(err),
+        error: errMsg,
       }));
+      task.fail(errMsg);
     }
-  }, []);
+  }, [task]);
 
   const cancelBatch = useCallback(() => {
     abortRef.current?.abort();

@@ -1,30 +1,23 @@
 /**
- * Strategy Guide Card Component
- * 策略制作指南卡片组件
+ * Strategy Guide Sidecar
  *
- * Provides educational guidance for users to understand the complete
- * strategy creation workflow, addressing user need:
- * "最终目的是让用户全流程的把控，制作出属于自己的最适合市场套利的策略"
+ * Compact floating workflow stepper that tracks user progress.
+ * Renders as a small pill in the bottom-right corner of the dashboard.
+ * Click to expand a popover with step details and tips.
  *
- * Features:
- * - 4-step workflow visualization (策略类型 → 参数调整 → 回测验证 → 实盘优化)
- * - Expandable detailed tips for each step
- * - Current step highlighting
- * - Can be collapsed to save space
- *
- * @module components/strategy-editor/strategy-guide-card
+ * Replaces the previous large inline card.
  */
 
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { cn } from "@/lib/utils";
 
 // =============================================================================
 // Types
 // =============================================================================
 
-type WorkflowStep = "strategy" | "parameters" | "backtest" | "validation";
+export type WorkflowStep = "strategy" | "parameters" | "backtest" | "validation";
 
 interface StrategyGuideCardProps {
   currentStep?: WorkflowStep;
@@ -32,69 +25,33 @@ interface StrategyGuideCardProps {
 }
 
 // =============================================================================
-// Workflow Steps Data
+// Step Data
 // =============================================================================
 
-const WORKFLOW_STEPS = [
+const STEPS = [
   {
     id: "strategy" as WorkflowStep,
-    number: 1,
-    title: "选择策略类型",
-    titleEn: "Choose Strategy Type",
+    label: "构思策略",
     icon: "🎯",
-    description: "根据市场环境和个人风格选择合适的策略类型",
-    tips: [
-      "趋势跟踪策略：适合单边上涨/下跌行情，使用均线、MACD等趋势指标",
-      "均值回归策略：适合震荡市场，使用RSI、布林带等超买超卖指标",
-      "突破策略：捕捉关键位突破，适合波动率扩张阶段",
-      "多因子策略：结合多个指标，提高信号可靠性",
-    ],
-    actionTip: "💡 在策略描述中明确说明想要的策略类型和核心逻辑",
+    tip: "用自然语言描述你想要的策略类型和核心逻辑",
   },
   {
     id: "parameters" as WorkflowStep,
-    number: 2,
-    title: "调整参数",
-    titleEn: "Adjust Parameters",
+    label: "调整参数",
     icon: "⚙️",
-    description: "根据回测结果和市场特性优化策略参数",
-    tips: [
-      "点击参数旁的 ℹ️ 图标，查看详细说明和常见取值",
-      "先用推荐值进行回测，观察效果后再微调",
-      "注意参数之间的关系（如快线周期应小于慢线周期）",
-      "不同市场环境使用不同参数（牛市用宽松参数，熊市用保守参数）",
-    ],
-    actionTip: "💡 每次只调整1-2个参数，观察对结果的影响",
+    tip: "每次只调 1-2 个参数，观察对收益和回撤的影响",
   },
   {
     id: "backtest" as WorkflowStep,
-    number: 3,
-    title: "回测验证",
-    titleEn: "Backtest Validation",
+    label: "回测验证",
     icon: "📊",
-    description: "在历史数据上测试策略表现，评估盈利能力和风险",
-    tips: [
-      "查看回测依据面板，确认测试数据的质量和来源",
-      "关注核心指标：总收益率、最大回撤、夏普比率、胜率",
-      "查看交易记录，理解每笔交易的触发原因和盈亏",
-      "好的策略应该：收益稳定、回撤可控、交易次数合理（不要过度交易）",
-    ],
-    actionTip: "💡 单只股票测试后，再用多只股票验证策略普适性",
+    tip: "关注夏普比率 > 1、最大回撤 < 20%、胜率 > 45%",
   },
   {
     id: "validation" as WorkflowStep,
-    number: 4,
-    title: "多股验证",
-    titleEn: "Multi-Stock Validation",
+    label: "多股验证",
     icon: "✅",
-    description: "在多只股票上测试，验证策略的普适性和稳定性",
-    tips: [
-      "选择不同行业、不同特性的股票进行测试",
-      "观察策略在不同股票上的表现差异",
-      "警惕过拟合：在单只股票上完美，但在其他股票上失效",
-      "真正优秀的策略应该在大多数股票上都有正收益",
-    ],
-    actionTip: "💡 使用策略验证页面，批量测试10-50只股票",
+    tip: "用 10-50 只不同行业股票测试策略普适性",
   },
 ];
 
@@ -103,161 +60,131 @@ const WORKFLOW_STEPS = [
 // =============================================================================
 
 export function StrategyGuideCard({ currentStep, className }: StrategyGuideCardProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
-  const [expandedStep, setExpandedStep] = useState<WorkflowStep | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
 
-  if (isCollapsed) {
-    return (
-      <div
-        className={cn(
-          "p-3 bg-primary/20 border border-border rounded-lg cursor-pointer hover:bg-primary/30 transition-colors",
-          className
-        )}
-        onClick={() => setIsCollapsed(false)}
-      >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">📚</span>
-            <span className="text-sm font-medium text-white">策略制作指南</span>
-            <span className="text-xs text-white/40">Strategy Guide</span>
-          </div>
-          <svg className="w-4 h-4 text-white/40" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </div>
-      </div>
-    );
-  }
+  const currentIdx = STEPS.findIndex((s) => s.id === currentStep);
+  const activeStep = currentIdx >= 0 ? STEPS[currentIdx] : STEPS[0];
+  const progress = currentIdx >= 0 ? ((currentIdx + 1) / STEPS.length) * 100 : 25;
+
+  // Close on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (panelRef.current && !panelRef.current.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, [isOpen]);
 
   return (
-    <div className={cn("p-4 bg-primary/20 border border-border rounded-lg", className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <span className="text-lg">📚</span>
-          <div>
-            <h3 className="text-sm font-semibold text-white">策略制作指南</h3>
-            <p className="text-xs text-white/40">Strategy Creation Guide</p>
+    <div className={cn("fixed bottom-20 right-4 z-40 md:bottom-12 md:right-6", className)} ref={panelRef}>
+      {/* Expanded panel */}
+      {isOpen && (
+        <div className="absolute bottom-12 right-0 w-72 bg-surface/95 backdrop-blur-xl border border-border rounded-xl shadow-2xl shadow-black/40 overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200">
+          {/* Header */}
+          <div className="px-3 py-2.5 border-b border-border/50">
+            <p className="text-xs font-medium text-white/80">策略制作流程</p>
+          </div>
+
+          {/* Steps */}
+          <div className="p-2 space-y-0.5">
+            {STEPS.map((step, idx) => {
+              const isActive = currentStep === step.id;
+              const isPast = currentIdx > idx;
+
+              return (
+                <div
+                  key={step.id}
+                  className={cn(
+                    "flex items-start gap-2.5 px-2.5 py-2 rounded-lg transition-colors",
+                    isActive && "bg-accent/10",
+                  )}
+                >
+                  {/* Step indicator */}
+                  <div className="flex flex-col items-center gap-0.5 pt-0.5">
+                    <div
+                      className={cn(
+                        "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0",
+                        isActive
+                          ? "bg-accent text-black"
+                          : isPast
+                            ? "bg-profit/80 text-white"
+                            : "bg-white/10 text-white/40"
+                      )}
+                    >
+                      {isPast ? "✓" : idx + 1}
+                    </div>
+                    {/* Connector line */}
+                    {idx < STEPS.length - 1 && (
+                      <div className={cn("w-px h-3", isPast ? "bg-profit/40" : "bg-white/10")} />
+                    )}
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs">{step.icon}</span>
+                      <span
+                        className={cn(
+                          "text-xs font-medium",
+                          isActive ? "text-accent" : isPast ? "text-white/60" : "text-white/40"
+                        )}
+                      >
+                        {step.label}
+                      </span>
+                      {isActive && (
+                        <span className="px-1 py-px bg-accent/20 text-accent text-[9px] rounded leading-tight">
+                          当前
+                        </span>
+                      )}
+                    </div>
+                    {isActive && (
+                      <p className="text-[11px] text-white/50 mt-0.5 leading-relaxed">{step.tip}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
-        <button
-          onClick={() => setIsCollapsed(true)}
-          className="text-white/40 hover:text-white/60 transition-colors"
-          aria-label="Collapse guide"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
-          </svg>
-        </button>
-      </div>
+      )}
 
-      {/* Workflow Steps */}
-      <div className="space-y-3">
-        {WORKFLOW_STEPS.map((step, index) => {
-          const isActive = currentStep === step.id;
-          const isExpanded = expandedStep === step.id;
-          const isPast = currentStep && WORKFLOW_STEPS.findIndex(s => s.id === currentStep) > index;
+      {/* Floating pill trigger */}
+      <button
+        onClick={() => setIsOpen(!isOpen)}
+        className={cn(
+          "flex items-center gap-2 pl-3 pr-3 py-2 rounded-full",
+          "bg-surface/90 backdrop-blur-xl border border-border/60",
+          "shadow-lg shadow-black/30 hover:bg-surface hover:border-border transition-all",
+          "text-xs",
+          isOpen && "border-accent/40"
+        )}
+      >
+        {/* Mini progress ring */}
+        <svg className="w-5 h-5 shrink-0 -rotate-90" viewBox="0 0 20 20">
+          <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/10" />
+          <circle
+            cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2"
+            className="text-accent"
+            strokeDasharray={`${(progress / 100) * 50.3} 50.3`}
+            strokeLinecap="round"
+          />
+        </svg>
 
-          return (
-            <div
-              key={step.id}
-              className={cn(
-                "rounded-lg border transition-all",
-                isActive
-                  ? "bg-accent/10 border-accent/30"
-                  : isPast
-                    ? "bg-profit/5 border-profit/20"
-                    : "bg-background/40 border-border/50"
-              )}
-            >
-              {/* Step Header */}
-              <button
-                onClick={() => setExpandedStep(isExpanded ? null : step.id)}
-                className="w-full p-3 flex items-center justify-between hover:bg-white/5 transition-colors rounded-lg"
-              >
-                <div className="flex items-center gap-3">
-                  {/* Step Number */}
-                  <div
-                    className={cn(
-                      "w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold",
-                      isActive
-                        ? "bg-accent text-white"
-                        : isPast
-                          ? "bg-profit text-white"
-                          : "bg-white/10 text-white/60"
-                    )}
-                  >
-                    {isPast ? "✓" : step.number}
-                  </div>
+        {/* Current step label */}
+        <span className="text-white/70 whitespace-nowrap">
+          <span className="text-white/40 mr-1">{activeStep?.icon}</span>
+          {activeStep?.label}
+        </span>
 
-                  {/* Icon and Title */}
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg">{step.icon}</span>
-                    <div className="text-left">
-                      <div className="flex items-center gap-2">
-                        <span className={cn("text-sm font-medium", isActive ? "text-accent" : "text-white")}>
-                          {step.title}
-                        </span>
-                        {isActive && (
-                          <span className="px-1.5 py-0.5 bg-accent/20 text-accent text-[10px] rounded">
-                            当前
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-xs text-white/40">{step.titleEn}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Expand Icon */}
-                <svg
-                  className={cn(
-                    "w-4 h-4 text-white/40 transition-transform",
-                    isExpanded && "rotate-180"
-                  )}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Expanded Content */}
-              {isExpanded && (
-                <div className="px-3 pb-3 space-y-2">
-                  <p className="text-xs text-white/70 leading-relaxed">
-                    {step.description}
-                  </p>
-
-                  {/* Tips */}
-                  <div className="space-y-1.5 mt-2">
-                    {step.tips.map((tip, tipIndex) => (
-                      <div
-                        key={tipIndex}
-                        className="flex items-start gap-2 text-xs text-white/60 leading-relaxed"
-                      >
-                        <span className="text-accent mt-0.5 flex-shrink-0">•</span>
-                        <span>{tip}</span>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Action Tip */}
-                  <div className="mt-3 p-2 bg-accent/10 border border-accent/20 rounded text-xs text-white/80">
-                    {step.actionTip}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Footer */}
-      <div className="mt-4 pt-3 border-t border-border/30 text-xs text-white/40">
-        <p>💡 提示：点击每个步骤查看详细指导 | Click each step for detailed guidance</p>
-      </div>
+        {/* Step count */}
+        <span className="text-white/30 font-mono tabular-nums">
+          {Math.max(1, currentIdx + 1)}/4
+        </span>
+      </button>
     </div>
   );
 }

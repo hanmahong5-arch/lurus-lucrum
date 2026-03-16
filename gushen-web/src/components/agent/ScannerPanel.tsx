@@ -11,6 +11,7 @@
 import { useState, useRef, useCallback } from "react";
 import { SW_SECTORS, CONCEPT_SECTORS } from "@/lib/data-service/sources/eastmoney-sector";
 import type { ScanTarget, RankedResult, ScannerEvent } from "@/lib/agent/scanner-agent";
+import { useAsyncTask } from "@/hooks/use-async-task";
 
 // =============================================================================
 // Constants
@@ -204,6 +205,7 @@ export function ScannerPanel() {
   const [error, setError] = useState<string>("");
 
   const abortRef = useRef<AbortController | null>(null);
+  const task = useAsyncTask();
 
   const handleStart = useCallback(async () => {
     if (scanTargets.length === 0) {
@@ -217,6 +219,9 @@ export function ScannerPanel() {
     setInsights("");
     setProgress({ done: 0, total: scanTargets.length, current: "" });
 
+    const strategyName = BUILTIN_STRATEGIES.find((s) => s.id === strategy)?.name ?? strategy;
+    task.registerTask({ type: 'scan', title: `扫描 — ${strategyName} (${scanTargets.length}个目标)` });
+
     const ac = new AbortController();
     abortRef.current = ac;
 
@@ -226,8 +231,7 @@ export function ScannerPanel() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           strategy,
-          strategyName:
-            BUILTIN_STRATEGIES.find((s) => s.id === strategy)?.name ?? strategy,
+          strategyName,
           scanTargets,
           dateRange: { start: startDate, end: endDate },
           capital,
@@ -237,9 +241,14 @@ export function ScannerPanel() {
 
       if (!res.ok) {
         const text = await res.text();
-        setError(`请求失败 (${res.status}): ${text}`);
+        const errMsg = `请求失败 (${res.status}): ${text}`;
+        setError(errMsg);
+        task.fail(errMsg);
         return;
       }
+
+      let finalRanking: RankedResult[] = [];
+      let finalInsights = "";
 
       for await (const event of parseSseStream(res)) {
         if (ac.signal.aborted) break;
@@ -247,32 +256,48 @@ export function ScannerPanel() {
         switch (event.type) {
           case "progress":
             setProgress({ done: event.done, total: event.total, current: event.current });
+            task.updateProgress(
+              event.total > 0 ? Math.round((event.done / event.total) * 100) : 0,
+              `${event.done}/${event.total} ${event.current}`
+            );
             break;
           case "ranking":
             setRanking(event.items);
+            finalRanking = event.items;
             break;
           case "insights":
             setInsights(event.content);
+            finalInsights = event.content;
             break;
           case "error":
             setError(event.message);
+            task.fail(event.message);
             break;
         }
       }
+
+      if (!ac.signal.aborted && !error) {
+        task.complete({ ranking: finalRanking, insights: finalInsights });
+      }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        setError(String(err));
+        const errMsg = String(err);
+        setError(errMsg);
+        task.fail(errMsg);
+      } else {
+        task.cancel();
       }
     } finally {
       setRunning(false);
       abortRef.current = null;
     }
-  }, [strategy, scanTargets, startDate, endDate, capital]);
+  }, [strategy, scanTargets, startDate, endDate, capital, task, error]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
     setRunning(false);
-  }, []);
+    task.cancel();
+  }, [task]);
 
   const progressPercent =
     progress.total > 0

@@ -34,6 +34,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { useQuotaStatus } from '@/hooks/use-quota-status';
 import { LocaleSwitcher } from '@/components/i18n/locale-switcher';
+import { TaskNotificationBell } from '@/components/task/task-notification-bell';
 
 // Primary navigation items (always visible on desktop)
 const PRIMARY_NAV = [
@@ -219,6 +220,9 @@ export function DashboardHeader() {
 
             {/* Right side - Hamburger (mobile) + Auto-save, Quota & Account */}
             <div className="flex items-center gap-3">
+              {/* Task notification bell */}
+              <TaskNotificationBell />
+
               {/* Language switcher */}
               <LocaleSwitcher />
 
