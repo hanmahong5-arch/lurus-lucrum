@@ -1050,6 +1050,66 @@ export const strategySubscriptions = pgTable(
 );
 
 // ============================================================================
+// Strategy Community Tables (Phase 4 — Social Features)
+// ============================================================================
+
+/**
+ * Strategy comments table - User comments on marketplace strategies
+ * 策略评论表 - 用户对市场策略的评论
+ */
+export const strategyComments = pgTable(
+  'strategy_comments',
+  {
+    id: serial('id').primaryKey(),
+    /** Marketplace strategy being commented on */
+    marketplaceStrategyId: integer('marketplace_strategy_id')
+      .notNull()
+      .references(() => marketplaceStrategies.id, { onDelete: 'cascade' }),
+    /** Commenter's user ID (Zitadel sub) */
+    userId: text('user_id').notNull(),
+    /** Display name at time of comment */
+    userName: varchar('user_name', { length: 100 }),
+    /** Comment content */
+    content: text('content').notNull(),
+    /** Parent comment ID for replies (null = top-level) */
+    parentId: integer('parent_id'),
+    /** Soft delete flag */
+    deleted: boolean('deleted').default(false),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    strategyIdx: index('idx_strategy_comments_strategy').on(table.marketplaceStrategyId),
+    userIdx: index('idx_strategy_comments_user').on(table.userId),
+    parentIdx: index('idx_strategy_comments_parent').on(table.parentId),
+  })
+);
+
+/**
+ * Strategy likes table - User likes on marketplace strategies
+ * 策略点赞表 - 用户对市场策略的点赞
+ */
+export const strategyLikes = pgTable(
+  'strategy_likes',
+  {
+    id: serial('id').primaryKey(),
+    /** Marketplace strategy being liked */
+    marketplaceStrategyId: integer('marketplace_strategy_id')
+      .notNull()
+      .references(() => marketplaceStrategies.id, { onDelete: 'cascade' }),
+    /** User who liked (Zitadel sub) */
+    userId: text('user_id').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueLike: uniqueIndex('idx_strategy_likes_unique').on(
+      table.marketplaceStrategyId,
+      table.userId
+    ),
+    strategyIdx: index('idx_strategy_likes_strategy').on(table.marketplaceStrategyId),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -1135,3 +1195,10 @@ export type NewMarketplaceStrategy = typeof marketplaceStrategies.$inferInsert;
 
 export type StrategySubscription = typeof strategySubscriptions.$inferSelect;
 export type NewStrategySubscription = typeof strategySubscriptions.$inferInsert;
+
+// Community types
+export type StrategyComment = typeof strategyComments.$inferSelect;
+export type NewStrategyComment = typeof strategyComments.$inferInsert;
+
+export type StrategyLike = typeof strategyLikes.$inferSelect;
+export type NewStrategyLike = typeof strategyLikes.$inferInsert;

@@ -204,7 +204,7 @@ export default function HistoryPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Page title and stats */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold text-white mb-2">
@@ -218,7 +218,7 @@ export default function HistoryPage() {
           </p>
 
           {/* Stats cards */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
               <div className="text-white/50 text-xs mb-1">总交易次数</div>
               <div className="text-2xl font-bold text-white">

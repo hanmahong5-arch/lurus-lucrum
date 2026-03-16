@@ -268,7 +268,7 @@ export function SignalTimeline({ data, className = "" }: SignalTimelineProps) {
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-4 gap-2 mt-4 pt-4 border-t border-border">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mt-4 pt-4 border-t border-border">
           <div className="text-center">
             <div className="text-xs text-white/40">总信号</div>
             <div className="text-sm font-medium text-accent">{stats.totalSignals}</div>

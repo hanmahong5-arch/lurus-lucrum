@@ -166,7 +166,7 @@ export function DataStatusPanel() {
       {isExpanded && (
         <div className="border-t border-border">
           {/* Stats Grid */}
-          <div className="grid grid-cols-4 gap-4 p-4 border-b border-border/50">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-4 border-b border-border/50">
             <div>
               <div className="text-xs text-white/50 mb-1">总请求数</div>
               <div className="text-lg font-medium text-white">

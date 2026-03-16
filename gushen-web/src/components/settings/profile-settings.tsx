@@ -138,7 +138,7 @@ export function ProfileSettings() {
       {/* Profile form */}
       <div className="space-y-6">
         {/* Display name */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="text-sm text-white/70 pt-2">
             显示名称
             <span className="block text-xs text-white/40">Display Name</span>
@@ -161,7 +161,7 @@ export function ProfileSettings() {
         </div>
 
         {/* Email */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="text-sm text-white/70 pt-2">
             邮箱地址
             <span className="block text-xs text-white/40">Email</span>
@@ -175,7 +175,7 @@ export function ProfileSettings() {
         </div>
 
         {/* Phone */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="text-sm text-white/70 pt-2">
             手机号码
             <span className="block text-xs text-white/40">Phone</span>
@@ -200,7 +200,7 @@ export function ProfileSettings() {
         </div>
 
         {/* Timezone */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="text-sm text-white/70 pt-2">
             时区设置
             <span className="block text-xs text-white/40">Timezone</span>
@@ -229,7 +229,7 @@ export function ProfileSettings() {
         </div>
 
         {/* Locale */}
-        <div className="grid grid-cols-3 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 items-start">
           <label className="text-sm text-white/70 pt-2">
             语言偏好
             <span className="block text-xs text-white/40">Language</span>

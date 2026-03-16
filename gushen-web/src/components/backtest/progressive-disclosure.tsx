@@ -20,12 +20,34 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronUp, BarChart3, List, Signal } from "lucide-react";
+import {
+  ChevronDown,
+  ChevronUp,
+  BarChart3,
+  List,
+  Signal,
+  TrendingUp,
+  Shield,
+  Activity,
+  HelpCircle,
+} from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import { ScoreCard } from "./score-card";
 import { NextStepGuide } from "./next-step-guide";
 import { AiInsightPlaceholder } from "./ai-insight-placeholder";
+import {
+  getMetricRating,
+  getMetricTooltip,
+  RATING_DOT_CLASSES,
+  type MetricRating,
+} from "@/lib/backtest/metric-rating";
 import type { StrategyScore } from "@/lib/backtest/score";
 import type { UnifiedBacktestResult } from "@/lib/backtest/types";
 
@@ -92,6 +114,206 @@ function usePrefersReducedMotion(): boolean {
 }
 
 // =============================================================================
+// HERO METRICS / 核心指标大数字区
+// =============================================================================
+
+interface HeroMetricsProps {
+  fullResult: UnifiedBacktestResult;
+  excessReturn?: number;
+}
+
+/**
+ * Hero section: 3 large numbers (total return, annualized, max drawdown)
+ * with benchmark comparison line.
+ */
+function HeroMetrics({ fullResult, excessReturn }: HeroMetricsProps) {
+  const { returnMetrics, riskMetrics } = fullResult;
+
+  const heroItems = [
+    {
+      label: "总收益率",
+      value: returnMetrics.totalReturn,
+      suffix: "%",
+      isPositive: returnMetrics.totalReturn >= 0,
+      metricKey: "totalReturn",
+    },
+    {
+      label: "年化收益率",
+      value: returnMetrics.annualizedReturn,
+      suffix: "%",
+      isPositive: returnMetrics.annualizedReturn >= 0,
+      metricKey: "annualizedReturn",
+    },
+    {
+      label: "最大回撤",
+      value: -riskMetrics.maxDrawdown,
+      suffix: "%",
+      isPositive: false,
+      metricKey: "maxDrawdown",
+    },
+  ];
+
+  return (
+    <div data-testid="hero-metrics" className="space-y-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        {heroItems.map((item) => {
+          const rating = getMetricRating(item.metricKey, item.value);
+          return (
+            <div
+              key={item.metricKey}
+              className="text-center p-4 rounded-xl bg-card border"
+            >
+              <div className="flex items-center justify-center gap-1.5 text-xs text-muted-foreground mb-2">
+                <span
+                  className={cn(
+                    "inline-block w-2 h-2 rounded-full",
+                    RATING_DOT_CLASSES[rating],
+                  )}
+                />
+                {item.label}
+              </div>
+              <p
+                className={cn(
+                  "text-3xl font-bold font-mono tabular-nums",
+                  item.isPositive ? "text-profit" : "text-loss",
+                )}
+              >
+                {item.value >= 0 ? "+" : ""}
+                {item.value.toFixed(2)}
+                <span className="text-lg">{item.suffix}</span>
+              </p>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Benchmark comparison line */}
+      {excessReturn !== undefined && (
+        <div className="flex items-center justify-center gap-2 text-sm">
+          <span className="text-muted-foreground">vs 沪深300</span>
+          <span
+            className={cn(
+              "font-mono tabular-nums font-semibold",
+              excessReturn >= 0 ? "text-profit" : "text-loss",
+            )}
+          >
+            {excessReturn >= 0 ? "+" : ""}
+            {excessReturn.toFixed(2)}%
+          </span>
+          <span className="text-muted-foreground text-xs">
+            {excessReturn >= 0 ? "跑赢大盘" : "跑输大盘"}
+          </span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =============================================================================
+// METRIC SUMMARY GRID / 9 指标摘要网格
+// =============================================================================
+
+interface MetricSummaryGridProps {
+  fullResult: UnifiedBacktestResult;
+}
+
+/**
+ * 3x3 metric grid: 3 return + 3 risk + 3 trading metrics
+ * with rating dots and tooltip explanations.
+ */
+function MetricSummaryGrid({ fullResult }: MetricSummaryGridProps) {
+  const { returnMetrics, riskMetrics, tradingMetrics } = fullResult;
+
+  const columns = [
+    {
+      title: "收益",
+      icon: TrendingUp,
+      iconColor: "text-profit",
+      metrics: [
+        { key: "totalReturn", label: "总收益率", value: returnMetrics.totalReturn, suffix: "%" },
+        { key: "annualizedReturn", label: "年化收益", value: returnMetrics.annualizedReturn, suffix: "%" },
+        { key: "alpha", label: "Alpha", value: returnMetrics.alpha ?? 0, suffix: "%" },
+      ],
+    },
+    {
+      title: "风险",
+      icon: Shield,
+      iconColor: "text-blue-500",
+      metrics: [
+        { key: "sharpeRatio", label: "夏普比率", value: riskMetrics.sharpeRatio, suffix: "" },
+        { key: "maxDrawdown", label: "最大回撤", value: -riskMetrics.maxDrawdown, suffix: "%" },
+        { key: "sortinoRatio", label: "索提诺", value: riskMetrics.sortinoRatio, suffix: "" },
+      ],
+    },
+    {
+      title: "交易",
+      icon: Activity,
+      iconColor: "text-purple-500",
+      metrics: [
+        { key: "winRate", label: "胜率", value: tradingMetrics.winRate, suffix: "%" },
+        { key: "profitFactor", label: "盈亏比", value: tradingMetrics.profitFactor, suffix: "" },
+        { key: "totalTrades", label: "交易次数", value: tradingMetrics.totalTrades, suffix: "笔" },
+      ],
+    },
+  ];
+
+  return (
+    <TooltipProvider>
+      <div data-testid="metric-summary-grid" className="grid grid-cols-3 gap-4">
+        {columns.map((col) => {
+          const Icon = col.icon;
+          return (
+            <Card key={col.title}>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm flex items-center gap-1.5">
+                  <Icon className={cn("h-3.5 w-3.5", col.iconColor)} aria-hidden="true" />
+                  {col.title}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                {col.metrics.map((m) => {
+                  const rating = getMetricRating(m.key, m.value);
+                  const tooltipText = getMetricTooltip(m.key);
+                  return (
+                    <div key={m.key} className="flex items-center justify-between">
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <span
+                          className={cn(
+                            "inline-block w-1.5 h-1.5 rounded-full flex-shrink-0",
+                            RATING_DOT_CLASSES[rating],
+                          )}
+                        />
+                        <span>{m.label}</span>
+                        {tooltipText && (
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <HelpCircle className="h-3 w-3 text-muted-foreground/40 cursor-help" />
+                            </TooltipTrigger>
+                            <TooltipContent>
+                              <p className="text-xs">{tooltipText}</p>
+                            </TooltipContent>
+                          </Tooltip>
+                        )}
+                      </div>
+                      <span className="text-sm font-semibold font-mono tabular-nums">
+                        {typeof m.value === "number" ? m.value.toFixed(2) : m.value}
+                        {m.suffix && (
+                          <span className="text-xs text-muted-foreground ml-0.5">{m.suffix}</span>
+                        )}
+                      </span>
+                    </div>
+                  );
+                })}
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
+    </TooltipProvider>
+  );
+}
+
+// =============================================================================
 // EQUITY CURVE PLACEHOLDER / 权益曲线占位
 // =============================================================================
 
@@ -121,7 +343,7 @@ function EquityCurveSection({ data }: EquityCurveSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="h-48 flex items-center justify-center rounded-md bg-muted/30 border border-dashed">
+        <div className="h-[280px] flex items-center justify-center rounded-md bg-muted/30 border border-dashed">
           <div className="text-center">
             <p className="text-sm text-muted-foreground">
               {data.length} 个数据点
@@ -309,6 +531,11 @@ export function ProgressiveDisclosure({
         />
       </div>
 
+      {/* Hero: 3 big numbers + benchmark comparison */}
+      {fullResult && (
+        <HeroMetrics fullResult={fullResult} excessReturn={excessReturn} />
+      )}
+
       {/* Layer 2: Equity curve (delayed 500ms or immediate with reduced motion) */}
       {showLayer2 && (
         <div
@@ -320,6 +547,13 @@ export function ProgressiveDisclosure({
         >
           {equityCurveData && equityCurveData.length > 0 && (
             <EquityCurveSection data={equityCurveData} />
+          )}
+
+          {/* 9-metric summary grid (3 columns: return/risk/trading) */}
+          {fullResult && (
+            <div className="mt-4">
+              <MetricSummaryGrid fullResult={fullResult} />
+            </div>
           )}
         </div>
       )}

@@ -407,7 +407,7 @@ export default function StrategyValidationPage() {
     return (
       <div className="min-h-screen bg-background">
         <DashboardHeader />
-        <main className="max-w-7xl mx-auto px-6 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="w-12 h-12 border-3 border-accent/30 border-t-accent rounded-full animate-spin mx-auto mb-4" />
@@ -423,7 +423,7 @@ export default function StrategyValidationPage() {
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Page Header */}
         <div className="mb-8">
           <div className="flex items-center gap-2 mb-2">
@@ -436,13 +436,13 @@ export default function StrategyValidationPage() {
             <span className="text-white/20">/</span>
             <span className="text-accent text-sm">策略验证</span>
           </div>
-          <h1 className="text-2xl font-bold text-white mb-2">
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">
             策略验证系统
-            <span className="text-base font-normal text-white/50 ml-2">
+            <span className="text-sm sm:text-base font-normal text-white/50 ml-2 hidden sm:inline">
               / Strategy Validation System
             </span>
           </h1>
-          <p className="text-white/60">
+          <p className="text-sm sm:text-base text-white/60">
             验证交易策略在不同行业板块的历史表现，了解策略的胜率和收益分布
           </p>
         </div>

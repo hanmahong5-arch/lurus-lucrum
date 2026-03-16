@@ -39,7 +39,7 @@ function PreviewSkeleton() {
       role="status"
     >
       <div className="h-16 rounded-lg bg-surface-hover" />
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         {[0, 1, 2].map((i) => (
           <div key={i} className="h-12 rounded-lg bg-surface-hover" />
         ))}
@@ -169,7 +169,7 @@ export function QuickPreviewResult({
         />
 
         {/* Summary metrics */}
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
           <MetricCard
             label="Total Return"
             value={returnDisplay}

@@ -33,10 +33,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Button } from '@/components/ui/button';
 import { useQuotaStatus } from '@/hooks/use-quota-status';
+import { LocaleSwitcher } from '@/components/i18n/locale-switcher';
 
 // Primary navigation items (always visible on desktop)
 const PRIMARY_NAV = [
   { href: '/dashboard', label: '策略编辑器' },
+  { href: '/dashboard/marketplace', label: '策略市场' },
   { href: '/dashboard/strategy-validation', label: '策略验证' },
   { href: '/dashboard/trading', label: '交易面板' },
   { href: '/dashboard/strategy-scanner', label: '扫描选板' },
@@ -48,18 +50,23 @@ const PRIMARY_NAV = [
 const MORE_NAV = [
   { href: '/dashboard/insights', label: '机构洞察' },
   { href: '/dashboard/advisor', label: '投资顾问' },
+  { href: '/dashboard/diagnostics', label: '策略诊断' },
   { href: '/backtest-agent', label: '智能回测' },
 ];
 
 // All items combined for mobile menu
 const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV];
 
-// Role display mapping
-const DEFAULT_ROLE_INFO = { label: '免费版', color: 'text-white/50' } as const;
+// Role display mapping (supports both new codes and legacy names)
+const DEFAULT_ROLE_INFO = { label: '体验版', color: 'text-white/50' } as const;
 
 const ROLE_LABELS: Record<string, { label: string; color: string }> = {
   free: DEFAULT_ROLE_INFO,
-  standard: { label: '标准版', color: 'text-accent' },
+  basic: { label: '进阶版', color: 'text-accent' },
+  pro: { label: '专业版', color: 'text-profit' },
+  enterprise: { label: '企业版', color: 'text-cyan-400' },
+  // Legacy names for backward compat
+  standard: { label: '进阶版', color: 'text-accent' },
   premium: { label: '专业版', color: 'text-profit' },
 };
 
@@ -107,8 +114,8 @@ function isNavActive(pathname: string, href: string): boolean {
 function QuotaBar({ userId, plan }: { userId: string; plan: string }) {
   const { remaining, total, loading } = useQuotaStatus(userId);
 
-  // Premium users have no limits — hide bar
-  if (plan === 'premium' || loading || total <= 0) return null;
+  // Pro/Enterprise users have no limits — hide bar
+  if (plan === 'pro' || plan === 'enterprise' || plan === 'premium' || loading || total <= 0) return null;
 
   const usedPercent = Math.min(100, Math.round(((total - remaining) / total) * 100));
   const remainingPercent = 100 - usedPercent;
@@ -212,8 +219,11 @@ export function DashboardHeader() {
 
             {/* Right side - Hamburger (mobile) + Auto-save, Quota & Account */}
             <div className="flex items-center gap-3">
+              {/* Language switcher */}
+              <LocaleSwitcher />
+
               {/* Quota progress bar (free/standard users only) */}
-              {isAuthenticated && user?.id && user.role !== 'premium' && (
+              {isAuthenticated && user?.id && !['pro', 'enterprise', 'premium'].includes(user.role ?? '') && (
                 <QuotaBar userId={user.id} plan={user.role ?? 'free'} />
               )}
 
@@ -305,6 +315,12 @@ export function DashboardHeader() {
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/strategies">
                         我的策略
+                      </Link>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem asChild>
+                      <Link href="/dashboard/referral">
+                        邀请返利
                       </Link>
                     </DropdownMenuItem>
 

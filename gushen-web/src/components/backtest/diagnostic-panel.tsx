@@ -355,7 +355,7 @@ function CategorySummary({ report }: CategorySummaryProps) {
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       {categories.map(({ key, label, icon: Icon, color }) => {
         const counts = categoryCounts[key];
         const total = counts.errors + counts.warnings + counts.infos;

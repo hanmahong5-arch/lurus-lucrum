@@ -374,7 +374,7 @@ export default function PaperTradingPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-6 py-6">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
         {/* Error message */}
         {error && (
           <div className="mb-4 p-3 bg-loss/10 border border-loss/30 rounded-lg flex items-center justify-between">

@@ -180,7 +180,7 @@ export default function AccountPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Page title */}
         <div className="flex items-center justify-between mb-8">
           <div>

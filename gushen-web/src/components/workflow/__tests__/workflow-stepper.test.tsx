@@ -374,64 +374,72 @@ describe("WorkflowStepper Component - Story 1.5", () => {
 });
 
 describe("DEFAULT_WORKFLOW_STEPS", () => {
-  it("should have 5 steps", () => {
-    expect(DEFAULT_WORKFLOW_STEPS).toHaveLength(5);
+  it("should have 7 steps", () => {
+    expect(DEFAULT_WORKFLOW_STEPS).toHaveLength(7);
   });
 
   it("should have correct labels", () => {
     const labels = DEFAULT_WORKFLOW_STEPS.map((s) => s.label);
-    expect(labels).toEqual(["起点", "输入", "生成", "回测", "验证"]);
+    expect(labels).toEqual(["构思", "生成", "调参", "回测", "验证", "诊断", "保存"]);
   });
 
   it("should have all pending status by default", () => {
     const statuses = DEFAULT_WORKFLOW_STEPS.map((s) => s.status);
-    expect(statuses).toEqual(["pending", "pending", "pending", "pending", "pending"]);
+    expect(statuses).toEqual(["pending", "pending", "pending", "pending", "pending", "pending", "pending"]);
   });
 });
 
 describe("createStepsFromCurrentIndex helper", () => {
   it("should create steps with correct statuses for index 0", () => {
     const steps = createStepsFromCurrentIndex(0);
-    expect(steps).toHaveLength(5);
+    expect(steps).toHaveLength(7);
 
     expect(steps[0]!.status).toBe("current");
     expect(steps[1]!.status).toBe("pending");
     expect(steps[2]!.status).toBe("pending");
     expect(steps[3]!.status).toBe("pending");
     expect(steps[4]!.status).toBe("pending");
+    expect(steps[5]!.status).toBe("pending");
+    expect(steps[6]!.status).toBe("pending");
   });
 
-  it("should create steps with correct statuses for index 2", () => {
-    const steps = createStepsFromCurrentIndex(2);
-    expect(steps).toHaveLength(5);
+  it("should create steps with correct statuses for index 3", () => {
+    const steps = createStepsFromCurrentIndex(3);
+    expect(steps).toHaveLength(7);
 
     expect(steps[0]!.status).toBe("completed");
     expect(steps[1]!.status).toBe("completed");
-    expect(steps[2]!.status).toBe("current");
-    expect(steps[3]!.status).toBe("pending");
+    expect(steps[2]!.status).toBe("completed");
+    expect(steps[3]!.status).toBe("current");
     expect(steps[4]!.status).toBe("pending");
+    expect(steps[5]!.status).toBe("pending");
+    expect(steps[6]!.status).toBe("pending");
   });
 
-  it("should create steps with correct statuses for index 4 (last)", () => {
-    const steps = createStepsFromCurrentIndex(4);
-    expect(steps).toHaveLength(5);
+  it("should create steps with correct statuses for index 6 (last)", () => {
+    const steps = createStepsFromCurrentIndex(6);
+    expect(steps).toHaveLength(7);
 
     expect(steps[0]!.status).toBe("completed");
     expect(steps[1]!.status).toBe("completed");
     expect(steps[2]!.status).toBe("completed");
     expect(steps[3]!.status).toBe("completed");
-    expect(steps[4]!.status).toBe("current");
+    expect(steps[4]!.status).toBe("completed");
+    expect(steps[5]!.status).toBe("completed");
+    expect(steps[6]!.status).toBe("current");
   });
 
   it("should use default labels", () => {
     const steps = createStepsFromCurrentIndex(0);
 
     expect(steps.map((s) => s.label)).toEqual([
-      "起点",
-      "输入",
+      "构思",
       "生成",
+      "调参",
       "回测",
       "验证",
+      "诊断",
+      "保存",
     ]);
   });
 

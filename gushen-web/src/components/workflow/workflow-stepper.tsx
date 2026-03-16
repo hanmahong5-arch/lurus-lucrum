@@ -2,8 +2,8 @@
  * Workflow Stepper Component
  * 工作流步骤导航组件
  *
- * Displays workflow progress with 5 steps:
- * ⓪ 起点 → ① 输入 → ② 生成 → ③ 回测 → ④ 验证
+ * Displays workflow progress with 7 steps:
+ * ① 构思 → ② 生成 → ③ 调参 → ④ 回测 → ⑤ 验证 → ⑥ 诊断 → ⑦ 保存
  *
  * Supports horizontal (desktop) and vertical (mobile) layouts.
  *
@@ -56,11 +56,13 @@ export interface WorkflowStepperProps {
  * Default workflow steps for strategy workflow
  */
 export const DEFAULT_WORKFLOW_STEPS: WorkflowStep[] = [
-  { label: "起点", status: "pending" },
-  { label: "输入", status: "pending" },
+  { label: "构思", status: "pending" },
   { label: "生成", status: "pending" },
+  { label: "调参", status: "pending" },
   { label: "回测", status: "pending" },
   { label: "验证", status: "pending" },
+  { label: "诊断", status: "pending" },
+  { label: "保存", status: "pending" },
 ];
 
 // =============================================================================
@@ -297,7 +299,7 @@ export function WorkflowStepper({
  */
 export function createStepsFromCurrentIndex(
   currentIndex: number,
-  labels: string[] = ["起点", "输入", "生成", "回测", "验证"]
+  labels: string[] = ["构思", "生成", "调参", "回测", "验证", "诊断", "保存"]
 ): WorkflowStep[] {
   return labels.map((label, index) => ({
     label,

@@ -21,11 +21,18 @@ import {
   ChevronUp,
   Download,
   AlertTriangle,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+  TooltipProvider,
+} from "@/components/ui/tooltip";
 import {
   Table,
   TableBody,
@@ -39,6 +46,11 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  getMetricRating,
+  getMetricTooltip,
+  RATING_DOT_CLASSES,
+} from "@/lib/backtest/metric-rating";
 import type {
   UnifiedBacktestResult,
   ReturnMetrics,
@@ -65,6 +77,8 @@ interface MetricCardProps {
   trend?: "up" | "down" | "neutral";
   highlight?: boolean;
   tooltip?: string;
+  /** Metric key for rating evaluation and tooltip lookup */
+  metricKey?: string;
 }
 
 // =============================================================================
@@ -77,7 +91,16 @@ function MetricCard({
   unit = "",
   trend = "neutral",
   highlight = false,
+  metricKey,
 }: MetricCardProps) {
+  const numericValue =
+    typeof value === "number" ? value : parseFloat(String(value));
+  const rating =
+    metricKey && !isNaN(numericValue)
+      ? getMetricRating(metricKey, numericValue)
+      : undefined;
+  const tooltipText = metricKey ? getMetricTooltip(metricKey) : undefined;
+
   return (
     <div
       className={cn(
@@ -85,11 +108,32 @@ function MetricCard({
         highlight && "border-primary bg-primary/5",
       )}
     >
-      <div className="text-xs text-muted-foreground mb-1">{label}</div>
+      <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+        {rating && (
+          <span
+            className={cn(
+              "inline-block w-1.5 h-1.5 rounded-full flex-shrink-0",
+              RATING_DOT_CLASSES[rating],
+            )}
+            aria-label={`Rating: ${rating}`}
+          />
+        )}
+        <span className="truncate">{label}</span>
+        {tooltipText && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <HelpCircle className="h-3 w-3 text-muted-foreground/50 cursor-help flex-shrink-0" />
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">{tooltipText}</p>
+            </TooltipContent>
+          </Tooltip>
+        )}
+      </div>
       <div className="flex items-center gap-1">
         <span
           className={cn(
-            "text-xl font-semibold",
+            "text-xl font-semibold font-mono tabular-nums",
             trend === "up" && "text-green-600",
             trend === "down" && "text-red-600",
           )}
@@ -135,19 +179,21 @@ function ReturnMetricsSection({ metrics }: ReturnMetricsSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           <MetricCard
             label="总收益率"
             value={metrics.totalReturn}
             unit="%"
             trend={totalReturnTrend}
             highlight
+            metricKey="totalReturn"
           />
           <MetricCard
             label="年化收益率"
             value={metrics.annualizedReturn}
             unit="%"
             trend={annualizedTrend}
+            metricKey="annualizedReturn"
           />
           {metrics.alpha !== undefined && (
             <MetricCard
@@ -155,12 +201,14 @@ function ReturnMetricsSection({ metrics }: ReturnMetricsSectionProps) {
               value={metrics.alpha}
               unit="%"
               trend={alphaTrend}
+              metricKey="alpha"
             />
           )}
           <MetricCard
             label="收益波动率"
             value={(metrics.returnVolatility * 100).toFixed(2)}
             unit="%"
+            metricKey="returnVolatility"
           />
           {metrics.bestMonth !== undefined && (
             <MetricCard
@@ -215,37 +263,42 @@ function RiskMetricsSection({ metrics }: RiskMetricsSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           <MetricCard
             label="最大回撤"
             value={-metrics.maxDrawdown}
             unit="%"
             trend="down"
             highlight={drawdownSeverity === "error"}
+            metricKey="maxDrawdown"
           />
           <MetricCard
             label="回撤持续天数"
             value={metrics.maxDrawdownDuration}
             unit="天"
+            metricKey="maxDrawdownDuration"
           />
           <MetricCard
             label="夏普比率"
             value={metrics.sharpeRatio}
             trend={sharpeTrend}
             highlight
+            metricKey="sharpeRatio"
           />
           <MetricCard
             label="索提诺比率"
             value={metrics.sortinoRatio}
             trend={metrics.sortinoRatio >= 1.5 ? "up" : "neutral"}
+            metricKey="sortinoRatio"
           />
           <MetricCard
             label="卡玛比率"
             value={metrics.calmarRatio}
             trend={metrics.calmarRatio >= 1 ? "up" : "neutral"}
+            metricKey="calmarRatio"
           />
           {metrics.var95 !== undefined && (
-            <MetricCard label="VaR (95%)" value={-metrics.var95} unit="%" />
+            <MetricCard label="VaR (95%)" value={-metrics.var95} unit="%" metricKey="var95" />
           )}
         </div>
       </CardContent>
@@ -280,45 +333,51 @@ function TradingMetricsSection({ metrics }: TradingMetricsSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
           <MetricCard
             label="胜率"
             value={metrics.winRate}
             unit="%"
             trend={winRateTrend}
             highlight
+            metricKey="winRate"
           />
           <MetricCard
             label="盈亏比"
             value={metrics.profitFactor}
             trend={profitFactorTrend}
             highlight
+            metricKey="profitFactor"
           />
           <MetricCard
             label="总交易次数"
             value={metrics.totalTrades}
             unit="笔"
+            metricKey="totalTrades"
           />
           <MetricCard
             label="平均持仓天数"
             value={metrics.avgHoldingDays}
             unit="天"
+            metricKey="avgHoldingDays"
           />
           <MetricCard
             label="最大连胜"
             value={metrics.maxConsecutiveWins}
             unit="次"
+            metricKey="maxConsecutiveWins"
           />
           <MetricCard
             label="最大连亏"
             value={metrics.maxConsecutiveLosses}
             unit="次"
             trend={metrics.maxConsecutiveLosses >= 5 ? "down" : "neutral"}
+            metricKey="maxConsecutiveLosses"
           />
         </div>
 
         {/* Additional trading details */}
-        <div className="mt-3 pt-3 border-t grid grid-cols-4 gap-2 text-sm">
+        <div className="mt-3 pt-3 border-t grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
           <div className="text-center">
             <div className="text-muted-foreground">盈利笔数</div>
             <div className="font-medium text-green-600">
@@ -373,8 +432,8 @@ function DiagnosticSection({ metrics }: DiagnosticSectionProps) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-3 gap-3">
-          <MetricCard label="盈利因子" value={tradingMetrics.profitFactor} />
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-3">
+          <MetricCard label="盈利因子" value={tradingMetrics.profitFactor} metricKey="profitFactor" />
           <MetricCard
             label="月均交易"
             value={tradingMetrics.tradingFrequency}
@@ -385,12 +444,14 @@ function DiagnosticSection({ metrics }: DiagnosticSectionProps) {
             value={tradingMetrics.maxSingleWin}
             unit="%"
             trend="up"
+            metricKey="maxSingleWin"
           />
           <MetricCard
             label="最大单笔亏损"
             value={tradingMetrics.maxSingleLoss}
             unit="%"
             trend="down"
+            metricKey="maxSingleLoss"
           />
           {riskMetrics.drawdownRecoveryDays !== undefined && (
             <MetricCard
@@ -441,9 +502,9 @@ function StockRankingTable({
               <TableHead className="w-12">排名</TableHead>
               <TableHead>股票</TableHead>
               <TableHead className="text-right">收益率</TableHead>
-              <TableHead className="text-right">胜率</TableHead>
-              <TableHead className="text-right">交易数</TableHead>
-              <TableHead className="text-right">贡献度</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">胜率</TableHead>
+              <TableHead className="text-right hidden sm:table-cell">交易数</TableHead>
+              <TableHead className="text-right hidden md:table-cell">贡献度</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -467,11 +528,11 @@ function StockRankingTable({
                   {stock.totalReturn >= 0 ? "+" : ""}
                   {stock.totalReturn.toFixed(2)}%
                 </TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right hidden sm:table-cell">
                   {stock.winRate.toFixed(1)}%
                 </TableCell>
-                <TableCell className="text-right">{stock.tradeCount}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className="text-right hidden sm:table-cell">{stock.tradeCount}</TableCell>
+                <TableCell className="text-right hidden md:table-cell">
                   {stock.contribution.toFixed(1)}%
                 </TableCell>
               </TableRow>
@@ -556,11 +617,12 @@ export function ResultDashboard({
   }, [riskMetrics, tradingMetrics]);
 
   return (
+    <TooltipProvider>
     <div className={cn("space-y-4", className)}>
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <h2 className="text-lg font-semibold">回测结果</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+          <h2 className="text-base sm:text-lg font-semibold">回测结果</h2>
           <Badge variant={summaryBadge.variant}>{summaryBadge.label}</Badge>
           {target.mode === "sector" && target.sector && (
             <Badge variant="outline">{target.sector.name}</Badge>
@@ -602,7 +664,7 @@ export function ResultDashboard({
       )}
 
       {/* Four metrics sections */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <ReturnMetricsSection metrics={returnMetrics} />
         <RiskMetricsSection metrics={riskMetrics} />
         <TradingMetricsSection metrics={tradingMetrics} />
@@ -627,6 +689,7 @@ export function ResultDashboard({
           <StockRankingTable stocks={stockResults} title="组合内股票表现" />
         )}
     </div>
+    </TooltipProvider>
   );
 }
 

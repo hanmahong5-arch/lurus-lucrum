@@ -109,7 +109,7 @@ function ScoreRangeIndicator({
  * Single builtin template card
  */
 /** Tier hierarchy for access checks */
-const TIER_ORDER: Record<PlanTier, number> = { free: 0, standard: 1, premium: 2 };
+const TIER_ORDER: Record<PlanTier, number> = { free: 0, basic: 1, pro: 2, enterprise: 3 };
 
 function isTemplateLocked(templateTier: PlanTier, userPlan: PlanTier): boolean {
   return TIER_ORDER[userPlan] < TIER_ORDER[templateTier];

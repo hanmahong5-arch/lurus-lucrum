@@ -1,229 +1,219 @@
 "use client";
 
 import { useState } from "react";
+import { useAccountOverview } from "@/hooks/useAccountOverview";
+import {
+  PLAN_DISPLAY,
+  getLimitsForPlan,
+  normalizePlanTier,
+  type PlanTier,
+  type PlanDisplayInfo,
+} from "@/lib/config/plan-limits";
 
-/**
- * Subscription plan type
- */
-type PlanId = "free" | "standard" | "premium";
-
-/**
- * Plan configuration
- */
-interface Plan {
-  id: PlanId;
-  name: string;
-  nameEn: string;
-  icon: string;
-  description: string;
-  priceMonthly: number;
-  priceYearly: number;
-  features: Array<{ text: string; included: boolean }>;
-  highlighted?: boolean;
-}
-
-/**
- * Subscription plans data
- */
-const PLANS: Plan[] = [
+// Feature comparison rows for the plan table
+const FEATURE_ROWS: Array<{
+  label: string;
+  key: string;
+  getValue: (tier: PlanTier) => string;
+}> = [
   {
-    id: "free",
-    name: "顾婶",
-    nameEn: "GuShen Aunt",
-    icon: "👵",
-    description: "投资小白的贴心助手",
-    priceMonthly: 0,
-    priceYearly: 0,
-    features: [
-      { text: "基础市场资讯", included: true },
-      { text: "术语解释和入门教育", included: true },
-      { text: "每日3次AI对话", included: true },
-      { text: "行业轮动分析", included: false },
-      { text: "个股深度分析", included: false },
-      { text: "邮件推送服务", included: false },
-      { text: "实时信号通知", included: false },
-    ],
+    label: "AI 策略生成",
+    key: "aiCalls",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).dailyAiCalls;
+      return v === Infinity ? "无限" : `${v} 次/天`;
+    },
   },
   {
-    id: "standard",
-    name: "估神",
-    nameEn: "GuShen Master",
-    icon: "🧙",
-    description: "把握大势的方向指南",
-    priceMonthly: 99,
-    priceYearly: 999,
-    features: [
-      { text: "包含顾婶所有功能", included: true },
-      { text: "行业轮动分析", included: true },
-      { text: "宏观政策解读", included: true },
-      { text: "三道六术框架分析", included: true },
-      { text: "每日50次AI对话", included: true },
-      { text: "个股深度分析", included: false },
-      { text: "邮件推送服务", included: false },
-    ],
-    highlighted: true,
+    label: "单股回测",
+    key: "backtests",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).dailyBacktests;
+      return v === Infinity ? "无限" : `${v} 次/天`;
+    },
   },
   {
-    id: "premium",
-    name: "股神",
-    nameEn: "GuShen God",
-    icon: "🏆",
-    description: "精准选股的私人顾问",
-    priceMonthly: 999,
-    priceYearly: 9999,
-    features: [
-      { text: "包含估神所有功能", included: true },
-      { text: "个股深度分析", included: true },
-      { text: "AI选股推荐", included: true },
-      { text: "每日邮件推送", included: true },
-      { text: "实时信号通知", included: true },
-      { text: "私人投顾1对1", included: true },
-      { text: "无限AI对话", included: true },
-    ],
+    label: "历史数据",
+    key: "history",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).historyYears;
+      return v === Infinity ? "全量" : `近 ${v} 年`;
+    },
+  },
+  {
+    label: "多股验证",
+    key: "multiStock",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).maxMultiStocks;
+      if (v === 0) return "—";
+      if (v === Infinity) return "无限";
+      return `${v} 只/次`;
+    },
+  },
+  {
+    label: "AI 投资顾问",
+    key: "advisor",
+    getValue: (t) => {
+      const m = getLimitsForPlan(t).advisorMode;
+      if (m === "none") return "—";
+      if (m === "single") return "基础模式";
+      return "完整版 (11 Agent + 辩论)";
+    },
+  },
+  {
+    label: "策略诊断",
+    key: "diagnostic",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).diagnosticRules;
+      if (v === 0) return "—";
+      if (v === Infinity) return "完整";
+      return `${v} 条规则`;
+    },
+  },
+  {
+    label: "策略市场",
+    key: "marketplace",
+    getValue: (t) => {
+      const m = getLimitsForPlan(t).marketplace;
+      if (m === "browse") return "只读浏览";
+      if (m === "subscribe") return "可订阅 (3个)";
+      return "无限订阅 + 上架";
+    },
+  },
+  {
+    label: "数据导出",
+    key: "export",
+    getValue: (t) => {
+      const m = getLimitsForPlan(t).dataExport;
+      if (m === "none") return "—";
+      if (m === "csv") return "CSV";
+      return "CSV + JSON + PDF";
+    },
+  },
+  {
+    label: "结果保存",
+    key: "saved",
+    getValue: (t) => {
+      const v = getLimitsForPlan(t).maxSavedResults;
+      return v === Infinity ? "无限" : `${v} 份`;
+    },
+  },
+  {
+    label: "AI Token (月)",
+    key: "tokens",
+    getValue: (t) => {
+      const map: Record<string, string> = {
+        free: "50K",
+        basic: "500K",
+        pro: "5M",
+        enterprise: "无限",
+      };
+      return map[t] ?? "50K";
+    },
   },
 ];
 
+function formatPrice(plan: PlanDisplayInfo, cycle: "monthly" | "yearly"): string {
+  if (plan.priceMonthly === 0) return "免费";
+  if (plan.priceMonthly < 0) return "联系我们";
+  if (cycle === "yearly") {
+    const monthlyEquiv = Math.round(plan.priceYearly / 12);
+    return `¥${monthlyEquiv}`;
+  }
+  return `¥${plan.priceMonthly}`;
+}
+
+function PriceSuffix({ plan, cycle }: { plan: PlanDisplayInfo; cycle: "monthly" | "yearly" }) {
+  if (plan.priceMonthly <= 0) return null;
+  return (
+    <span className="text-xs text-white/40">/月</span>
+  );
+}
+
+function YearlySaving({ plan }: { plan: PlanDisplayInfo }) {
+  if (plan.priceMonthly <= 0) return null;
+  const monthlyTotal = plan.priceMonthly * 12;
+  const saved = monthlyTotal - plan.priceYearly;
+  const pct = Math.round((saved / monthlyTotal) * 100);
+  return (
+    <span className="text-xs text-profit">
+      年付省 {pct}%
+    </span>
+  );
+}
+
 /**
  * Subscription Settings Component
- * 订阅管理组件
- *
- * Features:
- * - Current plan display
- * - Plan comparison
- * - Upgrade/downgrade options
- * - Billing history
- * - Usage statistics
+ * 4-tier pricing: Explorer (free) / Trader (49) / Pro (149) / Enterprise
  */
 export function SubscriptionSettings() {
-  // Mock current subscription - in production, this would come from API
-  const [currentPlan] = useState<PlanId>("free");
+  const { data: overview, isLoading } = useAccountOverview();
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [isUpgrading, setIsUpgrading] = useState(false);
 
-  // Mock usage data
-  const usage = {
-    conversationsUsed: 2,
-    conversationsLimit: 3,
-    analysisUsed: 0,
-    analysisLimit: 0,
-    resetDate: new Date(Date.now() + 24 * 60 * 60 * 1000), // Tomorrow
-  };
+  const currentPlan = normalizePlanTier(overview?.subscription?.plan_code);
+  const currentDisplay = PLAN_DISPLAY.find((p) => p.code === currentPlan) ?? PLAN_DISPLAY[0]!;
 
-  /**
-   * Handle plan upgrade
-   */
-  const handleUpgrade = async (planId: PlanId) => {
-    if (planId === currentPlan) return;
-
+  const handleUpgrade = async (code: PlanTier) => {
+    if (code === currentPlan) return;
+    if (code === "enterprise") {
+      window.open("mailto:sales@lurus.cn?subject=GuShen 企业版咨询", "_blank");
+      return;
+    }
     setIsUpgrading(true);
-
-    // Simulate API call
+    // TODO: integrate with real payment API
     await new Promise((resolve) => setTimeout(resolve, 1500));
-
-    alert(`升级到${PLANS.find((p) => p.id === planId)?.name}功能即将推出！\nUpgrade to ${planId} coming soon!`);
-
+    alert(`升级到${PLAN_DISPLAY.find((p) => p.code === code)?.name}功能即将推出！`);
     setIsUpgrading(false);
   };
 
-  /**
-   * Format price display
-   */
-  const formatPrice = (price: number): string => {
-    if (price === 0) return "免费";
-    return `¥${price}`;
-  };
-
-  /**
-   * Get current plan details
-   */
-  const currentPlanDetails = PLANS.find((p) => p.id === currentPlan);
+  // Usage stats from account overview
+  const walletBalance = overview?.wallet?.balance ?? 0;
+  const subStatus = overview?.subscription?.status;
+  const subExpires = overview?.subscription?.expires_at;
 
   return (
     <div className="space-y-8">
-      {/* Current subscription */}
+      {/* Current plan banner */}
       <div className="p-6 bg-gradient-to-br from-accent/10 to-accent/5 rounded-xl border border-accent/30">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-4">
             <div className="w-16 h-16 rounded-xl bg-accent/20 flex items-center justify-center text-3xl">
-              {currentPlanDetails?.icon}
+              {currentDisplay.icon}
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-xl font-bold text-white">
-                  {currentPlanDetails?.name}
+                  {currentDisplay.name}
                 </h3>
                 <span className="text-sm text-white/50">
-                  {currentPlanDetails?.nameEn}
+                  {currentDisplay.nameEn}
                 </span>
               </div>
               <p className="text-sm text-white/60 mt-1">
-                {currentPlanDetails?.description}
+                {currentDisplay.tagline}
               </p>
               <div className="flex items-center gap-3 mt-3">
                 <span className="px-2 py-0.5 text-xs rounded-full bg-profit/20 text-profit border border-profit/30">
-                  ✓ 当前套餐
+                  当前套餐
                 </span>
-                {currentPlan === "free" && (
+                {subStatus === "active" && subExpires && (
                   <span className="text-xs text-white/40">
-                    永久免费使用
+                    到期: {new Date(subExpires).toLocaleDateString("zh-CN")}
                   </span>
+                )}
+                {currentPlan === "free" && (
+                  <span className="text-xs text-white/40">永久免费</span>
                 )}
               </div>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Usage statistics */}
-      <div>
-        <h3 className="text-base font-medium text-white mb-4 flex items-center gap-2">
-          📊 使用量统计
-          <span className="text-white/40 font-normal">Usage</span>
-        </h3>
-
-        <div className="grid grid-cols-2 gap-4">
-          {/* Conversations */}
-          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-white/70">AI对话</span>
-              <span className="text-sm text-white">
-                {usage.conversationsUsed} / {usage.conversationsLimit === Infinity ? "∞" : usage.conversationsLimit}
-              </span>
+          {/* LuBell balance */}
+          <div className="text-right hidden sm:block">
+            <span className="text-xs text-white/40">鹿贝余额</span>
+            <div className="text-lg font-mono tabular-nums text-amber-400 mt-0.5">
+              {walletBalance.toFixed(2)} <span className="text-xs">LB</span>
             </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-accent rounded-full transition-all"
-                style={{
-                  width: `${Math.min((usage.conversationsUsed / usage.conversationsLimit) * 100, 100)}%`,
-                }}
-              />
-            </div>
-            <p className="text-xs text-white/40 mt-2">
-              {usage.resetDate.toLocaleDateString("zh-CN")} 重置
-            </p>
-          </div>
-
-          {/* Analysis */}
-          <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-sm text-white/70">深度分析</span>
-              <span className="text-sm text-white">
-                {usage.analysisLimit === 0 ? (
-                  <span className="text-white/40">不可用</span>
-                ) : (
-                  `${usage.analysisUsed} / ${usage.analysisLimit}`
-                )}
-              </span>
-            </div>
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-white/20 rounded-full"
-                style={{ width: "0%" }}
-              />
-            </div>
-            <p className="text-xs text-white/40 mt-2">
-              升级后解锁
-            </p>
           </div>
         </div>
       </div>
@@ -234,8 +224,7 @@ export function SubscriptionSettings() {
       <div>
         <div className="flex items-center justify-between mb-6">
           <h3 className="text-base font-medium text-white flex items-center gap-2">
-            💎 套餐对比
-            <span className="text-white/40 font-normal">Plans</span>
+            套餐对比
           </h3>
 
           {/* Billing cycle toggle */}
@@ -259,104 +248,135 @@ export function SubscriptionSettings() {
               }`}
             >
               年付
-              <span className="ml-1 text-xs text-profit">省17%</span>
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-3 gap-4">
-          {PLANS.map((plan) => (
-            <div
-              key={plan.id}
-              className={`relative p-5 rounded-xl border transition ${
-                plan.highlighted
-                  ? "bg-accent/5 border-accent/40"
-                  : "bg-white/5 border-white/10"
-              } ${plan.id === currentPlan ? "ring-2 ring-accent" : ""}`}
-            >
-              {plan.highlighted && (
-                <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 text-xs rounded-full bg-accent text-primary-600 font-medium">
-                  推荐
-                </div>
-              )}
-
-              {/* Plan header */}
-              <div className="text-center mb-4">
-                <div className="text-3xl mb-2">{plan.icon}</div>
-                <h4 className="text-lg font-bold text-white">{plan.name}</h4>
-                <p className="text-xs text-white/50">{plan.nameEn}</p>
-              </div>
-
-              {/* Price */}
-              <div className="text-center mb-4">
-                <div className="text-2xl font-bold text-white">
-                  {formatPrice(billingCycle === "monthly" ? plan.priceMonthly : plan.priceYearly)}
-                </div>
-                {plan.priceMonthly > 0 && (
-                  <p className="text-xs text-white/40">
-                    /{billingCycle === "monthly" ? "月" : "年"}
-                  </p>
-                )}
-              </div>
-
-              {/* Features */}
-              <ul className="space-y-2 mb-6">
-                {plan.features.map((feature, idx) => (
-                  <li
-                    key={idx}
-                    className={`flex items-center gap-2 text-xs ${
-                      feature.included ? "text-white/70" : "text-white/30"
-                    }`}
-                  >
-                    <span className={feature.included ? "text-profit" : "text-white/20"}>
-                      {feature.included ? "✓" : "✗"}
-                    </span>
-                    {feature.text}
-                  </li>
-                ))}
-              </ul>
-
-              {/* Action button */}
-              <button
-                onClick={() => handleUpgrade(plan.id)}
-                disabled={plan.id === currentPlan || isUpgrading}
-                className={`w-full py-2 text-sm rounded-lg font-medium transition ${
-                  plan.id === currentPlan
-                    ? "bg-white/10 text-white/50 cursor-not-allowed"
-                    : plan.highlighted
-                    ? "bg-accent text-primary-600 hover:bg-accent/90"
-                    : "bg-white/10 text-white hover:bg-white/20"
-                }`}
+        {/* 4-column pricing grid */}
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {PLAN_DISPLAY.map((plan) => {
+            const isCurrent = plan.code === currentPlan;
+            return (
+              <div
+                key={plan.code}
+                className={`relative p-4 rounded-xl border transition ${
+                  plan.highlighted
+                    ? "bg-accent/5 border-accent/40"
+                    : "bg-white/5 border-white/10"
+                } ${isCurrent ? "ring-2 ring-accent" : ""}`}
               >
-                {plan.id === currentPlan
-                  ? "当前套餐"
-                  : plan.id === "free"
-                  ? "降级"
-                  : "升级"}
-              </button>
-            </div>
-          ))}
+                {plan.highlighted && (
+                  <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 px-2.5 py-0.5 text-[10px] rounded-full bg-accent text-primary-600 font-medium">
+                    推荐
+                  </div>
+                )}
+
+                {/* Header */}
+                <div className="text-center mb-3">
+                  <div className="text-2xl mb-1">{plan.icon}</div>
+                  <h4 className="text-base font-bold text-white">{plan.name}</h4>
+                  <p className="text-[10px] text-white/40">{plan.nameEn}</p>
+                </div>
+
+                {/* Price */}
+                <div className="text-center mb-1">
+                  <span className="text-2xl font-bold text-white font-mono tabular-nums">
+                    {formatPrice(plan, billingCycle)}
+                  </span>
+                  <PriceSuffix plan={plan} cycle={billingCycle} />
+                </div>
+                <div className="text-center mb-4 h-4">
+                  {billingCycle === "yearly" && <YearlySaving plan={plan} />}
+                </div>
+
+                {/* Tagline */}
+                <p className="text-[11px] text-white/50 text-center mb-4 min-h-[2rem]">
+                  {plan.tagline}
+                </p>
+
+                {/* Action */}
+                <button
+                  onClick={() => handleUpgrade(plan.code)}
+                  disabled={isCurrent || isUpgrading || isLoading}
+                  className={`w-full py-2 text-sm rounded-lg font-medium transition ${
+                    isCurrent
+                      ? "bg-white/10 text-white/50 cursor-not-allowed"
+                      : plan.highlighted
+                      ? "bg-accent text-primary-600 hover:bg-accent/90"
+                      : plan.code === "enterprise"
+                      ? "bg-white/10 text-white hover:bg-white/20"
+                      : "bg-white/10 text-white hover:bg-white/20"
+                  }`}
+                >
+                  {isCurrent
+                    ? "当前套餐"
+                    : plan.code === "enterprise"
+                    ? "联系销售"
+                    : "升级"}
+                </button>
+              </div>
+            );
+          })}
         </div>
       </div>
 
       <div className="border-t border-border" />
 
-      {/* Billing history hint */}
-      <div className="p-4 bg-white/5 rounded-lg border border-white/10">
-        <h4 className="text-sm font-medium text-white mb-1 flex items-center gap-2">
-          🧾 账单历史
-          <span className="text-white/40 font-normal">Billing History</span>
-        </h4>
-        <p className="text-xs text-white/50 mb-3">
-          查看历史账单和发票下载
-        </p>
-        <button
-          onClick={() => alert("账单历史功能即将推出 / Billing history coming soon")}
-          className="text-sm text-accent hover:text-accent/80 transition"
-        >
-          查看账单历史 →
-        </button>
+      {/* Feature comparison table */}
+      <div>
+        <h3 className="text-base font-medium text-white mb-4">
+          功能对比详情
+        </h3>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-white/10">
+                <th className="text-left text-white/50 py-2 pr-4 font-normal">功能</th>
+                {PLAN_DISPLAY.map((plan) => (
+                  <th
+                    key={plan.code}
+                    className={`text-center py-2 px-2 font-medium ${
+                      plan.code === currentPlan ? "text-accent" : "text-white/70"
+                    }`}
+                  >
+                    {plan.name}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {FEATURE_ROWS.map((row) => (
+                <tr key={row.key} className="border-b border-white/5">
+                  <td className="py-2.5 pr-4 text-white/60 whitespace-nowrap">
+                    {row.label}
+                  </td>
+                  {PLAN_DISPLAY.map((plan) => {
+                    const val = row.getValue(plan.code);
+                    const isUnavailable = val === "—";
+                    return (
+                      <td
+                        key={plan.code}
+                        className={`text-center py-2.5 px-2 font-mono tabular-nums text-xs ${
+                          isUnavailable
+                            ? "text-white/20"
+                            : plan.code === currentPlan
+                            ? "text-accent"
+                            : "text-white/70"
+                        }`}
+                      >
+                        {val}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
+
+      <div className="border-t border-border" />
 
       {/* FAQ */}
       <div className="p-4 bg-white/5 rounded-lg border border-white/10">
@@ -369,7 +389,7 @@ export function SubscriptionSettings() {
               如何升级套餐？
             </summary>
             <p className="text-white/50 mt-1 pl-4">
-              选择您需要的套餐并点击升级按钮，按照指引完成支付即可。
+              选择您需要的套餐并点击升级按钮，支持支付宝和微信支付。
             </p>
           </details>
           <details className="group">
@@ -377,15 +397,23 @@ export function SubscriptionSettings() {
               可以随时取消订阅吗？
             </summary>
             <p className="text-white/50 mt-1 pl-4">
-              是的，您可以随时取消订阅。取消后，您可以继续使用到当前计费周期结束。
+              是的，您可以随时取消订阅。取消后可继续使用到当前计费周期结束。
             </p>
           </details>
           <details className="group">
             <summary className="text-white/70 cursor-pointer hover:text-white transition">
-              支持哪些支付方式？
+              AI Token 用完后怎么办？
             </summary>
             <p className="text-white/50 mt-1 pl-4">
-              目前支持支付宝、微信支付和银行卡支付。
+              付费用户超出月度配额后会自动从鹿贝余额扣款（1 LB = 10,000 tokens），免费用户需升级。
+            </p>
+          </details>
+          <details className="group">
+            <summary className="text-white/70 cursor-pointer hover:text-white transition">
+              年付可以退款吗？
+            </summary>
+            <p className="text-white/50 mt-1 pl-4">
+              年付开始 7 天内可全额退款，之后按已使用月数折算退还剩余部分。
             </p>
           </details>
         </div>

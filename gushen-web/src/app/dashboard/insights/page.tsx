@@ -145,7 +145,7 @@ export default function InsightsPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-[1920px] mx-auto p-4">
+      <main className="max-w-[1920px] mx-auto px-3 sm:p-4">
         {/* Page Header */}
         <div className="mb-6">
           <div className="flex items-center justify-between">
@@ -173,7 +173,7 @@ export default function InsightsPage() {
         </div>
 
         {/* Top Summary Cards */}
-        <div className="grid grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-6">
           {/* Northbound Capital Card */}
           <div className="bg-surface rounded-xl border border-border p-4">
             <div className="flex items-center justify-between mb-2">
@@ -313,7 +313,7 @@ export default function InsightsPage() {
         </div>
 
         {/* Tab Navigation */}
-        <div className="flex border-b border-border mb-4">
+        <div className="flex border-b border-border mb-4 overflow-x-auto scrollbar-hide">
           <button
             onClick={() => setActiveTab("capital")}
             className={`px-6 py-3 text-sm font-medium transition ${
@@ -357,9 +357,9 @@ export default function InsightsPage() {
         </div>
 
         {/* Tab Content */}
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Main Content Area */}
-          <div className="col-span-9">
+          <div className="lg:col-span-9">
             <div className="bg-surface rounded-xl border border-border">
               {/* Capital Flow Tab */}
               {activeTab === "capital" && (
@@ -586,7 +586,7 @@ export default function InsightsPage() {
           </div>
 
           {/* Right Sidebar - Quick Indicators */}
-          <div className="col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-4">
             {/* Market Indices */}
             <div className="bg-surface rounded-xl border border-border p-4">
               <h3 className="text-sm font-medium text-white mb-3">主要指数</h3>

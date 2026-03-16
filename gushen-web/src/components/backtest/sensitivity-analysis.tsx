@@ -201,7 +201,7 @@ function SingleParamChart({ data, onValueSelect }: SingleParamChartProps) {
       </div>
 
       {/* Summary */}
-      <div className="grid grid-cols-3 gap-3 text-sm">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
         <div className="p-2 rounded bg-muted/50">
           <div className="text-muted-foreground">最优收益</div>
           <div className="font-medium text-green-600">
@@ -365,7 +365,7 @@ function HeatmapChart({ data, onCellSelect }: HeatmapChartProps) {
           <Target className="h-4 w-4 text-yellow-600" />
           <span className="font-medium">最优参数组合</span>
         </div>
-        <div className="mt-2 grid grid-cols-3 gap-4 text-sm">
+        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-4 text-sm">
           <div>
             <span className="text-muted-foreground">{param1Label}:</span>
             <span className="ml-2 font-mono font-medium">

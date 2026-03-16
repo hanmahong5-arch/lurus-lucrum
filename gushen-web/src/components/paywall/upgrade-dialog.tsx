@@ -110,7 +110,7 @@ function LimitContent({
           <p className="font-mono text-xl text-blue-400">{countdown || "计算中..."}</p>
         </div>
         <p className="text-sm text-gray-400">
-          升级到 Standard 可享受每日 50 次{featureLabel}，Premium 则无限制。
+          升级到进阶版可享受每日 50 次{featureLabel}，专业版则无限制。
         </p>
       </div>
     </>
@@ -126,7 +126,7 @@ function LockContent({ templateName }: { templateName: string }) {
           模板需要升级解锁
         </DialogTitle>
         <DialogDescription className="text-gray-400">
-          <span className="text-white font-medium">{templateName}</span> 是 Standard 及以上计划专属模板
+          <span className="text-white font-medium">{templateName}</span> 是进阶版及以上计划专属模板
         </DialogDescription>
       </DialogHeader>
       <div className="space-y-3">

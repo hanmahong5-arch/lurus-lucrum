@@ -412,12 +412,12 @@ export default function TradingPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-[1920px] mx-auto p-4">
+      <main className="max-w-[1920px] mx-auto px-3 sm:p-4">
         {/* Market Overview Bar */}
-        <div className="mb-4 bg-surface rounded-xl border border-border p-3">
-          <div className="flex items-center justify-between">
+        <div className="mb-4 bg-surface rounded-xl border border-border p-3 overflow-x-auto">
+          <div className="flex items-center justify-between min-w-[600px] sm:min-w-0">
             {/* Indices */}
-            <div className="flex items-center gap-6">
+            <div className="flex items-center gap-3 sm:gap-6">
               {indicesLoading && !indices ? (
                 <div className="text-white/50 text-sm">加载指数...</div>
               ) : indicesError ? (
@@ -485,9 +485,9 @@ export default function TradingPage() {
           </div>
         </div>
 
-        <div className="grid grid-cols-12 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Left sidebar - Symbol selector */}
-          <div className="col-span-2">
+          <div className="lg:col-span-2">
             <div className="bg-surface rounded-xl border border-border p-3">
               <h3 className="text-sm font-medium text-white mb-3">
                 选择股票 / Symbol
@@ -547,7 +547,7 @@ export default function TradingPage() {
           </div>
 
           {/* Center - Chart */}
-          <div className="col-span-7">
+          <div className="lg:col-span-7">
             <KLineChart
               symbol={selectedSymbol}
               height={500}
@@ -559,7 +559,7 @@ export default function TradingPage() {
           </div>
 
           {/* Right sidebar - Order entry */}
-          <div className="col-span-3">
+          <div className="lg:col-span-3">
             <div className="bg-surface rounded-xl border border-border p-4">
               <h3 className="text-sm font-medium text-white mb-4">
                 下单 / Place Order
@@ -730,9 +730,9 @@ export default function TradingPage() {
         </div>
 
         {/* Bottom - Positions, Orders, and Market Data */}
-        <div className="mt-4 grid grid-cols-12 gap-4">
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
           {/* Main table section */}
-          <div className="col-span-9">
+          <div className="lg:col-span-9">
             <div className="bg-surface rounded-xl border border-border">
               {/* Tabs - Fixed z-index and button type for proper click handling */}
               <div className="flex border-b border-border relative z-10">
@@ -1059,7 +1059,7 @@ export default function TradingPage() {
           </div>
 
           {/* Right Side Panels - Orderbook, Indicators, and Data Status */}
-          <div className="col-span-3 space-y-4">
+          <div className="lg:col-span-3 space-y-4">
             {/* Level 2 Orderbook / 五档行情 */}
             <OrderbookPanel
               symbol={selectedSymbol}

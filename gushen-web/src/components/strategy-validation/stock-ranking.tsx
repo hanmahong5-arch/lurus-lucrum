@@ -400,7 +400,7 @@ const MobileCard = React.memo(
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-3 gap-2 text-xs">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
           <div>
             <div className="text-white/40">信号数</div>
             <div className="font-mono tabular-nums text-white/70">
@@ -1046,7 +1046,7 @@ export function StockRanking({
         )}
 
         {/* Summary Stats */}
-        <div className="grid grid-cols-3 gap-2 mt-4 pt-4 border-t border-border">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-4 pt-4 border-t border-border">
           <div className="text-center">
             <div className="text-xs text-white/40">平均胜率</div>
             <div className="text-sm font-medium text-white">

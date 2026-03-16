@@ -60,7 +60,7 @@ export default function StrategyScannerPage() {
   return (
     <div className="min-h-screen bg-background text-white flex flex-col">
       <DashboardHeader />
-      <main className="flex-1 p-6 overflow-hidden">
+      <main className="flex-1 px-4 sm:p-6 overflow-hidden">
         <div className="max-w-7xl mx-auto h-full">
           <div className="flex items-center justify-between mb-4">
             <div>

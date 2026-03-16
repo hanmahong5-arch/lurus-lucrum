@@ -12,6 +12,7 @@ import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-c
 import { StrategyWorkbenchPanel } from "@/components/strategy-editor/strategy-workbench-panel";
 import { StrategyLogicSummary } from "@/components/strategy-editor/strategy-logic-summary";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { WorkspaceStatusBar } from "@/components/dashboard/workspace-status-bar";
 import { TieredDemoSelector } from "@/components/onboarding";
 import { useOnboardingImport } from "@/hooks/use-onboarding-import";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
@@ -68,14 +69,17 @@ export default function DashboardPage() {
   // Code-parameter linkage state / 代码-参数联动状态
   const [focusedLine, setFocusedLine] = useState<number | null>(null);
 
-  // Calculate current workflow step (Phase 4 UX enhancement)
-  // 计算当前工作流步骤（Phase 4用户体验增强）
+  // Calculate current workflow step (Phase 4 UX / 7-step model)
+  // Maps to StrategyGuideCard 4-step type while tracking finer granularity
+  // 7 steps: 构思→生成→调参→回测→验证→诊断→保存
   const currentWorkflowStep = useMemo(() => {
-    if (!generatedCode) return "strategy"; // No code yet, user is defining strategy
-    if (!workspace.lastBacktestResult) return "parameters"; // Code generated, adjusting parameters
-    return "backtest"; // Has backtest result, analyzing results
+    if (!generatedCode && !isGenerating) return "strategy"; // Step 1: Ideation
+    if (isGenerating) return "strategy"; // Step 2: Generating (mapped to strategy phase)
+    if (!workspace.lastBacktestResult && !isBacktesting) return "parameters"; // Step 3: Tuning params
+    if (isBacktesting) return "backtest"; // Step 4: Running backtest
+    return "backtest"; // Step 5-7: Verification/diagnosis/save (mapped to backtest phase)
     // "validation" step is on strategy-validation page
-  }, [generatedCode, workspace.lastBacktestResult]);
+  }, [generatedCode, isGenerating, isBacktesting, workspace.lastBacktestResult]);
 
   // Parse current parameters from generated code for AI assistant
   // 从生成的代码中解析当前参数供AI助手使用
@@ -359,13 +363,13 @@ export default function DashboardPage() {
     return (
       <div className="min-h-screen bg-background">
         <div className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border h-14" />
-        <main className="max-w-7xl mx-auto px-6 py-8">
+        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
           <div className="space-y-6 animate-pulse">
             <div className="w-64 h-8 bg-surface rounded" />
-            <div className="grid lg:grid-cols-3 gap-6">
+            <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
               <div className="h-64 bg-surface rounded-xl" />
-              <div className="h-64 bg-surface rounded-xl" />
-              <div className="h-64 bg-surface rounded-xl" />
+              <div className="h-64 bg-surface rounded-xl hidden lg:block" />
+              <div className="h-64 bg-surface rounded-xl hidden lg:block" />
             </div>
           </div>
         </main>
@@ -380,16 +384,16 @@ export default function DashboardPage() {
       <DashboardHeader />
 
       {/* Main content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Page title */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">
+        <div className="mb-4 sm:mb-8">
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">
             AI 策略生成器
-            <span className="text-base font-normal text-white/50 ml-2">
+            <span className="text-sm sm:text-base font-normal text-white/50 ml-2 hidden sm:inline">
               / AI Strategy Generator
             </span>
           </h1>
-          <p className="text-white/60">
+          <p className="text-sm sm:text-base text-white/60">
             用自然语言描述你的交易策略，AI 将自动生成可执行的 VeighNa
             策略代码，支持参数微调和回测验证
           </p>
@@ -418,8 +422,8 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
           </div>
         )}
 
-        {/* Editor grid - 3 columns on large screens */}
-        <div className="grid lg:grid-cols-3 gap-6">
+        {/* Editor grid - 3 columns on large screens, single column mobile */}
+        <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
           {/* Left column - Input */}
           <div className="space-y-6" ref={strategyInputRef}>
             <StrategyInput
@@ -540,6 +544,11 @@ n        {/* Tiered onboarding demo selector - shown when no code exists (Story 
           </p>
         </div>
       </main>
+
+      {/* Bottom status bar */}
+      {user?.id && (
+        <WorkspaceStatusBar userId={user.id} />
+      )}
     </div>
   );
 }
