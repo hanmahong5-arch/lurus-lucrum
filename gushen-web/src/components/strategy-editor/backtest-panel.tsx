@@ -281,7 +281,7 @@ export function BacktestPanel({
   const [ahaSharpRatio, setAhaSharpRatio] = useState(0);
 
   // UI state
-  const [showConfig, setShowConfig] = useState(false);
+  const [showConfig, setShowConfig] = useState(true);
   const [showDetails, setShowDetails] = useState(false);
   const [showTrades, setShowTrades] = useState(false);
   const [tradeView, setTradeView] = useState<"card" | "table">("card");
