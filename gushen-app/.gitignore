@@ -1,0 +1,35 @@
+node_modules/
+.expo/
+dist/
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+*.orig.*
+web-build/
+
+# Env
+.env
+.env.local
+.env.production
+
+# Build artifacts
+android/
+ios/
+*.apk
+*.aab
+*.ipa
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# EAS
+play-store-key.json
