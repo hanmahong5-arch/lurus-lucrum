@@ -116,7 +116,7 @@ async function incrementUsage(userId: string, tokens: number, lbSpent = 0): Prom
 // ─── Identity service helpers ──────────────────────────────────────────────────
 
 /**
- * Resolve a numeric lurus-identity account ID from a Zitadel sub.
+ * Resolve a numeric lurus-platform account ID from a Zitadel sub.
  * Returns null when the identity service is unavailable (fail-open).
  */
 export async function resolveAccountId(zitadelSub: string): Promise<string | null> {
@@ -200,7 +200,7 @@ async function deductLubell(accountId: string, tokens: number): Promise<{ succes
 /**
  * Check whether the user has sufficient quota for an AI operation.
  *
- * @param accountId   lurus-identity account ID (numeric string)
+ * @param accountId   lurus-platform account ID (numeric string)
  * @param userId      gushen local user identifier (used as Redis key prefix)
  * @param estimatedTokens  Expected token consumption for this operation
  */
@@ -274,7 +274,7 @@ export async function checkAndConsumeQuota(
 }
 
 /**
- * Report actual token consumption to lurus-identity after a successful operation.
+ * Report actual token consumption to lurus-platform after a successful operation.
  * Fire-and-forget — never throws.
  */
 export function consumeQuota(params: {

@@ -15,6 +15,7 @@
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { verifyZitadelJWT } from "./jwt-verify";
 
 // ============================================================================
 // Types
@@ -52,6 +53,31 @@ interface AuthErrorResponse {
   error: string;
   message: string;
   code: string;
+}
+
+// ============================================================================
+// JWT Fallback Helper
+// ============================================================================
+
+/**
+ * Try to extract UserContext from Bearer JWT when NextAuth session is absent.
+ * This enables mobile apps (gushen-app) that authenticate via Zitadel OIDC
+ * to call gushen-web API routes directly.
+ */
+async function getUserFromBearerJWT(request: NextRequest): Promise<UserContext | null> {
+  const authHeader = request.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+
+  const token = authHeader.slice(7);
+  const claims = await verifyZitadelJWT(token);
+  if (!claims?.sub) return null;
+
+  return {
+    userId: claims.sub,
+    email: claims.email ?? "",
+    name: claims.name ?? claims.preferred_username ?? null,
+    role: "free", // Real tier is resolved from lurus-platform entitlements, not JWT
+  };
 }
 
 // ============================================================================
@@ -93,49 +119,27 @@ export async function withUser<T>(
     // 从 NextAuth.js 获取会话
     const session = await getServerSession(authOptions);
 
-    // Validate session exists
-    // 验证会话是否存在
-    if (!session) {
+    let userContext: UserContext | null = null;
+
+    if (session?.user?.id) {
+      // Extract user context from NextAuth session
+      userContext = {
+        userId: session.user.id,
+        email: session.user.email || "",
+        name: session.user.name || null,
+        role: session.user.role || "free",
+      };
+    } else {
+      // Fallback: try Zitadel JWT from Authorization header (mobile app)
+      userContext = await getUserFromBearerJWT(request);
+    }
+
+    if (!userContext?.userId) {
       return NextResponse.json(
         {
           error: "Unauthorized",
           message: "请先登录 / Please log in first",
           code: "AUTH_NO_SESSION",
-        },
-        { status: 401 }
-      ) as NextResponse<AuthErrorResponse>;
-    }
-
-    // Validate user exists in session
-    // 验证会话中是否存在用户
-    if (!session.user) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-          message: "无效的用户会话 / Invalid user session",
-          code: "AUTH_NO_USER",
-        },
-        { status: 401 }
-      ) as NextResponse<AuthErrorResponse>;
-    }
-
-    // Extract user context
-    // 提取用户上下文
-    const userContext: UserContext = {
-      userId: session.user.id,
-      email: session.user.email || "",
-      name: session.user.name || null,
-      role: session.user.role || "free",
-    };
-
-    // Validate userId exists
-    // 验证用户 ID 是否存在
-    if (!userContext.userId) {
-      return NextResponse.json(
-        {
-          error: "Unauthorized",
-          message: "用户ID缺失 / User ID missing",
-          code: "AUTH_NO_USER_ID",
         },
         { status: 401 }
       ) as NextResponse<AuthErrorResponse>;
@@ -219,11 +223,23 @@ export async function withRole<T>(
   request: NextRequest,
   handler: AuthenticatedHandler<T>
 ): Promise<NextResponse<T | AuthErrorResponse>> {
-  // First authenticate the user
-  // 首先验证用户身份
+  // Authenticate the user (session or JWT fallback)
   const session = await getServerSession(authOptions);
 
-  if (!session || !session.user || !session.user.id) {
+  let userContext: UserContext | null = null;
+
+  if (session?.user?.id) {
+    userContext = {
+      userId: session.user.id,
+      email: session.user.email || "",
+      name: session.user.name || null,
+      role: session.user.role || "free",
+    };
+  } else {
+    userContext = await getUserFromBearerJWT(request);
+  }
+
+  if (!userContext?.userId) {
     return NextResponse.json(
       {
         error: "Unauthorized",
@@ -233,13 +249,6 @@ export async function withRole<T>(
       { status: 401 }
     ) as NextResponse<AuthErrorResponse>;
   }
-
-  const userContext: UserContext = {
-    userId: session.user.id,
-    email: session.user.email || "",
-    name: session.user.name || null,
-    role: session.user.role || "free",
-  };
 
   // Check role level
   // 检查角色级别
@@ -297,18 +306,19 @@ export async function withOptionalUser<T>(
   try {
     const session = await getServerSession(authOptions);
 
-    if (!session || !session.user || !session.user.id) {
-      // No valid session, proceed without user context
-      // 无有效会话，不使用用户上下文继续
-      return await handler(request, null);
-    }
+    let userContext: UserContext | null = null;
 
-    const userContext: UserContext = {
-      userId: session.user.id,
-      email: session.user.email || "",
-      name: session.user.name || null,
-      role: session.user.role || "free",
-    };
+    if (session?.user?.id) {
+      userContext = {
+        userId: session.user.id,
+        email: session.user.email || "",
+        name: session.user.name || null,
+        role: session.user.role || "free",
+      };
+    } else {
+      // Fallback: try Zitadel JWT from Authorization header (mobile app)
+      userContext = await getUserFromBearerJWT(request);
+    }
 
     return await handler(request, userContext);
   } catch (error) {

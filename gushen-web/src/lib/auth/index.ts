@@ -22,3 +22,6 @@ export {
   type UserContext,
   type AuthenticatedHandler,
 } from "./with-user";
+
+// JWT verification for mobile app Bearer token fallback
+export { verifyZitadelJWT, type ZitadelClaims } from "./jwt-verify";

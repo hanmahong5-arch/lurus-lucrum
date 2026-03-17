@@ -2,7 +2,7 @@
  * Plan Limits Configuration
  * Single source of truth for feature limits per subscription plan.
  *
- * Tier codes match lurus-identity plan_code values:
+ * Tier codes match lurus-platform plan_code values:
  *   free → Explorer | basic → Trader | pro → Pro | enterprise → Enterprise
  *
  * @module lib/config/plan-limits

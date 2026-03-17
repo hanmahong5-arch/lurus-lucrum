@@ -14,6 +14,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
+import { verifyZitadelJWT } from "@/lib/auth/jwt-verify";
 import type { AdvisorContext, ChatMode, InstitutionRoleId } from "@/lib/advisor/agent/types";
 import {
   buildAdvisorSystemPrompt,
@@ -192,7 +193,18 @@ function getModeConfig(mode: ChatMode): {
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
-    const userId = session?.user?.id as string | undefined;
+    let userId = session?.user?.id as string | undefined;
+
+    // Fallback: try Zitadel JWT from Authorization header (mobile app)
+    if (!userId) {
+      const authHeader = request.headers.get("authorization");
+      if (authHeader?.startsWith("Bearer ")) {
+        const claims = await verifyZitadelJWT(authHeader.slice(7));
+        if (claims?.sub) {
+          userId = claims.sub;
+        }
+      }
+    }
 
     const body: AdvisorChatRequest = await request.json();
     const {

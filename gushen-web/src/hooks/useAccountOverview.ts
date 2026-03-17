@@ -2,7 +2,7 @@
  * Account Overview Hook
  *
  * Fetches aggregated identity overview (VIP level, Lubell wallet, subscription)
- * via the local /api/lurus/overview proxy which calls lurus-identity internally.
+ * via the local /api/lurus/overview proxy which calls lurus-platform internally.
  * Data is cached for 2 minutes to reduce API calls.
  */
 
