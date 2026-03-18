@@ -372,8 +372,8 @@ export const SUBSCRIPTION_PLANS: Record<PlanId, SubscriptionPlanConfig> = {
   },
   premium: {
     id: 'premium',
-    name: '股神',
-    nameEn: 'Lucrum God',
+    name: 'Lucrum Pro',
+    nameEn: 'Lucrum Pro',
     description: '精准选股的私人顾问',
     descriptionEn: 'Your personal advisor for precise stock selection',
     price: { monthly: 999, yearly: 9999 },

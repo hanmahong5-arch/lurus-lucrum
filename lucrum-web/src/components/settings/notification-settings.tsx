@@ -399,7 +399,7 @@ export function NotificationSettings() {
           <span className="text-xl">💎</span>
           <div>
             <h4 className="text-sm font-medium text-accent mb-1">
-              升级到股神会员
+              升级到 Lucrum Pro 会员
             </h4>
             <p className="text-xs text-white/50 mb-2">
               解锁每日邮件推送、实时信号通知、私人投顾服务等高级功能

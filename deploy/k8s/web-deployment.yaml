@@ -58,7 +58,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: web
-          image: ghcr.io/hanmahong5-arch/gushen-web:main
+          image: ghcr.io/hanmahong5-arch/lucrum-web:main
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
