@@ -1,23 +1,23 @@
 # ============================================
-# AI-QTRD Web Frontend Deployment
-# Next.js Application for Gushen
+# Lucrum Web Frontend Deployment
+# Next.js Application for Lucrum
 # Managed by ArgoCD for GitOps deployment
 # ============================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-qtrd-web
-  namespace: ai-qtrd
+  name: lucrum-web
+  namespace: lucrum
   labels:
-    app: ai-qtrd-web
+    app: lucrum-web
     component: frontend
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: web
     app.kubernetes.io/managed-by: argocd
 spec:
   selector:
     matchLabels:
-      app: ai-qtrd-web
+      app: lucrum-web
       app.kubernetes.io/managed-by: argocd
       app.kubernetes.io/part-of: lurus
   strategy:
@@ -28,7 +28,7 @@ spec:
   template:
     metadata:
       labels:
-        app: ai-qtrd-web
+        app: lucrum-web
         component: frontend
         app.kubernetes.io/managed-by: argocd
         app.kubernetes.io/part-of: lurus
@@ -49,7 +49,7 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    app: ai-qtrd-web
+                    app: lucrum-web
                 topologyKey: kubernetes.io/hostname
 
       securityContext:
@@ -58,7 +58,7 @@ spec:
         fsGroup: 65534
       containers:
         - name: web
-          image: ghcr.io/hanmahong5-arch/gushen-web:main
+          image: ghcr.io/hanmahong5-arch/lucrum-web:main
           securityContext:
             allowPrivilegeEscalation: false
             readOnlyRootFilesystem: true
@@ -78,7 +78,7 @@ spec:
               value: "0.0.0.0"
             # API proxy configuration
             - name: API_URL
-              value: "http://ai-qtrd-api:8000"
+              value: "http://lucrum-api:8000"
 
             # Lurus integration
             - name: LURUS_API_URL
@@ -88,7 +88,7 @@ spec:
             - name: LURUS_IDENTITY_INTERNAL_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: LURUS_IDENTITY_INTERNAL_KEY
             - name: TENANT_SLUG
               value: "lurus"
@@ -103,7 +103,7 @@ spec:
             - name: NEXTAUTH_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: NEXTAUTH_SECRET
             - name: ZITADEL_ISSUER
               value: "https://auth.lurus.cn"
@@ -116,7 +116,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: DATABASE_URL
 
             # Memorus memory engine (fail-open: pod starts even if key absent)
@@ -125,7 +125,7 @@ spec:
             - name: MEMORUS_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: MEMORUS_API_KEY
                   optional: true
 
@@ -133,13 +133,13 @@ spec:
             - name: REDIS_ENABLED
               value: "true"
             - name: REDIS_HOST
-              value: "redis-service.ai-qtrd.svc.cluster.local"
+              value: "redis-service.lucrum.svc.cluster.local"
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: REDIS_PASSWORD
             - name: REDIS_DB
               value: "0"
@@ -151,6 +151,15 @@ spec:
             limits:
               cpu: 500m
               memory: 512Mi
+
+          startupProbe:
+            httpGet:
+              path: /
+              port: 3000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 24
+            timeoutSeconds: 3
 
           livenessProbe:
             httpGet:
@@ -187,10 +196,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-qtrd-web
-  namespace: ai-qtrd
+  name: lucrum-web
+  namespace: lucrum
   labels:
-    app: ai-qtrd-web
+    app: lucrum-web
     component: frontend
 spec:
   type: ClusterIP
@@ -200,4 +209,4 @@ spec:
       targetPort: 3000
       protocol: TCP
   selector:
-    app: ai-qtrd-web
+    app: lucrum-web
