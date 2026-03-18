@@ -1,60 +1,113 @@
-# GitHub Actions workflow for building and pushing lucrum-web Docker image
-# Triggers on push to main branch affecting lucrum-web directory
-name: Build Lucrum Web
+# Lucrum Web CI/CD — follows governance reusable-frontend.yaml pattern.
+# Structure: Typecheck & Test → Build & Push (with Trivy scan)
+name: Lucrum Web CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'lucrum-web/**'
       - '.github/workflows/build-lucrum-web.yaml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'lucrum-web/**'
   workflow_dispatch:
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/lucrum-web
-
 jobs:
-  build-and-push:
+  test:
+    name: Typecheck & Test
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
+    defaults:
+      run:
+        working-directory: lucrum-web
     steps:
-      - name: Checkout repository
+      - name: Check out
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+        continue-on-error: true
+
+      - name: Test
+        run: bun run test
+
+  build:
+    name: Build & Push
+    runs-on: ubuntu-latest
+    needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped') && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      packages: write
+      contents: read
+      security-events: write
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Determine version
+        id: version
+        run: |
+          VERSION="main-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
+          echo "value=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Container Registry
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Extract metadata for Docker
+      - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-,format=short
-            type=raw,value=latest,enable={{is_default_branch}}
+          images: ghcr.io/hanmahong5-arch/gushen-web
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+      - name: Build & push
+        uses: docker/build-push-action@v6
         with:
           context: ./lucrum-web
           file: ./lucrum-web/Dockerfile
+          platforms: linux/amd64
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: |
+            ghcr.io/hanmahong5-arch/gushen-web:main
+            ghcr.io/hanmahong5-arch/gushen-web:${{ steps.version.outputs.value }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args: |
-            API_URL=http://lucrum-api:8000
+          provenance: false
+          sbom: false
+
+      - name: Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ghcr.io/hanmahong5-arch/gushen-web:${{ steps.version.outputs.value }}
+          format: sarif
+          output: trivy-results.sarif
+          severity: CRITICAL,HIGH
+
+      - name: Upload Trivy results
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
