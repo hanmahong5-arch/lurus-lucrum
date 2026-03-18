@@ -275,11 +275,11 @@ const score = calculateScore({
 - [Source: _bmad-output/planning-artifacts/architecture.md#ADR-006] — Decimal.js 财务计算要求
 - [Source: _bmad-output/planning-artifacts/prd.md#§9] — 评分算法维度和阈值定义
 - [Source: _bmad-output/implementation-artifacts/2-1-score-calculator.md] — 前序 Story 实现记录
-- [Source: gushen-web/src/lib/backtest/score/] — ScoreCalculator 模块代码
-- [Source: gushen-web/src/components/financial/financial-value.tsx] — FinancialValue 组件
-- [Source: gushen-web/src/components/strategy-editor/backtest-panel.tsx] — 集成目标文件
-- [Source: gushen-web/src/app/globals.css#L67-72] — 评分色 CSS 变量
-- [Source: gushen-web/tailwind.config.ts#L109-114] — 评分色 Tailwind 类
+- [Source: lucrum-web/src/lib/backtest/score/] — ScoreCalculator 模块代码
+- [Source: lucrum-web/src/components/financial/financial-value.tsx] — FinancialValue 组件
+- [Source: lucrum-web/src/components/strategy-editor/backtest-panel.tsx] — 集成目标文件
+- [Source: lucrum-web/src/app/globals.css#L67-72] — 评分色 CSS 变量
+- [Source: lucrum-web/tailwind.config.ts#L109-114] — 评分色 Tailwind 类
 
 ## Dev Agent Record
 
@@ -316,9 +316,9 @@ None.
 
 ### File List
 
-- `gushen-web/src/components/backtest/score-card.tsx` — NEW: ScoreCard component
-- `gushen-web/src/components/backtest/__tests__/score-card.test.tsx` — NEW: 42 component tests
-- `gushen-web/src/components/strategy-editor/backtest-panel.tsx` — MODIFIED: ScoreCard integration
+- `lucrum-web/src/components/backtest/score-card.tsx` — NEW: ScoreCard component
+- `lucrum-web/src/components/backtest/__tests__/score-card.test.tsx` — NEW: 42 component tests
+- `lucrum-web/src/components/strategy-editor/backtest-panel.tsx` — MODIFIED: ScoreCard integration
 
 ### Review Follow-ups
 

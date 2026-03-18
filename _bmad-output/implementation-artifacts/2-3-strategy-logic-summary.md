@@ -321,11 +321,11 @@ interface ScoreCardProps {
 - [Source: _bmad-output/planning-artifacts/prd.md#Journey 1] — 策略创建流程上下文
 - [Source: _bmad-output/implementation-artifacts/2-1-score-calculator.md] — 前序 Story 实现 (评分算法)
 - [Source: _bmad-output/implementation-artifacts/2-2-score-card-component.md] — 前序 Story 实现 (评分卡组件，模式参考)
-- [Source: gushen-web/src/components/strategy-editor/code-preview.tsx] — 代码预览组件 (折叠区复用)
-- [Source: gushen-web/src/components/ui/collapsible.tsx] — Radix Collapsible 组件
-- [Source: gushen-web/src/components/ui/badge.tsx] — Badge 组件 (success/warning/danger variants)
-- [Source: gushen-web/src/app/globals.css#L79-82] — AI 视觉语言 CSS 变量
-- [Source: gushen-web/tailwind.config.ts] — Tailwind 自定义配置
+- [Source: lucrum-web/src/components/strategy-editor/code-preview.tsx] — 代码预览组件 (折叠区复用)
+- [Source: lucrum-web/src/components/ui/collapsible.tsx] — Radix Collapsible 组件
+- [Source: lucrum-web/src/components/ui/badge.tsx] — Badge 组件 (success/warning/danger variants)
+- [Source: lucrum-web/src/app/globals.css#L79-82] — AI 视觉语言 CSS 变量
+- [Source: lucrum-web/tailwind.config.ts] — Tailwind 自定义配置
 
 ## Dev Agent Record
 
@@ -363,6 +363,6 @@ Opus 4.6
 
 ### File List
 
-- `gushen-web/src/components/strategy-editor/strategy-logic-summary.tsx` (NEW)
-- `gushen-web/src/components/strategy-editor/__tests__/strategy-logic-summary.test.tsx` (NEW)
-- `gushen-web/src/app/dashboard/page.tsx` (MODIFIED — import, logicSummary useMemo, StrategyLogicSummary placement, extractLogicSummary helper)
+- `lucrum-web/src/components/strategy-editor/strategy-logic-summary.tsx` (NEW)
+- `lucrum-web/src/components/strategy-editor/__tests__/strategy-logic-summary.test.tsx` (NEW)
+- `lucrum-web/src/app/dashboard/page.tsx` (MODIFIED — import, logicSummary useMemo, StrategyLogicSummary placement, extractLogicSummary helper)

@@ -1,7 +1,7 @@
 /**
  * Shared Market Data Types
  *
- * Used by both gushen-web and gushen-app.
+ * Used by both lucrum-web and lucrum-app.
  * Keep in sync — this is the single source of truth.
  */
 

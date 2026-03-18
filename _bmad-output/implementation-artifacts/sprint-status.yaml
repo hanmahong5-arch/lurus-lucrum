@@ -1,5 +1,5 @@
 # generated: 2026-02-04
-# project: lurus-gushen
+# project: lurus-lucrum
 # project_key: NOKEY
 # tracking_system: file-system
 # story_location: _bmad-output/implementation-artifacts
@@ -39,7 +39,7 @@
 # - [S] = Supplementary story (UX components, additional features)
 
 generated: 2026-02-04
-project: lurus-gushen
+project: lurus-lucrum
 project_key: NOKEY
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts

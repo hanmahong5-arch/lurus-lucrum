@@ -121,9 +121,9 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 ### 相关现有代码
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/tailwind.config.ts` | Tailwind 配置 | 扩展 colors, fontSize |
-| `gushen-web/src/app/globals.css` | 全局 CSS 变量 | 添加 --gushen-* 变量 |
-| `gushen-web/docs/DESIGN_SYSTEM.md` | 设计文档 | 更新令牌列表 |
+| `lucrum-web/tailwind.config.ts` | Tailwind 配置 | 扩展 colors, fontSize |
+| `lucrum-web/src/app/globals.css` | 全局 CSS 变量 | 添加 --gushen-* 变量 |
+| `lucrum-web/docs/DESIGN_SYSTEM.md` | 设计文档 | 更新令牌列表 |
 
 ### 测试标准
 - **组件单元测试**: 验证 Tailwind 类名生成
@@ -141,8 +141,8 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Design System Foundation] - 设计令牌扩展计划
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.1] - Story 定义和验收标准
 - [Source: _bmad-output/planning-artifacts/prd.md#Section 9.5] - 评分色和显示规则
-- [Source: gushen-web/tailwind.config.ts] - 现有 Tailwind 配置结构
-- [Source: gushen-web/docs/DESIGN_SYSTEM.md] - 现有设计系统文档
+- [Source: lucrum-web/tailwind.config.ts] - 现有 Tailwind 配置结构
+- [Source: lucrum-web/docs/DESIGN_SYSTEM.md] - 现有设计系统文档
 
 ## Dev Agent Record
 
@@ -167,10 +167,10 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/app/globals.css (modified - added --gushen-* CSS variables)
-- gushen-web/tailwind.config.ts (modified - added colors, backgroundColor, fontSize, animation, keyframes, utilities)
-- gushen-web/docs/DESIGN_SYSTEM.md (modified - added Section 6 with token documentation)
-- gushen-web/src/lib/design-system/__tests__/design-tokens.test.ts (new - 25 tests for AC validation)
+- lucrum-web/src/app/globals.css (modified - added --gushen-* CSS variables)
+- lucrum-web/tailwind.config.ts (modified - added colors, backgroundColor, fontSize, animation, keyframes, utilities)
+- lucrum-web/docs/DESIGN_SYSTEM.md (modified - added Section 6 with token documentation)
+- lucrum-web/src/lib/design-system/__tests__/design-tokens.test.ts (new - 25 tests for AC validation)
 
 ### Review Follow-ups
 

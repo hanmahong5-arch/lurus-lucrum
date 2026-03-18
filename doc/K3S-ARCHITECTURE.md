@@ -496,7 +496,7 @@ K3s自动为每个Service创建DNS记录：
 
 **前端 → Redis**:
 ```typescript
-// gushen-web/src/lib/redis/client.ts
+// lucrum-web/src/lib/redis/client.ts
 const redis = new Redis({
   host: "redis-service.ai-qtrd.svc.cluster.local", // 或简化为 "redis-service"
   port: 6379,
@@ -1357,7 +1357,7 @@ EXPLAIN ANALYZE SELECT * FROM klines WHERE stock_code='600519' AND date >= '2024
 
 **连接池调优**:
 ```typescript
-// gushen-web/src/lib/db/index.ts
+// lucrum-web/src/lib/db/index.ts
 const pool = new Pool({
   max: 20,                    // 增加到20（当前值）
   min: 5,                     // 保持最少5个连接

@@ -159,9 +159,9 @@ interface StatusBarActions {
 
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/src/lib/stores/` | Zustand stores 目录 | 新增 status-bar-store.ts |
-| `gushen-web/src/components/layout/` | 布局组件目录 | 新增 status-bar.tsx |
-| `gushen-web/tailwind.config.ts` | 设计令牌 | 已有需要的颜色 |
+| `lucrum-web/src/lib/stores/` | Zustand stores 目录 | 新增 status-bar-store.ts |
+| `lucrum-web/src/components/layout/` | 布局组件目录 | 新增 status-bar.tsx |
+| `lucrum-web/tailwind.config.ts` | 设计令牌 | 已有需要的颜色 |
 
 ### Previous Story Intelligence
 
@@ -172,8 +172,8 @@ interface StatusBarActions {
 
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.3] - Story 定义
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#StatusBar] - 组件规范
-- [Source: gushen-web/tailwind.config.ts] - 设计令牌配置
-- [Source: gushen-web/src/lib/stores/] - Zustand store 模式参考
+- [Source: lucrum-web/tailwind.config.ts] - 设计令牌配置
+- [Source: lucrum-web/src/lib/stores/] - Zustand store 模式参考
 
 ## Dev Agent Record
 
@@ -200,9 +200,9 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/lib/stores/status-bar-store.ts (new - Zustand store)
-- gushen-web/src/components/layout/status-bar.tsx (new - StatusBar component)
-- gushen-web/src/components/layout/__tests__/status-bar.test.tsx (new - 53 tests)
+- lucrum-web/src/lib/stores/status-bar-store.ts (new - Zustand store)
+- lucrum-web/src/components/layout/status-bar.tsx (new - StatusBar component)
+- lucrum-web/src/components/layout/__tests__/status-bar.test.tsx (new - 53 tests)
 
 ## Change Log
 

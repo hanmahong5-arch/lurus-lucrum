@@ -1,8 +1,8 @@
-# Kustomization for AI-QTRD (GuShen) ArgoCD deployment
+# Kustomization for Lucrum ArgoCD deployment
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
-namespace: ai-qtrd
+namespace: lucrum
 
 resources:
   - namespace.yaml

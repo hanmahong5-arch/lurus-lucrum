@@ -10,7 +10,7 @@
 ## 已完成的核心文件
 
 ### 1. 环境配置
-**文件**: `gushen-web/.env.local`
+**文件**: `lucrum-web/.env.local`
 - 配置 LURUS_API_URL、TENANT_SLUG 等环境变量
 - 设置 NEXTAUTH_URL 和 NEXTAUTH_SECRET
 
@@ -235,7 +235,7 @@ NEXTAUTH_SECRET=<生产环境随机密钥>
 ## 文件清单
 
 ```
-gushen-web/
+lucrum-web/
 ├── .env.local                          # 新增：环境变量配置
 ├── src/
 │   ├── lib/

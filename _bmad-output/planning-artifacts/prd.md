@@ -1,6 +1,6 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
-inputDocuments: ['product-brief.md', 'architecture.md', 'project-context.md', 'gushen-web/CLAUDE.md', 'gushen-web/package.json']
+inputDocuments: ['product-brief.md', 'architecture.md', 'project-context.md', 'lucrum-web/CLAUDE.md', 'lucrum-web/package.json']
 date: 2026-02-02
 regenerated: 2026-02-02
 author: Anita (via BMAD PRD Workflow)
@@ -8,7 +8,7 @@ projectType: web-application
 domainComplexity: high
 ---
 
-# PRD: GuShen AI Quantitative Trading Platform
+# PRD: Lucrum AI Quantitative Trading Platform
 # 产品需求文档：股神 AI 量化交易平台
 
 ---
@@ -17,7 +17,7 @@ domainComplexity: high
 
 ### 1.1 Purpose / 目的
 
-GuShen (股神) is a web-based AI quantitative trading platform that enables users to design, backtest, and validate trading strategies using natural language and AI assistance. It provides financial-grade calculations, multi-stock validation, automated strategy discovery, and AI-powered investment advisory.
+Lucrum is a web-based AI quantitative trading platform that enables users to design, backtest, and validate trading strategies using natural language and AI assistance. It provides financial-grade calculations, multi-stock validation, automated strategy discovery, and AI-powered investment advisory.
 
 股神是一个基于 Web 的 AI 量化交易平台，使用户能够使用自然语言和 AI 辅助来设计、回测和验证交易策略。提供金融级计算精度、多股验证、自动策略发现和 AI 投资咨询服务。
 
@@ -385,7 +385,7 @@ User imports into workspace for backtesting
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                       GuShen Domain Model                            │
+│                       Lucrum Domain Model                            │
 │                                                                      │
 │  ┌──────────┐    ┌──────────────┐    ┌───────────────┐              │
 │  │ Strategy  │───→│ Backtest Run │───→│ Backtest      │              │

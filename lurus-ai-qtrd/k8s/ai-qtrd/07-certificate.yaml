@@ -1,12 +1,12 @@
-# AI-QTRD TLS Certificate
+# Lucrum TLS Certificate
 # Let's Encrypt certificate for gushen.lurus.cn
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
   name: gushen-lurus-cn-tls
-  namespace: ai-qtrd
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: certificate
 spec:
   secretName: gushen-lurus-cn-tls

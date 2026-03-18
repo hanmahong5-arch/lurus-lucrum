@@ -196,8 +196,8 @@ interface EmptyStatePreset {
 
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/src/components/feedback/` | 反馈组件目录 | 新增 empty-state.tsx |
-| `gushen-web/tailwind.config.ts` | 设计令牌 | 已有 btn-tactile |
+| `lucrum-web/src/components/feedback/` | 反馈组件目录 | 新增 empty-state.tsx |
+| `lucrum-web/tailwind.config.ts` | 设计令牌 | 已有 btn-tactile |
 
 ### Previous Story Intelligence
 
@@ -209,7 +209,7 @@ interface EmptyStatePreset {
 
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.4] - Story 定义
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#EmptyState] - 组件规范
-- [Source: gushen-web/tailwind.config.ts] - 设计令牌配置
+- [Source: lucrum-web/tailwind.config.ts] - 设计令牌配置
 
 ## Dev Agent Record
 
@@ -240,9 +240,9 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/components/feedback/empty-state.tsx (new - EmptyState component)
-- gushen-web/src/components/feedback/empty-state-presets.ts (new - 5 preset configurations)
-- gushen-web/src/components/feedback/__tests__/empty-state.test.tsx (new - 50 tests)
+- lucrum-web/src/components/feedback/empty-state.tsx (new - EmptyState component)
+- lucrum-web/src/components/feedback/empty-state-presets.ts (new - 5 preset configurations)
+- lucrum-web/src/components/feedback/__tests__/empty-state.test.tsx (new - 50 tests)
 
 ### Review Follow-ups
 

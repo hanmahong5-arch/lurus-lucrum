@@ -1,7 +1,7 @@
 # Implementation Readiness Assessment Report
 
 **Date:** 2026-02-04
-**Project:** lurus-gushen
+**Project:** lurus-lucrum
 
 ---
 stepsCompleted: [step-01-document-discovery, step-02-prd-analysis, step-03-epic-coverage-validation, step-04-ux-alignment, step-05-epic-quality-review, step-06-final-assessment]
@@ -435,7 +435,7 @@ Architecture notes: "非绿地项目，无 starter template" — confirmed brown
 
 ## READY WITH CAVEATS
 
-The lurus-gushen project has strong planning foundations. All 4 core documents exist, FR coverage is 100%, UX-PRD-Architecture alignment is solid, and the majority of stories have quality acceptance criteria. However, several structural issues in the epics document should be addressed before (or during) the next sprint.
+The lurus-lucrum project has strong planning foundations. All 4 core documents exist, FR coverage is 100%, UX-PRD-Architecture alignment is solid, and the majority of stories have quality acceptance criteria. However, several structural issues in the epics document should be addressed before (or during) the next sprint.
 
 ### Findings Summary
 
@@ -516,4 +516,4 @@ This assessment identified **12 issues** across **4 categories** (document struc
 
 **Assessed by:** BMAD Implementation Readiness Workflow
 **Date:** 2026-02-04
-**Project:** lurus-gushen
+**Project:** lurus-lucrum

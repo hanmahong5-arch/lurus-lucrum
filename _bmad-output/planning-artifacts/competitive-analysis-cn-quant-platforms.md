@@ -1,7 +1,7 @@
 # 中国量化交易平台竞品分析报告 / Competitive Analysis: Chinese Quant Trading Platforms
 
 > Date: 2026-03-16
-> Purpose: Competitive intelligence for Lurus Gushen product positioning
+> Purpose: Competitive intelligence for Lurus Lucrum product positioning
 
 ---
 
@@ -189,7 +189,7 @@ The market is shifting from programmer-only tools toward mass-market investment 
 | VIP | 1,080元/年 | 微信推送、自定义指标、数据导出、5000计算点/天、30个选股条件、2007年起数据 |
 | 至尊用户 | 6,998元/年 | 全功能、多计算进程、优先客服、20000计算点/天、实时回测、AI助手、港股持仓数据、120次智能优化 |
 
-### Key Differentiators (Critical for Gushen reference)
+### Key Differentiators (Critical for Lucrum reference)
 - **完全无需编程**：向导式、菜单界面、拖拽鼠标完成选股
 - 海量A股因子库，筛选+排名组合选股
 - 通达信/大智慧用户学习零门槛
@@ -436,7 +436,7 @@ The market is shifting from programmer-only tools toward mass-market investment 
 
 ---
 
-## Implications for Lurus Gushen / 对鹿神的启示
+## Implications for Lurus Lucrum / 对鹿神的启示
 
 ### Market Gap Analysis / 市场空白
 

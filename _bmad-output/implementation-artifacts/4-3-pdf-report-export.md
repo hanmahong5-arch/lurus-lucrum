@@ -231,20 +231,20 @@ Opus 4.6
 - jsPDF and html2canvas are dynamically imported for code splitting
 
 ### File List
-- `gushen-web/src/lib/report/constants.ts` - Page dimensions, colors, font sizes
-- `gushen-web/src/lib/report/types.ts` - Report data interfaces
-- `gushen-web/src/lib/report/fonts.ts` - Chinese font async loader with caching
-- `gushen-web/src/lib/report/report-data-assembler.ts` - Data extraction from UnifiedBacktestResult
-- `gushen-web/src/lib/report/pdf-generator.ts` - Main PDF orchestrator
-- `gushen-web/src/lib/report/use-report-export.ts` - React hook for export state management
-- `gushen-web/src/lib/report/index.ts` - Barrel export
-- `gushen-web/src/lib/report/renderers/index.ts` - Renderers barrel export
-- `gushen-web/src/lib/report/renderers/cover-page.ts` - Cover page renderer
-- `gushen-web/src/lib/report/renderers/score-page.ts` - Score summary renderer
-- `gushen-web/src/lib/report/renderers/chart-page.ts` - Equity curve chart renderer
-- `gushen-web/src/lib/report/renderers/metrics-table-page.ts` - 3-category metrics table
-- `gushen-web/src/lib/report/renderers/trade-list-page.ts` - Trade list table
-- `gushen-web/src/lib/report/renderers/stock-ranking-page.ts` - Multi-stock ranking table
-- `gushen-web/src/components/backtest/export-pdf-button.tsx` - Export button component
-- `gushen-web/src/lib/report/__tests__/report-data-assembler.test.ts` - 23 assembler tests
-- `gushen-web/src/lib/report/__tests__/pdf-generator.test.ts` - 6 integration tests
+- `lucrum-web/src/lib/report/constants.ts` - Page dimensions, colors, font sizes
+- `lucrum-web/src/lib/report/types.ts` - Report data interfaces
+- `lucrum-web/src/lib/report/fonts.ts` - Chinese font async loader with caching
+- `lucrum-web/src/lib/report/report-data-assembler.ts` - Data extraction from UnifiedBacktestResult
+- `lucrum-web/src/lib/report/pdf-generator.ts` - Main PDF orchestrator
+- `lucrum-web/src/lib/report/use-report-export.ts` - React hook for export state management
+- `lucrum-web/src/lib/report/index.ts` - Barrel export
+- `lucrum-web/src/lib/report/renderers/index.ts` - Renderers barrel export
+- `lucrum-web/src/lib/report/renderers/cover-page.ts` - Cover page renderer
+- `lucrum-web/src/lib/report/renderers/score-page.ts` - Score summary renderer
+- `lucrum-web/src/lib/report/renderers/chart-page.ts` - Equity curve chart renderer
+- `lucrum-web/src/lib/report/renderers/metrics-table-page.ts` - 3-category metrics table
+- `lucrum-web/src/lib/report/renderers/trade-list-page.ts` - Trade list table
+- `lucrum-web/src/lib/report/renderers/stock-ranking-page.ts` - Multi-stock ranking table
+- `lucrum-web/src/components/backtest/export-pdf-button.tsx` - Export button component
+- `lucrum-web/src/lib/report/__tests__/report-data-assembler.test.ts` - 23 assembler tests
+- `lucrum-web/src/lib/report/__tests__/pdf-generator.test.ts` - 6 integration tests

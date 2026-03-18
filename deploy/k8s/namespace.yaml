@@ -1,8 +1,8 @@
-# Namespace for AI-QTRD (GuShen) application
+# Namespace for Lucrum (AI quantitative trading) application
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ai-qtrd
+  name: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/part-of: lurus

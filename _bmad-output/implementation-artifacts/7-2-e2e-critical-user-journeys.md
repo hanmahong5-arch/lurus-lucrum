@@ -24,14 +24,14 @@
 ## Acceptance Criteria
 
 ### AC-1: Playwright Configuration
-- [ ] Playwright installed and configured in `gushen-web/`
+- [ ] Playwright installed and configured in `lucrum-web/`
 - [ ] `playwright.config.ts` defines 4 viewport projects:
   - Desktop: 1920x1080 (Chrome)
   - Laptop: 1280x800 (Chrome)
   - Tablet: 768x1024 (Chrome)
   - Mobile: 390x844 (Chrome)
 - [ ] `test:e2e` script added to `package.json`
-- [ ] E2E tests located in `gushen-web/tests/e2e/`
+- [ ] E2E tests located in `lucrum-web/tests/e2e/`
 
 ### AC-2: Journey 1 - Strategy Creation & Backtest (Core Flow)
 - [ ] Happy path: Input strategy description -> Generate code -> Select stock -> Run backtest -> See ScoreCard

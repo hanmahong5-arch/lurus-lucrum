@@ -1,0 +1,20 @@
+# DEPRECATED: Superseded by wildcard certificate (deploy/cluster/cert-manager/wildcard-certificate.yaml)
+# The wildcard cert "lurus-cn-wildcard-tls" covers *.lurus.cn + lurus.cn
+# This file can be deleted after wildcard cert is deployed and verified.
+#
+# To clean up the old per-domain cert from the cluster:
+#   kubectl delete certificate lucrum-lurus-cn-tls -n lucrum
+#   kubectl delete secret lucrum-lurus-cn-tls -n lucrum
+---
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lucrum-lurus-cn-tls
+  namespace: lucrum
+spec:
+  secretName: lucrum-lurus-cn-tls
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+    - gushen.lurus.cn

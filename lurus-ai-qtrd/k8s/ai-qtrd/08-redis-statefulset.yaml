@@ -4,7 +4,7 @@ apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: redis
-  namespace: ai-qtrd
+  namespace: lucrum
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: database
@@ -71,14 +71,14 @@ spec:
                 redis-server /etc/redis/redis.conf \
                   --requirepass ${REDIS_PASSWORD} \
                   --masterauth ${REDIS_PASSWORD} \
-                  --replicaof redis-0.redis-headless.ai-qtrd.svc.cluster.local 6379
+                  --replicaof redis-0.redis-headless.lucrum.svc.cluster.local 6379
               fi
 
           env:
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: REDIS_PASSWORD
             - name: REDIS_REPLICATION_MODE
               value: "master"

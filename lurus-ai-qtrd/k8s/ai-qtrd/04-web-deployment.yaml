@@ -1,22 +1,22 @@
 # ============================================
-# AI-QTRD Web Frontend Deployment
+# Lucrum Web Frontend Deployment
 # Next.js Application for Gushen
 # Phase 8.5: Agentic Investment Advisor Architecture
 # ============================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-qtrd-web
-  namespace: ai-qtrd
+  name: lucrum-web
+  namespace: lucrum
   labels:
-    app: ai-qtrd-web
+    app: lucrum-web
     component: frontend
     version: "1.1.0"
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ai-qtrd-web
+      app: lucrum-web
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -25,7 +25,7 @@ spec:
   template:
     metadata:
       labels:
-        app: ai-qtrd-web
+        app: lucrum-web
         component: frontend
     spec:
       # Schedule on worker node (cloud-ubuntu-3-2c2g)
@@ -34,7 +34,7 @@ spec:
 
       containers:
         - name: web
-          image: ghcr.io/hanmahong5-arch/gushen-web:main
+          image: ghcr.io/hanmahong5-arch/lucrum-web:main
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 3000
@@ -49,19 +49,19 @@ spec:
               value: "0.0.0.0"
             # API proxy configuration
             - name: API_URL
-              value: "http://ai-qtrd-api:8000"
+              value: "http://lucrum-api:8000"
 
             # Redis configuration
             - name: REDIS_ENABLED
               value: "true"
             - name: REDIS_HOST
-              value: "redis-service.ai-qtrd.svc.cluster.local"
+              value: "redis-service.lucrum.svc.cluster.local"
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-secrets
+                  name: lucrum-secrets
                   key: REDIS_PASSWORD
             - name: REDIS_DB
               value: "0"

@@ -4,7 +4,7 @@
 
 echo "修复 multi-stocks/route.ts 的Redis导入..."
 
-FILE="/root/gushen/gushen-web/src/app/api/backtest/multi-stocks/route.ts"
+FILE="/root/lucrum/lucrum-web/src/app/api/backtest/multi-stocks/route.ts"
 
 # 备份原文件
 cp "$FILE" "$FILE.bak"
@@ -22,4 +22,4 @@ echo "- 删除: import { backtestCache } from '@/lib/redis';"
 echo "- 添加: import { cacheGet, cacheSet } from '@/lib/redis';"
 echo ""
 echo "现在可以重新构建Docker镜像："
-echo "cd /root/gushen/gushen-web && docker build -t gushen-web:v18 ..."
+echo "cd /root/lucrum/lucrum-web && docker build -t lucrum-web:v18 ..."

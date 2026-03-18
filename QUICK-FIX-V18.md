@@ -329,7 +329,7 @@ kubectl exec -n ai-qtrd -it $(kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o 
    ```
 
 5. **记录每次部署**
-   在 `gushen-web/doc/process.md` 中记录部署时间和版本
+   在 `lucrum-web/doc/process.md` 中记录部署时间和版本
 
 ---
 
@@ -363,4 +363,4 @@ cat /tmp/debug-v18.txt
 **相关文档**:
 - `doc/manual-deploy-v18.md` - 完整部署指南
 - `diagnose-and-fix-v18.sh` - 自动诊断脚本
-- `gushen-web/doc/process.md` - 开发进度记录
+- `lucrum-web/doc/process.md` - 开发进度记录

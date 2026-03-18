@@ -4,7 +4,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: redis-config
-  namespace: ai-qtrd
+  namespace: lucrum
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: database

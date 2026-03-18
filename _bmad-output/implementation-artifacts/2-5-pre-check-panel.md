@@ -105,7 +105,7 @@ So that 我不会因为遗漏配置而导致回测失败。
 
 ### 架构要求
 
-**组件位置**: `gushen-web/src/components/backtest/pre-check-panel.tsx`
+**组件位置**: `lucrum-web/src/components/backtest/pre-check-panel.tsx`
 - UX 规格建议放在 `composite/` 但当前项目 backtest 组件在 `src/components/backtest/`
 - ScoreCard (2-2) 已在 `src/components/backtest/score-card.tsx`，遵循同一路径约定
 
@@ -245,7 +245,7 @@ function usePreCheckConditions(input: PreCheckConditionsInput): PreCheckItem[]
 ### Project Structure Notes
 
 ```
-gushen-web/src/components/backtest/
+lucrum-web/src/components/backtest/
 ├── pre-check-panel.tsx        ← 新建 (本 Story)
 ├── score-card.tsx             ← Story 2-2 已建
 ├── target-selector.tsx        ← 已有
@@ -256,7 +256,7 @@ gushen-web/src/components/backtest/
 
 集成修改:
 ```
-gushen-web/src/components/strategy-editor/
+lucrum-web/src/components/strategy-editor/
 └── backtest-panel.tsx         ← 修改: 导入 PreCheckPanel, 连接条件和回调
 ```
 
@@ -269,9 +269,9 @@ gushen-web/src/components/strategy-editor/
 - [Source: _bmad-output/planning-artifacts/architecture.md#ADR-006] — Decimal.js 要求
 - [Source: _bmad-output/planning-artifacts/project-context.md#Rule 3] — 金融计算安全
 - [Source: _bmad-output/planning-artifacts/project-context.md#Pattern 2] — Server Components 默认规则
-- [Source: gushen-web/src/components/strategy-editor/backtest-panel.tsx] — 集成目标文件
-- [Source: gushen-web/src/app/globals.css#L92-95] — 状态灯 CSS 变量
-- [Source: gushen-web/tailwind.config.ts#L135-137] — 状态灯 Tailwind 配置
+- [Source: lucrum-web/src/components/strategy-editor/backtest-panel.tsx] — 集成目标文件
+- [Source: lucrum-web/src/app/globals.css#L92-95] — 状态灯 CSS 变量
+- [Source: lucrum-web/tailwind.config.ts#L135-137] — 状态灯 Tailwind 配置
 - [Source: _bmad-output/implementation-artifacts/2-4-data-source-badge-banner.md] — 前序 Story 经验
 
 ## Dev Agent Record
@@ -293,10 +293,10 @@ None. No debug issues encountered.
 
 ### File List
 
-- `gushen-web/src/components/backtest/pre-check-panel.tsx` (new) — PreCheckPanel component + usePreCheckConditions hook
-- `gushen-web/src/components/backtest/__tests__/pre-check-panel.test.tsx` (new) — 29 tests (13 hook + 16 component)
-- `gushen-web/src/components/strategy-editor/backtest-panel.tsx` (modified) — Import PreCheckPanel + Tooltip, add hook call, replace button validation, add refs for focus navigation
-- `gushen-web/src/components/strategy-editor/__tests__/backtest-panel.test.tsx` (modified) — Added Tooltip mock, fixed mapDataSourceString mock
+- `lucrum-web/src/components/backtest/pre-check-panel.tsx` (new) — PreCheckPanel component + usePreCheckConditions hook
+- `lucrum-web/src/components/backtest/__tests__/pre-check-panel.test.tsx` (new) — 29 tests (13 hook + 16 component)
+- `lucrum-web/src/components/strategy-editor/backtest-panel.tsx` (modified) — Import PreCheckPanel + Tooltip, add hook call, replace button validation, add refs for focus navigation
+- `lucrum-web/src/components/strategy-editor/__tests__/backtest-panel.test.tsx` (modified) — Added Tooltip mock, fixed mapDataSourceString mock
 
 ## Change Log
 

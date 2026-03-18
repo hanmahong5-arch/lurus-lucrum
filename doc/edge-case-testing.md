@@ -24,8 +24,8 @@ This document records the edge case testing strategy and coverage for GuShen fro
 
 ### 配置文件 | Configuration Files
 
-- `gushen-web/vitest.config.ts` - Vitest 主配置
-- `gushen-web/src/__tests__/setup.ts` - 全局测试设置和 Mocks
+- `lucrum-web/vitest.config.ts` - Vitest 主配置
+- `lucrum-web/src/__tests__/setup.ts` - 全局测试设置和 Mocks
 
 ---
 

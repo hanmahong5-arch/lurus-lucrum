@@ -1,9 +1,9 @@
-# AI-QTRD Namespace
-# Kubernetes namespace for AI-QTRD quantitative trading platform
+# Lucrum Namespace
+# Kubernetes namespace for Lucrum quantitative trading platform
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: ai-qtrd
+  name: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: namespace

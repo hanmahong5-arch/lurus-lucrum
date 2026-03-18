@@ -60,8 +60,8 @@
 
 ```
 lurus-gushen/
-├── gushen-web/              # Existing Next.js (unchanged)
-├── gushen-app/              # NEW: React Native (Expo)
+├── lucrum-web/              # Existing Next.js (unchanged)
+├── lucrum-app/              # NEW: React Native (Expo)
 │   ├── app/                 # Expo Router (file-based routing)
 │   │   ├── (auth)/          # Auth screens (login, register)
 │   │   ├── (tabs)/          # Main tab navigation
@@ -274,7 +274,7 @@ Web design system → Mobile adaptation:
 ## 7. Development Milestones / 开发里程碑
 
 ### Sprint 1 (Week 1-2): Foundation
-- [ ] Expo project scaffolding (`gushen-app/`)
+- [ ] Expo project scaffolding (`lucrum-app/`)
 - [ ] Expo Router navigation structure (5 tabs)
 - [ ] Design system setup (theme, colors, typography)
 - [ ] API client layer (axios + interceptors + auth)

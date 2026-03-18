@@ -1,23 +1,23 @@
-# lurus-gushen
+# lurus-lucrum
 
 AI 量化交易平台，包含两个子项目：
 
 | 子项目 | 技术栈 | 职责 |
 |--------|--------|------|
-| `gushen-web/` | Next.js 14 + TypeScript + Bun | 前端 + API 路由层 + 回测引擎 |
+| `lucrum-web/` | Next.js 14 + TypeScript + Bun | 前端 + API 路由层 + 回测引擎 |
 | `lurus-ai-qtrd/` | Python 3.11 + FastAPI + vnpy | 量化引擎后端（vnpy 框架） |
 
 - 域名：`https://gushen.lurus.cn`
-- 命名空间：`ai-qtrd`
-- Web image：`ghcr.io/hanmahong5-arch/gushen-web:main`（GitOps，推 main 自动同步）
+- 命名空间：`lucrum`
+- Web image：`ghcr.io/hanmahong5-arch/lucrum-web:main`（GitOps，推 main 自动同步）
 - API image：`ghcr.io/hanmahong5-arch/lurus-ai-qtrd:main`（GitOps，推 main 自动同步）
 
 ---
 
-## gushen-web 目录结构
+## lucrum-web 目录结构
 
 ```
-gushen-web/
+lucrum-web/
 ├── src/
 │   ├── app/
 │   │   ├── api/                # Next.js API routes（advisor/agent/backtest/data/lurus/stocks）
@@ -72,7 +72,7 @@ lurus-ai-qtrd/
 
 ## 常用命令
 
-### gushen-web（在 `gushen-web/` 目录执行）
+### lucrum-web（在 `lucrum-web/` 目录执行）
 
 ```bash
 # 开发
@@ -111,17 +111,17 @@ docker build -t lurus-ai-qtrd:latest .
 ### K8s 运维
 
 ```bash
-ssh root@100.98.57.55 "kubectl -n ai-qtrd get pods"
-ssh root@100.98.57.55 "kubectl -n ai-qtrd logs -l app=ai-qtrd-web --tail=100"
-ssh root@100.98.57.55 "kubectl -n ai-qtrd rollout restart deployment/ai-qtrd-web"
-ssh root@100.98.57.55 "kubectl -n ai-qtrd rollout restart deployment/ai-qtrd-api"
+ssh root@100.98.57.55 "kubectl -n lucrum get pods"
+ssh root@100.98.57.55 "kubectl -n lucrum logs -l app=lucrum-web --tail=100"
+ssh root@100.98.57.55 "kubectl -n lucrum rollout restart deployment/lucrum-web"
+ssh root@100.98.57.55 "kubectl -n lucrum rollout restart deployment/lucrum-api"
 ```
 
 ---
 
 ## 环境变量
 
-### gushen-web（`.env.local`）
+### lucrum-web（`.env.local`）
 
 | 变量 | 说明 | 示例 |
 |------|------|------|
@@ -133,9 +133,9 @@ ssh root@100.98.57.55 "kubectl -n ai-qtrd rollout restart deployment/ai-qtrd-api
 | `ZITADEL_ISSUER` | Zitadel OIDC issuer | `https://auth.lurus.cn` |
 | `ZITADEL_CLIENT_ID` | Zitadel 应用 Client ID | `358400000000065537@lurus-api` |
 | `ZITADEL_CLIENT_SECRET` | PKCE 模式留空 | （留空） |
-| `DATABASE_URL` | PostgreSQL DSN | `postgresql://user:pass@host/gushen` |
+| `DATABASE_URL` | PostgreSQL DSN | `postgresql://user:pass@host/lucrum` |
 | `REDIS_ENABLED` | 是否启用 Redis | `true` |
-| `REDIS_HOST` | Redis 主机 | `redis-service.ai-qtrd.svc.cluster.local` |
+| `REDIS_HOST` | Redis 主机 | `redis-service.lucrum.svc.cluster.local` |
 | `REDIS_PORT` | Redis 端口 | `6379` |
 | `REDIS_PASSWORD` | Redis 密码 | （见 K8s Secret） |
 | `REDIS_DB` | Redis 数据库索引 | `0` |
@@ -148,16 +148,16 @@ ssh root@100.98.57.55 "kubectl -n ai-qtrd rollout restart deployment/ai-qtrd-api
 | 变量 | 说明 |
 |------|------|
 | `WEB_HOST` / `WEB_PORT` | FastAPI 监听地址（`0.0.0.0:8000`） |
-| `DEEPSEEK_API_KEY` | DeepSeek Key（K8s Secret: `ai-qtrd-secrets`） |
+| `DEEPSEEK_API_KEY` | DeepSeek Key（K8s Secret: `lucrum-secrets`） |
 | `DEEPSEEK_API_BASE` | `https://api.lurus.cn/v1`（通过 lurus-api 网关） |
 | `DEEPSEEK_MODEL` | `deepseek-chat` |
 | `DATA_DIR` / `LOG_DIR` | `/app/data` / `/app/logs` |
 
 ---
 
-## UI 开发规范（gushen-web 专属）
+## UI 开发规范（lucrum-web 专属）
 
-读取 `gushen-web/docs/DESIGN_SYSTEM.md` 后再写任何 UI。关键规则：
+读取 `lucrum-web/docs/DESIGN_SYSTEM.md` 后再写任何 UI。关键规则：
 
 - 暗色优先：背景用 `bg-void`（非 black）和 `bg-surface`
 - 金融数字：必须用 `font-mono tabular-nums`

@@ -202,21 +202,21 @@ bun run test -- --run [full suite] → 1352/1353 PASS (1 pre-existing failure in
 ### File List
 
 **Modified:**
-- `gushen-web/src/components/strategy-editor/backtest-panel.tsx` — Remove mock default, add DataSourceBadge, SimulatedDataBanner, date range display, empty state prompt
-- `gushen-web/src/components/backtest/target-selector.tsx` — Enhanced useStockSearch with groups/highlighting, useRecentStocks hook, HighlightedText component
-- `gushen-web/src/app/api/stocks/search/route.ts` — Pinyin search, match classification, result grouping
-- `gushen-web/src/app/api/backtest/route.ts` — Explicit empty string check for symbol
-- `gushen-web/src/components/strategy-editor/__tests__/backtest-panel.test.tsx` — Updated 28 pre-existing tests: mock TargetSelector for stock selection, fix text matchers for current component UI
-- `gushen-web/src/lib/db/queries.ts` — Added getKLineDateRange query
-- `gushen-web/package.json` + `bun.lock` — Added pinyin-pro dependency
+- `lucrum-web/src/components/strategy-editor/backtest-panel.tsx` — Remove mock default, add DataSourceBadge, SimulatedDataBanner, date range display, empty state prompt
+- `lucrum-web/src/components/backtest/target-selector.tsx` — Enhanced useStockSearch with groups/highlighting, useRecentStocks hook, HighlightedText component
+- `lucrum-web/src/app/api/stocks/search/route.ts` — Pinyin search, match classification, result grouping
+- `lucrum-web/src/app/api/backtest/route.ts` — Explicit empty string check for symbol
+- `lucrum-web/src/components/strategy-editor/__tests__/backtest-panel.test.tsx` — Updated 28 pre-existing tests: mock TargetSelector for stock selection, fix text matchers for current component UI
+- `lucrum-web/src/lib/db/queries.ts` — Added getKLineDateRange query
+- `lucrum-web/package.json` + `bun.lock` — Added pinyin-pro dependency
 
 **Created:**
-- `gushen-web/src/components/ui/data-source-badge.tsx` — DataSourceBadge component
-- `gushen-web/src/components/ui/simulated-data-banner.tsx` — SimulatedDataBanner component
-- `gushen-web/src/app/api/stocks/date-range/route.ts` — Date range API endpoint
-- `gushen-web/src/components/backtest/__tests__/target-selector.test.tsx` — 15 tests
-- `gushen-web/src/components/ui/__tests__/data-source-badge.test.tsx` — 10 tests
-- `gushen-web/src/components/ui/__tests__/simulated-data-banner.test.tsx` — 13 tests
+- `lucrum-web/src/components/ui/data-source-badge.tsx` — DataSourceBadge component
+- `lucrum-web/src/components/ui/simulated-data-banner.tsx` — SimulatedDataBanner component
+- `lucrum-web/src/app/api/stocks/date-range/route.ts` — Date range API endpoint
+- `lucrum-web/src/components/backtest/__tests__/target-selector.test.tsx` — 15 tests
+- `lucrum-web/src/components/ui/__tests__/data-source-badge.test.tsx` — 10 tests
+- `lucrum-web/src/components/ui/__tests__/simulated-data-banner.test.tsx` — 13 tests
 
 ### Review Follow-ups
 

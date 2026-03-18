@@ -7,7 +7,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis-headless
-  namespace: ai-qtrd
+  namespace: lucrum
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: database
@@ -32,7 +32,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: redis-service
-  namespace: ai-qtrd
+  namespace: lucrum
   labels:
     app.kubernetes.io/name: redis
     app.kubernetes.io/component: database

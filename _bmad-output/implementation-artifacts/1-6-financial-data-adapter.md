@@ -210,8 +210,8 @@ const data = useFinancialFormat(new Decimal('32.50'), 'percent', {
 
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/src/lib/backtest/core/financial-math.ts` | Decimal.js 封装 | 参考 |
-| `gushen-web/tailwind.config.ts` | profit/loss 颜色 | 已有 |
+| `lucrum-web/src/lib/backtest/core/financial-math.ts` | Decimal.js 封装 | 参考 |
+| `lucrum-web/tailwind.config.ts` | profit/loss 颜色 | 已有 |
 
 ### Previous Story Intelligence
 
@@ -221,8 +221,8 @@ const data = useFinancialFormat(new Decimal('32.50'), 'percent', {
 ### References
 
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.6] - Story 定义
-- [Source: gushen-web/src/lib/backtest/core/financial-math.ts] - Decimal.js 封装
-- [Source: gushen-web/tailwind.config.ts] - 设计令牌配置
+- [Source: lucrum-web/src/lib/backtest/core/financial-math.ts] - Decimal.js 封装
+- [Source: lucrum-web/tailwind.config.ts] - 设计令牌配置
 
 ## Dev Agent Record
 
@@ -250,13 +250,13 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/lib/financial/types.ts (new - Type definitions)
-- gushen-web/src/lib/financial/formatters.ts (new - Formatting functions)
-- gushen-web/src/lib/financial/use-financial-format.ts (new - React hook)
-- gushen-web/src/lib/financial/index.ts (new - Module exports)
-- gushen-web/src/lib/financial/__tests__/formatters.test.ts (new - 60 formatter tests)
-- gushen-web/src/components/financial/financial-value.tsx (new - FinancialValue component)
-- gushen-web/src/components/financial/__tests__/financial-value.test.tsx (new - 36 component tests)
+- lucrum-web/src/lib/financial/types.ts (new - Type definitions)
+- lucrum-web/src/lib/financial/formatters.ts (new - Formatting functions)
+- lucrum-web/src/lib/financial/use-financial-format.ts (new - React hook)
+- lucrum-web/src/lib/financial/index.ts (new - Module exports)
+- lucrum-web/src/lib/financial/__tests__/formatters.test.ts (new - 60 formatter tests)
+- lucrum-web/src/components/financial/financial-value.tsx (new - FinancialValue component)
+- lucrum-web/src/components/financial/__tests__/financial-value.test.tsx (new - 36 component tests)
 
 ## Change Log
 

@@ -6,11 +6,11 @@ inputDocuments:
   - ux-design-specification.md
 ---
 
-# lurus-gushen - Epic Breakdown
+# lurus-lucrum - Epic Breakdown
 
 ## Overview
 
-This document provides the complete epic and story breakdown for lurus-gushen, decomposing the requirements from the PRD, UX Design, and Architecture requirements into implementable stories.
+This document provides the complete epic and story breakdown for lurus-lucrum, decomposing the requirements from the PRD, UX Design, and Architecture requirements into implementable stories.
 
 ## Requirements Inventory
 
@@ -128,13 +128,13 @@ NFR-5.4: Critical path E2E — Key user journeys automated [Testing]
 - ADR-006: ALL monetary calculations MUST use Decimal.js via FinancialAmount wrapper. JavaScript native numbers FORBIDDEN for financial values.
 - ADR-009: Workflow orchestration via WorkflowManager + StepExecutor + CacheStrategy in src/lib/workflow/. SHA-256 hash-based cache, per-step TTL, automatic invalidation on upstream re-execution.
 - ADR-010: Strategy crawler pipeline: GitHubCrawler → PopularityScorer → StrategyConverter → CrawlerScheduler. Rate-limited GitHub API usage.
-- ADR-011: Staging environment in ai-qtrd-staging namespace on master node with Redis db:3 isolation.
+- ADR-011: Staging environment in lucrum-staging namespace on master node with Redis db:3 isolation.
 - GitOps deployment: GitHub Actions → GHCR → ArgoCD → K3s rolling update.
-- Schema isolation: gushen-web ONLY accesses gushen schema. Cross-schema queries FORBIDDEN.
+- Schema isolation: lucrum-web ONLY accesses gushen schema. Cross-schema queries FORBIDDEN.
 - Event streaming: NATS JetStream standard envelope for backtest/strategy/workflow/crawler events.
 - Layer boundaries: Transport → Business Logic → Data → UI. Each layer has strict import rules.
 - API response format: { success, data, error } wrapper for all TS endpoints.
-- Error codes: BT prefix for backtest, GS prefix for other gushen-web errors. Bilingual messages required.
+- Error codes: BT prefix for backtest, GS prefix for other lucrum-web errors. Bilingual messages required.
 - Naming patterns: snake_case DB, camelCase TS, kebab-case files/routes. Binding conventions per Architecture §8.1.
 - No starter template — existing project with established codebase.
 
@@ -1258,7 +1258,7 @@ So that 每次部署前能自动验证核心功能不被破坏。
 - Mobile: 390×844 (Chrome)
 **And** 每个旅程测试包含: Happy path + 主要错误路径 (网络失败/空数据)
 **And** CI 集成: GitHub Actions 中 `bun run test:e2e` 在 PR 合并前运行
-**And** 测试文件位于 `gushen-web/tests/e2e/`
+**And** 测试文件位于 `lucrum-web/tests/e2e/`
 **And** 验收: 4 个旅程 × 4 个 viewport = 16 个测试用例全部通过
 
 ---

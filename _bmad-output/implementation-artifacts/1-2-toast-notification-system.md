@@ -128,9 +128,9 @@ So that 我始终知道操作是否成功、是否需要关注。
 
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/src/app/layout.tsx` | 根布局 | 添加 Toaster 组件 |
-| `gushen-web/src/app/globals.css` | 全局样式 | 已有设计令牌 (Story 1.1) |
-| `gushen-web/tailwind.config.ts` | Tailwind 配置 | 已有颜色配置 (Story 1.1) |
+| `lucrum-web/src/app/layout.tsx` | 根布局 | 添加 Toaster 组件 |
+| `lucrum-web/src/app/globals.css` | 全局样式 | 已有设计令牌 (Story 1.1) |
+| `lucrum-web/tailwind.config.ts` | Tailwind 配置 | 已有颜色配置 (Story 1.1) |
 
 ### sonner 配置参考
 
@@ -189,8 +189,8 @@ promiseToast(
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.2] - Story 定义
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#Toast & Notification System] - UX 规范
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#ToastSystem] - 组件规范
-- [Source: gushen-web/tailwind.config.ts] - 设计令牌配置
-- [Source: gushen-web/src/app/globals.css] - CSS 变量定义
+- [Source: lucrum-web/tailwind.config.ts] - 设计令牌配置
+- [Source: lucrum-web/src/app/globals.css] - CSS 变量定义
 
 ## Dev Agent Record
 
@@ -214,12 +214,12 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/package.json (modified - added sonner dependency)
-- gushen-web/src/lib/toast.ts (new - toast API wrapper)
-- gushen-web/src/components/feedback/toast-system.tsx (new - ToastSystem component)
-- gushen-web/src/app/globals.css (modified - added toast CSS styles)
-- gushen-web/src/app/layout.tsx (modified - added ToastSystem)
-- gushen-web/src/components/feedback/__tests__/toast-system.test.tsx (new - 43 tests)
+- lucrum-web/package.json (modified - added sonner dependency)
+- lucrum-web/src/lib/toast.ts (new - toast API wrapper)
+- lucrum-web/src/components/feedback/toast-system.tsx (new - ToastSystem component)
+- lucrum-web/src/app/globals.css (modified - added toast CSS styles)
+- lucrum-web/src/app/layout.tsx (modified - added ToastSystem)
+- lucrum-web/src/components/feedback/__tests__/toast-system.test.tsx (new - 43 tests)
 
 ### Review Follow-ups
 

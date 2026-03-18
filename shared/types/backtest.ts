@@ -1,7 +1,7 @@
 /**
  * Shared Backtest Types (simplified for mobile display)
  *
- * The full BacktestResult type lives in gushen-web.
+ * The full BacktestResult type lives in lucrum-web.
  * This file contains the subset needed for mobile rendering.
  */
 

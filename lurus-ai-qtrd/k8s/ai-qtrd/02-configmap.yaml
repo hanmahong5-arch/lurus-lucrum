@@ -1,12 +1,12 @@
-# AI-QTRD ConfigMap
+# Lucrum ConfigMap
 # Non-sensitive configuration for the application
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: ai-qtrd-config
-  namespace: ai-qtrd
+  name: lucrum-config
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: config
 data:
   # Server configuration

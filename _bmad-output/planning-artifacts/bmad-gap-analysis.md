@@ -77,7 +77,7 @@ scope: Full platform assessment across all 4 BMAD phases
 
 | Item | Previous | Current | Status |
 |------|----------|---------|--------|
-| Design system | ✅ Exists | ✅ Active | `docs/DESIGN_SYSTEM.md` for gushen-web |
+| Design system | ✅ Exists | ✅ Active | `docs/DESIGN_SYSTEM.md` for lucrum-web |
 | UX specification | ❌ Missing | ⚠️ Partial | Implicit in PRD user journeys |
 | Responsive design spec | ⚠️ Partial | ✅ Implemented | Mobile card view below 768px |
 | Accessibility spec | ⚠️ Partial | ✅ Improved | ARIA labels, keyboard nav, WCAG targets |
@@ -115,7 +115,7 @@ scope: Full platform assessment across all 4 BMAD phases
 | Backlog grooming | ❌ Missing | ⚠️ Partial | plan.md populated but no formal backlog tool |
 
 **Remaining Gaps**:
-- 📋 Formal epics document for lurus-gushen (`epics-gushen.md`)
+- 📋 Formal epics document for lurus-lucrum (`epics-gushen.md`)
 - 📋 Story estimation and velocity tracking
 
 ---
@@ -137,8 +137,8 @@ scope: Full platform assessment across all 4 BMAD phases
 
 | Service | Previous Coverage | Current Coverage | Target | Gap |
 |---------|------------------|-----------------|--------|-----|
-| lurus-gushen (backtest/) | ~15% | **85%+ (680 tests)** | 80% | **✅ Exceeded** |
-| lurus-gushen (components) | ~5% | ~25% | 50% | -25% |
+| lurus-lucrum (backtest/) | ~15% | **85%+ (680 tests)** | 80% | **✅ Exceeded** |
+| lurus-lucrum (components) | ~5% | ~25% | 50% | -25% |
 | lurus-api | ~50% | ~50% | 70% | -20% |
 | lurus-switch | ~40% | ~40% | 60% | -20% |
 | lurus-webmail | ~5% | ~10% | 50% | -40% |
@@ -147,7 +147,7 @@ scope: Full platform assessment across all 4 BMAD phases
 **Major Achievement**: Backtest engine coverage went from ~15% to 85%+ (680 tests). This was the highest-risk area identified in the initial gap analysis.
 
 **Remaining Gaps**:
-- Priority 1: Component tests for gushen-web (strategy editor, ranking)
+- Priority 1: Component tests for lucrum-web (strategy editor, ranking)
 - Priority 2: lurus-api coverage improvement
 - Priority 3: lurus-webmail basic test suite
 
@@ -159,7 +159,7 @@ scope: Full platform assessment across all 4 BMAD phases
 | Automated tests in CI | ⚠️ Partial | ⚠️ Partial | Backtest tests comprehensive, CI step pending |
 | Docker image build | ✅ Working | ✅ Working | Multi-stage, public dir fix applied |
 | ArgoCD sync | ✅ Working | ✅ Working | GitOps |
-| Staging environment | ❌ Missing | ✅ Deployed | `ai-qtrd-staging` namespace |
+| Staging environment | ❌ Missing | ✅ Deployed | `lucrum-staging` namespace |
 | Rollback procedure | ⚠️ Manual | ⚠️ Manual | ArgoCD supports it, not documented |
 
 **Remaining Gaps**:
@@ -173,7 +173,7 @@ scope: Full platform assessment across all 4 BMAD phases
 |------|----------|---------|------------|
 | Root README.md | ✅ Basic | ✅ Good | Quick start guide |
 | CLAUDE.md (root) | ✅ Good | ✅ Updated | Company standards |
-| CLAUDE.md (gushen-web) | ✅ Excellent | ✅ Updated | Dev workflow |
+| CLAUDE.md (lucrum-web) | ✅ Excellent | ✅ Updated | Dev workflow |
 | doc/process.md | ✅ Active | ✅ Active | 10KB development log |
 | doc/plan.md | ❌ Empty | ✅ Populated | Q1-Q3 roadmap with sprints |
 | doc/structure.md | ❌ Missing | ⚠️ Partial | Architecture.md serves as substitute |
@@ -211,10 +211,10 @@ scope: Full platform assessment across all 4 BMAD phases
 1. ✅ **Product brief generated** → `product-brief.md`
 2. ✅ **Architecture document generated** → `architecture.md` (11 ADRs)
 3. ✅ **Project context generated** → `project-context.md`
-4. ✅ **PRD created for lurus-gushen** → `prd-gushen.md` (6 journeys, 60+ FRs)
+4. ✅ **PRD created for lurus-lucrum** → `prd-gushen.md` (6 journeys, 60+ FRs)
 5. ✅ **Gap analysis generated** → `bmad-gap-analysis.md`
 6. ✅ **Financial engine tests** → 680+ tests, 85%+ coverage
-7. ✅ **Staging environment deployed** → `ai-qtrd-staging` namespace
+7. ✅ **Staging environment deployed** → `lucrum-staging` namespace
 8. ✅ **doc/plan.md populated** → Q1-Q3 roadmap with sprints
 9. ✅ **Workflow system launched** → Multi-step strategy development
 10. ✅ **Strategy crawler launched** → GitHub discovery pipeline

@@ -1,0 +1,18 @@
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: lucrum-web
+  namespace: lucrum
+  labels:
+    app: lucrum-web
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`gushen.lurus.cn`)
+      kind: Rule
+      services:
+        - name: lucrum-web
+          port: 3000
+  tls:
+    secretName: lurus-cn-wildcard-tls

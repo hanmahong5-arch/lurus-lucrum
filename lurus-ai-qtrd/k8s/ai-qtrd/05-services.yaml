@@ -1,5 +1,5 @@
 # ============================================
-# AI-QTRD Services
+# Lucrum Services
 # Kubernetes services for internal and external access
 # ============================================
 ---
@@ -7,10 +7,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-qtrd-api
-  namespace: ai-qtrd
+  name: lucrum-api
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: api
 spec:
   type: ClusterIP
@@ -20,7 +20,7 @@ spec:
       targetPort: 8000
       protocol: TCP
   selector:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: api
 
 ---
@@ -28,10 +28,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-qtrd-web
-  namespace: ai-qtrd
+  name: lucrum-web
+  namespace: lucrum
   labels:
-    app: ai-qtrd-web
+    app: lucrum-web
     component: frontend
 spec:
   type: ClusterIP
@@ -41,5 +41,5 @@ spec:
       targetPort: 3000
       protocol: TCP
   selector:
-    app: ai-qtrd-web
+    app: lucrum-web
     component: frontend

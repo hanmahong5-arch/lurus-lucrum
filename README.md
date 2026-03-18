@@ -1,14 +1,14 @@
-# GuShen 量化交易平台 - 项目信息
+# Lucrum 量化交易平台 - 项目信息
 
 > 最后更新: 2026-01-23
 
 ## 项目概览
 
-**GuShen** 是一个工业级量化交易平台，包含前端和后端两个核心组件，已完成前后端对接并部署到 K3s 集群。
+**Lucrum** 是一个工业级量化交易平台，包含前端和后端两个核心组件，已完成前后端对接并部署到 K3s 集群。
 
 | 组件 | 技术栈 | 部署状态 | 访问地址 |
 |------|--------|---------|----------|
-| gushen-web | Next.js 14 + TypeScript + TailwindCSS + **Bun** + LangGraphJS | ✅ 运行中 (v21) | https://gushen.lurus.cn |
+| lucrum-web | Next.js 14 + TypeScript + TailwindCSS + **Bun** + LangGraphJS | ✅ 运行中 (v21) | https://gushen.lurus.cn |
 | lurus-ai-qtrd | FastAPI + VNPy 4.x + Python 3.11 | ✅ 运行中 (v1.0.4) | https://gushen.lurus.cn/api/* |
 
 > **⚠️ 重要**: 前端项目统一使用 **bun** 作为包管理器和运行时，不使用 npm。详见根目录 CLAUDE.md。
@@ -81,16 +81,16 @@
 
 - **统一仓库**: https://github.com/hanmahong5-arch/lurus-gushen
 - **分支**: main
-- **包含内容**: gushen-web (前端) + lurus-ai-qtrd (后端)
+- **包含内容**: lucrum-web (前端) + lurus-ai-qtrd (后端)
 
 ## K8s 部署信息
 
-### Namespace: ai-qtrd
+### Namespace: lucrum
 
 | Pod | 镜像版本 | 节点 | 状态 |
 |-----|---------|------|------|
-| ai-qtrd-web | gushen-web:v21 | cloud-ubuntu-3-2c2g | ✅ Running |
-| ai-qtrd-api | lurus-ai-qtrd:v1.0.4 | cloud-ubuntu-2-4c8g | ✅ Running |
+| lucrum-web | lucrum-web:v21 | cloud-ubuntu-3-2c2g | ✅ Running |
+| lucrum-api | lurus-ai-qtrd:v1.0.4 | cloud-ubuntu-2-4c8g | ✅ Running |
 
 ### 集群节点
 
@@ -104,10 +104,10 @@
 
 | 路由名 | 匹配规则 | 目标服务 |
 |--------|---------|----------|
-| ai-qtrd-frontend-api | `/api/strategy/generate`, `/api/advisor`, `/api/auth` | ai-qtrd-web:3000 |
-| ai-qtrd-api | `/api/*` (其他) | ai-qtrd-api:8000 |
-| ai-qtrd-ws | `/ws` | ai-qtrd-api:8000 |
-| ai-qtrd-web | 其他所有路径 | ai-qtrd-web:3000 |
+| lucrum-frontend-api | `/api/strategy/generate`, `/api/advisor`, `/api/auth` | lucrum-web:3000 |
+| lucrum-api | `/api/*` (其他) | lucrum-api:8000 |
+| lucrum-ws | `/ws` | lucrum-api:8000 |
+| lucrum-web | 其他所有路径 | lucrum-web:3000 |
 
 ## API 端点
 
@@ -136,7 +136,7 @@
 
 ### 前端
 ```bash
-cd gushen/gushen-web
+cd lucrum/lucrum-web
 bun install
 bun run dev
 # 访问 http://localhost:3000
@@ -144,7 +144,7 @@ bun run dev
 
 ### 后端
 ```bash
-cd gushen/lurus-ai-qtrd
+cd lucrum/lurus-ai-qtrd
 pip install -r vnpy_ai_trader/requirements.txt
 python -m vnpy_ai_trader.src.web.app
 # 访问 http://localhost:8000
@@ -168,15 +168,15 @@ python -m vnpy_ai_trader.src.web.app
 ssh root@100.98.57.55   
 
 # 查看 Pod 状态
-kubectl get pods -n ai-qtrd -o wide
+kubectl get pods -n lucrum -o wide
 
 # 查看日志
-kubectl logs -n ai-qtrd deployment/ai-qtrd-api --tail=100
-kubectl logs -n ai-qtrd deployment/ai-qtrd-web --tail=100
+kubectl logs -n lucrum deployment/lucrum-api --tail=100
+kubectl logs -n lucrum deployment/lucrum-web --tail=100
 
 # 重启服务
-kubectl rollout restart deployment/ai-qtrd-api -n ai-qtrd
-kubectl rollout restart deployment/ai-qtrd-web -n ai-qtrd
+kubectl rollout restart deployment/lucrum-api -n lucrum
+kubectl rollout restart deployment/lucrum-web -n lucrum
 ```
 
 ## 功能清单
@@ -270,10 +270,10 @@ kubectl rollout restart deployment/ai-qtrd-web -n ai-qtrd
 
 | 文件 | 路径 |
 |------|------|
-| 前端源码 | `gushen/gushen-web/` |
-| 后端源码 | `gushen/lurus-ai-qtrd/` |
-| K8s 配置 | `gushen/lurus-ai-qtrd/k8s/ai-qtrd/` |
-| 开发进度 | `gushen/lurus-ai-qtrd/vnpy_ai_trader/doc/process.md` |
+| 前端源码 | `lucrum/lucrum-web/` |
+| 后端源码 | `lucrum/lurus-ai-qtrd/` |
+| K8s 配置 | `lucrum/lurus-ai-qtrd/k8s/ai-qtrd/` |
+| 开发进度 | `lucrum/lurus-ai-qtrd/vnpy_ai_trader/doc/process.md` |
 
 ---
 
@@ -309,7 +309,7 @@ bun --version
 # 如果没有安装 Bun: https://bun.sh/docs/installation
 
 # 0.2 确保依赖是最新的
-cd gushen-web
+cd lucrum-web
 bun install
 
 # 0.3 本地构建测试 (可选但推荐)
@@ -323,8 +323,8 @@ bun run build      # 构建测试
 # ========================================
 
 # 1.1 删除旧压缩包 (必须!)
-Set-Location "C:\Users\Administrator\Desktop\lurus\gushen"
-Remove-Item "gushen-web-v*.tar.gz" -ErrorAction SilentlyContinue
+Set-Location "C:\Users\Administrator\Desktop\lurus\lucrum"
+Remove-Item "lucrum-web-v*.tar.gz" -ErrorAction SilentlyContinue
 
 # 1.2 打包源码
 # 注意事项：
@@ -337,18 +337,18 @@ tar --exclude='node_modules' `
     --exclude='.git' `
     --exclude='*.tar' `
     --exclude='*.tar.gz' `
-    -czvf gushen-web-vXX.tar.gz gushen-web
+    -czvf lucrum-web-vXX.tar.gz lucrum-web
 
 # 1.3 验证打包内容 - 检查关键文件
-tar -tvf gushen-web-vXX.tar.gz | Select-String "package.json"
-tar -tvf gushen-web-vXX.tar.gz | Select-String "Dockerfile"
+tar -tvf lucrum-web-vXX.tar.gz | Select-String "package.json"
+tar -tvf lucrum-web-vXX.tar.gz | Select-String "Dockerfile"
 # 确认时间戳是最新的!
 
 # ========================================
 # Step 2: 上传到服务器
 # ========================================
 
-scp gushen-web-vXX.tar.gz root@100.98.57.55:/root/
+scp lucrum-web-vXX.tar.gz root@100.98.57.55:/root/
 
 # ========================================
 # Step 3: 服务器端构建 (SSH到Master)
@@ -357,26 +357,26 @@ scp gushen-web-vXX.tar.gz root@100.98.57.55:/root/
 ssh root@100.98.57.55
 
 # 3.1 清理旧代码和缓存 (必须!)
-rm -rf /root/gushen-web
+rm -rf /root/lucrum-web
 docker builder prune -f  # 清理 Docker 构建缓存
 
 # 3.2 解压新代码
-cd /root && tar -xzf gushen-web-vXX.tar.gz
+cd /root && tar -xzf lucrum-web-vXX.tar.gz
 
 # 3.3 验证关键文件 - 确认 Dockerfile 使用 Bun
-head -n 10 /root/gushen-web/Dockerfile
+head -n 10 /root/lucrum-web/Dockerfile
 # 应该看到: FROM oven/bun:1-alpine
 
 # 3.4 构建镜像 (使用 Bun，构建速度提升 10-20x)
 # --no-cache 确保不使用旧缓存
 # --progress=plain 显示详细构建日志
-cd /root/gushen-web && docker build \
+cd /root/lucrum-web && docker build \
   --no-cache \
   --progress=plain \
-  -t gushen-web:vXX .
+  -t lucrum-web:vXX .
 
 # 3.5 验证镜像构建成功
-docker images | grep gushen-web:vXX
+docker images | grep lucrum-web:vXX
 # 应该能看到新镜像，注意镜像大小（使用 Bun 后可能更小）
 
 # ========================================
@@ -384,30 +384,30 @@ docker images | grep gushen-web:vXX
 # ========================================
 
 # 4.1 导出镜像
-docker save gushen-web:vXX -o /tmp/gushen-web-vXX.tar
+docker save lucrum-web:vXX -o /tmp/lucrum-web-vXX.tar
 
 # 4.2 传输到 Worker 节点
-sshpass -p "Lurus@ops" scp /tmp/gushen-web-vXX.tar root@cloud-ubuntu-3-2c2g:/tmp/
+sshpass -p "Lurus@ops" scp /tmp/lucrum-web-vXX.tar root@cloud-ubuntu-3-2c2g:/tmp/
 
 # 4.3 Worker 节点导入镜像
-sshpass -p "Lurus@ops" ssh root@cloud-ubuntu-3-2c2g "ctr -n k8s.io images rm docker.io/library/gushen-web:vXX 2>/dev/null; ctr -n k8s.io images import /tmp/gushen-web-vXX.tar"
+sshpass -p "Lurus@ops" ssh root@cloud-ubuntu-3-2c2g "ctr -n k8s.io images rm docker.io/library/lucrum-web:vXX 2>/dev/null; ctr -n k8s.io images import /tmp/lucrum-web-vXX.tar"
 
 # 4.4 更新 Deployment (二选一)
 # 方式1: 更新镜像版本
-kubectl set image deployment/ai-qtrd-web web=gushen-web:vXX -n ai-qtrd
+kubectl set image deployment/lucrum-web web=lucrum-web:vXX -n lucrum
 
 # 方式2: 滚动重启 (推荐，强制拉取新镜像)
-kubectl rollout restart deployment/ai-qtrd-web -n ai-qtrd
+kubectl rollout restart deployment/lucrum-web -n lucrum
 
 # 等待部署完成
-kubectl rollout status deployment/ai-qtrd-web -n ai-qtrd
+kubectl rollout status deployment/lucrum-web -n lucrum
 
 # ========================================
 # Step 5: 验证部署
 # ========================================
 
 # 5.1 检查 Pod 状态
-kubectl get pods -n ai-qtrd
+kubectl get pods -n lucrum
 
 # 5.2 检查 HTTP 响应
 curl -sI https://gushen.lurus.cn/
@@ -448,39 +448,39 @@ curl -sI https://gushen.lurus.cn/
 # ========================================
 # 在 Master 节点构建并导出
 # ========================================
-docker build --no-cache -t gushen-web:vXX .
-docker save gushen-web:vXX -o /tmp/gushen-web-vXX.tar
+docker build --no-cache -t lucrum-web:vXX .
+docker save lucrum-web:vXX -o /tmp/lucrum-web-vXX.tar
 
 # ========================================
 # 传输到 Worker 节点
 # ========================================
-sshpass -p "Lurus@ops" scp /tmp/gushen-web-vXX.tar root@cloud-ubuntu-3-2c2g:/tmp/
+sshpass -p "Lurus@ops" scp /tmp/lucrum-web-vXX.tar root@cloud-ubuntu-3-2c2g:/tmp/
 
 # ========================================
 # 在 Worker 节点导入 (关键步骤!)
 # ========================================
 sshpass -p "Lurus@ops" ssh root@cloud-ubuntu-3-2c2g << 'EOF'
   # Step 1: 删除 crictl 缓存的旧镜像 (必须!)
-  crictl rmi docker.io/library/gushen-web:vXX 2>/dev/null || true
+  crictl rmi docker.io/library/lucrum-web:vXX 2>/dev/null || true
   
   # Step 2: 用 k3s ctr 导入新镜像 (不是普通的 ctr!)
-  k3s ctr images import /tmp/gushen-web-vXX.tar
+  k3s ctr images import /tmp/lucrum-web-vXX.tar
   
   # Step 3: 验证 crictl 能看到新镜像
-  crictl images | grep gushen-web:vXX
+  crictl images | grep lucrum-web:vXX
 EOF
 
 # ========================================
 # 重启 Pod
 # ========================================
-kubectl delete pod -n ai-qtrd -l app=ai-qtrd-web --force --grace-period=0
-kubectl rollout status deployment/ai-qtrd-web -n ai-qtrd
+kubectl delete pod -n lucrum -l app=lucrum-web --force --grace-period=0
+kubectl rollout status deployment/lucrum-web -n lucrum
 
 # ========================================
 # 验证 Pod 使用新镜像
 # ========================================
 # 检查容器内文件时间戳
-kubectl exec -n ai-qtrd deploy/ai-qtrd-web -- ls -la /app/.next/static/chunks/ | head -5
+kubectl exec -n lucrum deploy/lucrum-web -- ls -la /app/.next/static/chunks/ | head -5
 # 时间戳应该是最新构建时间
 ```
 
@@ -497,10 +497,10 @@ kubectl exec -n ai-qtrd deploy/ai-qtrd-web -- ls -la /app/.next/static/chunks/ |
 
 ```bash
 # 1. 检查 Pod 使用的镜像 ID
-kubectl get pod -n ai-qtrd -l app=ai-qtrd-web -o jsonpath='{.items[0].status.containerStatuses[0].imageID}'
+kubectl get pod -n lucrum -l app=lucrum-web -o jsonpath='{.items[0].status.containerStatuses[0].imageID}'
 
 # 2. 检查 crictl 中该镜像的 ID
-crictl images | grep gushen-web
+crictl images | grep lucrum-web
 
 # 3. 如果 ID 不一致，说明 Pod 用的是旧缓存
 # 解决: crictl rmi + k3s ctr import + delete pod
@@ -520,7 +520,7 @@ powershell -c "irm bun.sh/install.ps1|iex"
 bun --version
 
 # 3. 迁移现有项目
-cd gushen-web
+cd lucrum-web
 bun install  # 自动识别 package-lock.json 并生成 bun.lockb
 
 # 4. 日常开发命令（参考 CLAUDE.md）
@@ -586,14 +586,14 @@ rm -rf node_modules ~/.bun/install/cache
 bun install
 
 # 3. 验证 Dockerfile 使用正确的基础镜像
-grep "FROM" gushen-web/Dockerfile
+grep "FROM" lucrum-web/Dockerfile
 # 应该输出: FROM oven/bun:1-alpine
 
 # 4. 检查容器内 Bun 版本
-docker run --rm gushen-web:vXX bun --version
+docker run --rm lucrum-web:vXX bun --version
 
 # 5. 查看容器启动命令
-docker inspect gushen-web:vXX | grep -A 5 "Cmd"
+docker inspect lucrum-web:vXX | grep -A 5 "Cmd"
 # 应该看到: ["bun", "run", "server.js"]
 ```
 
@@ -623,5 +623,5 @@ RUN npm run build
 CMD ["node", "server.js"]
 
 # 5. 重新构建镜像
-docker build --no-cache -t gushen-web:vXX .
+docker build --no-cache -t lucrum-web:vXX .
 ```

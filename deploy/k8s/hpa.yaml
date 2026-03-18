@@ -1,17 +1,17 @@
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: ai-qtrd-web-hpa
-  namespace: ai-qtrd
+  name: lucrum-web-hpa
+  namespace: lucrum
   labels:
-    app: ai-qtrd-web
-    app.kubernetes.io/name: ai-qtrd
+    app: lucrum-web
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/part-of: lurus
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: ai-qtrd-web
+    name: lucrum-web
   minReplicas: 1
   maxReplicas: 3
   metrics:

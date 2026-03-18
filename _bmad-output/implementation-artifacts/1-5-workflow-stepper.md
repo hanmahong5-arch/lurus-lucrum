@@ -214,8 +214,8 @@ const DEFAULT_STEPS = [
 
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
-| `gushen-web/src/components/workflow/` | 工作流组件目录 | 新增 |
-| `gushen-web/tailwind.config.ts` | 设计令牌 | 已有 step-* 颜色 |
+| `lucrum-web/src/components/workflow/` | 工作流组件目录 | 新增 |
+| `lucrum-web/tailwind.config.ts` | 设计令牌 | 已有 step-* 颜色 |
 
 ### Previous Story Intelligence
 
@@ -227,7 +227,7 @@ const DEFAULT_STEPS = [
 
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 1.5] - Story 定义
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#WorkflowStepper] - 组件规范
-- [Source: gushen-web/tailwind.config.ts] - 设计令牌配置
+- [Source: lucrum-web/tailwind.config.ts] - 设计令牌配置
 
 ## Dev Agent Record
 
@@ -256,8 +256,8 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/components/workflow/workflow-stepper.tsx (new - WorkflowStepper component)
-- gushen-web/src/components/workflow/__tests__/workflow-stepper.test.tsx (new - 45 tests)
+- lucrum-web/src/components/workflow/workflow-stepper.tsx (new - WorkflowStepper component)
+- lucrum-web/src/components/workflow/__tests__/workflow-stepper.test.tsx (new - 45 tests)
 
 ## Change Log
 

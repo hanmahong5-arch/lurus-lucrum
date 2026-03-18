@@ -1,10 +1,10 @@
 # ============================================
-# AI-QTRD Web Frontend Deployment (STAGING)
-# Next.js Application for Gushen
+# Lucrum Web Frontend Deployment (STAGING)
+# Next.js Application for Lucrum
 # Managed by ArgoCD for GitOps deployment
 #
 # Staging-specific changes from production:
-#   - Namespace: ai-qtrd-staging (isolated from prod)
+#   - Namespace: lucrum-staging (isolated from prod)
 #   - Image tag: staging (not latest)
 #   - Node: master node (cloud-ubuntu-1-16c32g) for cost efficiency
 #   - Resources: halved requests/limits compared to production
@@ -16,20 +16,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: ai-qtrd-web-staging
-  namespace: ai-qtrd-staging
+  name: lucrum-web-staging
+  namespace: lucrum-staging
   labels:
-    app: ai-qtrd-web-staging
+    app: lucrum-web-staging
     component: frontend
     environment: staging
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: web
     app.kubernetes.io/managed-by: argocd
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: ai-qtrd-web-staging
+      app: lucrum-web-staging
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -38,7 +38,7 @@ spec:
   template:
     metadata:
       labels:
-        app: ai-qtrd-web-staging
+        app: lucrum-web-staging
         component: frontend
         environment: staging
     spec:
@@ -49,7 +49,7 @@ spec:
       containers:
         - name: web
           # Staging image tag — built from staging branch, not latest
-          image: ghcr.io/hanmahong5-arch/gushen-web:staging
+          image: ghcr.io/hanmahong5-arch/lucrum-web:staging
           imagePullPolicy: Always
           ports:
             - containerPort: 3000
@@ -68,19 +68,19 @@ spec:
 
             # API proxy configuration — points to staging API service
             - name: API_URL
-              value: "http://ai-qtrd-api-staging:8000"
+              value: "http://lucrum-api-staging:8000"
 
             # Redis configuration — isolated db 3 on staging-namespaced Redis
             - name: REDIS_ENABLED
               value: "true"
             - name: REDIS_HOST
-              value: "redis-service.ai-qtrd-staging.svc.cluster.local"
+              value: "redis-service.lucrum-staging.svc.cluster.local"
             - name: REDIS_PORT
               value: "6379"
             - name: REDIS_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: ai-qtrd-staging-secrets
+                  name: lucrum-staging-secrets
                   key: REDIS_PASSWORD
             - name: REDIS_DB
               value: "3"
@@ -121,10 +121,10 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: ai-qtrd-web-staging
-  namespace: ai-qtrd-staging
+  name: lucrum-web-staging
+  namespace: lucrum-staging
   labels:
-    app: ai-qtrd-web-staging
+    app: lucrum-web-staging
     component: frontend
     environment: staging
 spec:
@@ -135,4 +135,4 @@ spec:
       targetPort: 3000
       protocol: TCP
   selector:
-    app: ai-qtrd-web-staging
+    app: lucrum-web-staging

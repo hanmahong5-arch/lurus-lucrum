@@ -227,11 +227,11 @@ function mapDataSourceType(info: DataSourceInfo): DataSourceType {
 - [Source: _bmad-output/planning-artifacts/ux-design-specification.md#SimulatedDataBanner] — Banner 规格
 - [Source: _bmad-output/planning-artifacts/architecture.md#§8.2] — TypeScript 目录结构规范
 - [Source: _bmad-output/planning-artifacts/architecture.md#§8.1] — 命名约定
-- [Source: gushen-web/src/components/ui/data-source-badge.tsx] — 现有实现
-- [Source: gushen-web/src/components/ui/simulated-data-banner.tsx] — 现有实现
-- [Source: gushen-web/src/components/strategy-editor/backtest-panel.tsx] — 集成点
-- [Source: gushen-web/src/app/globals.css#L75-77] — CSS 变量定义
-- [Source: gushen-web/tailwind.config.ts#L117-119] — Tailwind 颜色配置
+- [Source: lucrum-web/src/components/ui/data-source-badge.tsx] — 现有实现
+- [Source: lucrum-web/src/components/ui/simulated-data-banner.tsx] — 现有实现
+- [Source: lucrum-web/src/components/strategy-editor/backtest-panel.tsx] — 集成点
+- [Source: lucrum-web/src/app/globals.css#L75-77] — CSS 变量定义
+- [Source: lucrum-web/tailwind.config.ts#L117-119] — Tailwind 颜色配置
 - [Source: _bmad-output/implementation-artifacts/2-3-strategy-logic-summary.md] — 前序 Story 参考
 
 ## Dev Agent Record
@@ -262,14 +262,14 @@ claude-opus-4-6
 
 ### File List
 
-- `gushen-web/src/components/ui/data-source-badge.tsx` (modified) — Label "数据库", font 13px, added shared mapDataSourceString helper
-- `gushen-web/src/components/ui/simulated-data-banner.tsx` (modified) — Banner text aligned to Epic, aria-live="polite", banner-warn token
-- `gushen-web/src/components/ui/__tests__/data-source-badge.test.tsx` (modified) — Label test + tooltip content assertions
-- `gushen-web/src/components/ui/__tests__/simulated-data-banner.test.tsx` (modified) — aria-live test + disableSticky tests
-- `gushen-web/src/app/dashboard/strategy-validation/page.tsx` (modified) — DataSourceBadge/SimulatedDataBanner integration, uses shared mapDataSourceString, removed console.log
-- `gushen-web/src/components/strategy-editor/backtest-panel.tsx` (modified) — Uses shared mapDataSourceString from data-source-badge
-- `gushen-web/src/app/globals.css` (modified) — Added --gushen-color-banner-warn design token
-- `gushen-web/tailwind.config.ts` (modified) — Registered banner-warn color
+- `lucrum-web/src/components/ui/data-source-badge.tsx` (modified) — Label "数据库", font 13px, added shared mapDataSourceString helper
+- `lucrum-web/src/components/ui/simulated-data-banner.tsx` (modified) — Banner text aligned to Epic, aria-live="polite", banner-warn token
+- `lucrum-web/src/components/ui/__tests__/data-source-badge.test.tsx` (modified) — Label test + tooltip content assertions
+- `lucrum-web/src/components/ui/__tests__/simulated-data-banner.test.tsx` (modified) — aria-live test + disableSticky tests
+- `lucrum-web/src/app/dashboard/strategy-validation/page.tsx` (modified) — DataSourceBadge/SimulatedDataBanner integration, uses shared mapDataSourceString, removed console.log
+- `lucrum-web/src/components/strategy-editor/backtest-panel.tsx` (modified) — Uses shared mapDataSourceString from data-source-badge
+- `lucrum-web/src/app/globals.css` (modified) — Added --gushen-color-banner-warn design token
+- `lucrum-web/tailwind.config.ts` (modified) — Registered banner-warn color
 
 ### Review Follow-ups
 

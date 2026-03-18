@@ -1,14 +1,14 @@
-# AI-QTRD Traefik IngressRoutes
+# Lucrum Traefik IngressRoutes
 # HTTPS routing for gushen.lurus.cn
 ---
 # Main web route (frontend)
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: ai-qtrd-web
-  namespace: ai-qtrd
+  name: lucrum-web
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: ingress
 spec:
   entryPoints:
@@ -17,7 +17,7 @@ spec:
     - match: Host(`gushen.lurus.cn`) && !PathPrefix(`/api`) && !PathPrefix(`/ws`) && !PathPrefix(`/docs`) && !PathPrefix(`/openapi.json`) && !Path(`/health`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
   tls:
     secretName: gushen-lurus-cn-tls
@@ -27,10 +27,10 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: ai-qtrd-frontend-api
-  namespace: ai-qtrd
+  name: lucrum-frontend-api
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: ingress
 spec:
   entryPoints:
@@ -40,51 +40,51 @@ spec:
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/strategy/generate`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     # AI Advisor chat (calls lurus-api/DeepSeek)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/advisor`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     # Auth routes (Next.js NextAuth)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/auth`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     # Backtest API (frontend JS engine)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/backtest`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     # Market data APIs (frontend data-service with EastMoney/Sina sources)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market/status`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market/indices`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market/quote`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market/kline`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market/flow`)
       kind: Rule
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
   tls:
     secretName: gushen-lurus-cn-tls
@@ -94,10 +94,10 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: ai-qtrd-api
-  namespace: ai-qtrd
+  name: lucrum-api
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: ingress
 spec:
   entryPoints:
@@ -107,47 +107,47 @@ spec:
     - match: Host(`gushen.lurus.cn`) && Path(`/health`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     # Backend strategy API (parse, create, list, etc. - NOT generate)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/strategy`) && !PathPrefix(`/api/strategy/generate`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/trading`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/account`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     # Backend market API (exclude frontend routes: status, indices, quote, kline, flow)
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/market`) && !PathPrefix(`/api/market/status`) && !PathPrefix(`/api/market/indices`) && !PathPrefix(`/api/market/quote`) && !PathPrefix(`/api/market/kline`) && !PathPrefix(`/api/market/flow`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/data`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
-    # Note: /api/backtest is routed to frontend (ai-qtrd-frontend-api IngressRoute)
+    # Note: /api/backtest is routed to frontend (lucrum-frontend-api IngressRoute)
     # WebSocket endpoint
     - match: Host(`gushen.lurus.cn`) && PathPrefix(`/ws`)
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
     # Swagger docs
     - match: Host(`gushen.lurus.cn`) && (PathPrefix(`/docs`) || PathPrefix(`/openapi.json`))
       kind: Rule
       services:
-        - name: ai-qtrd-api
+        - name: lucrum-api
           port: 8000
   tls:
     secretName: gushen-lurus-cn-tls
@@ -157,10 +157,10 @@ spec:
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute
 metadata:
-  name: ai-qtrd-redirect
-  namespace: ai-qtrd
+  name: lucrum-redirect
+  namespace: lucrum
   labels:
-    app.kubernetes.io/name: ai-qtrd
+    app.kubernetes.io/name: lucrum
     app.kubernetes.io/component: ingress
 spec:
   entryPoints:
@@ -170,9 +170,9 @@ spec:
       kind: Rule
       middlewares:
         - name: redirect-https
-          namespace: ai-qtrd
+          namespace: lucrum
       services:
-        - name: ai-qtrd-web
+        - name: lucrum-web
           port: 3000
 
 ---
@@ -181,7 +181,7 @@ apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
   name: redirect-https
-  namespace: ai-qtrd
+  namespace: lucrum
 spec:
   redirectScheme:
     scheme: https

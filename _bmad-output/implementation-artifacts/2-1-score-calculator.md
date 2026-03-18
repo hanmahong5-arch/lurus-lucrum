@@ -207,7 +207,7 @@ maxConsecutiveWins, maxConsecutiveLosses, avgWin, avgLoss
 
 - [Source: _bmad-output/planning-artifacts/epics.md#Story 2.1] - Story 定义
 - [Source: _bmad-output/planning-artifacts/architecture.md#ADR-006] - Decimal.js 要求
-- [Source: gushen-web/src/lib/backtest/statistics.ts] - 指标计算参考
+- [Source: lucrum-web/src/lib/backtest/statistics.ts] - 指标计算参考
 
 ## Dev Agent Record
 
@@ -237,11 +237,11 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- gushen-web/src/lib/backtest/score/types.ts (new - Type definitions, thresholds)
-- gushen-web/src/lib/backtest/score/dimension-scorers.ts (new - 4 dimension scoring functions)
-- gushen-web/src/lib/backtest/score/score-calculator.ts (new - Main calculateScore function)
-- gushen-web/src/lib/backtest/score/index.ts (new - Module exports)
-- gushen-web/src/lib/backtest/score/__tests__/score-calculator.test.ts (new - 52 tests)
+- lucrum-web/src/lib/backtest/score/types.ts (new - Type definitions, thresholds)
+- lucrum-web/src/lib/backtest/score/dimension-scorers.ts (new - 4 dimension scoring functions)
+- lucrum-web/src/lib/backtest/score/score-calculator.ts (new - Main calculateScore function)
+- lucrum-web/src/lib/backtest/score/index.ts (new - Module exports)
+- lucrum-web/src/lib/backtest/score/__tests__/score-calculator.test.ts (new - 52 tests)
 
 ## Change Log
 
