@@ -75,11 +75,17 @@ const zh = {
   "referral.totalRewards": "累计奖励 (LB)",
   "referral.rules": "奖励规则",
 
-  // Upgrade
+  // Upgrade / Roles
   "upgrade.explorer": "体验版",
   "upgrade.trader": "进阶版",
   "upgrade.pro": "专业版",
   "upgrade.enterprise": "企业版",
+  "role.member": "会员",
+  "role.noName": "未设置名称",
+
+  // Header
+  "header.quota": "配额",
+  "header.demoAccount": "演示账户",
 
   // Risk
   "risk.disclaimer": "风险提示",

@@ -35,48 +35,58 @@ import { Button } from '@/components/ui/button';
 import { useQuotaStatus } from '@/hooks/use-quota-status';
 import { LocaleSwitcher } from '@/components/i18n/locale-switcher';
 import { TaskNotificationBell } from '@/components/task/task-notification-bell';
+import { useI18n } from '@/lib/i18n/context';
+import type { TranslationKey } from '@/lib/i18n/dictionaries/zh';
 
-// Primary navigation items (always visible on desktop)
-const PRIMARY_NAV = [
-  { href: '/dashboard', label: '策略编辑器' },
-  { href: '/dashboard/marketplace', label: '策略市场' },
-  { href: '/dashboard/strategy-validation', label: '策略验证' },
-  { href: '/dashboard/trading', label: '交易面板' },
-  { href: '/dashboard/strategy-scanner', label: '扫描选板' },
-  { href: '/dashboard/agents', label: '分析任务' },
-  { href: '/dashboard/history', label: '历史记录' },
+// Navigation items reference i18n keys instead of hardcoded labels
+const PRIMARY_NAV: { href: string; key: TranslationKey }[] = [
+  { href: '/dashboard', key: 'nav.strategyEditor' },
+  { href: '/dashboard/marketplace', key: 'nav.marketplace' },
+  { href: '/dashboard/strategy-validation', key: 'nav.validation' },
+  { href: '/dashboard/trading', key: 'nav.trading' },
+  { href: '/dashboard/strategy-scanner', key: 'nav.scanner' },
+  { href: '/dashboard/agents', key: 'nav.agents' },
+  { href: '/dashboard/history', key: 'nav.history' },
 ];
 
-// Secondary navigation items (inside "more" dropdown on desktop)
-const MORE_NAV = [
-  { href: '/dashboard/insights', label: '机构洞察' },
-  { href: '/dashboard/advisor', label: '投资顾问' },
-  { href: '/dashboard/diagnostics', label: '策略诊断' },
-  { href: '/backtest-agent', label: '智能回测' },
+const MORE_NAV: { href: string; key: TranslationKey }[] = [
+  { href: '/dashboard/insights', key: 'nav.insights' },
+  { href: '/dashboard/advisor', key: 'nav.advisor' },
+  { href: '/dashboard/diagnostics', key: 'nav.diagnostics' },
+  { href: '/backtest-agent', key: 'nav.smartBacktest' },
 ];
 
 // All items combined for mobile menu
 const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV];
 
-// Role display mapping (supports both new codes and legacy names)
-const DEFAULT_ROLE_INFO = { label: '体验版', color: 'text-white/50' } as const;
+// Role display mapping — keys reference i18n translation keys
+const ROLE_COLORS: Record<string, string> = {
+  free: 'text-white/50',
+  basic: 'text-accent',
+  pro: 'text-profit',
+  enterprise: 'text-cyan-400',
+  standard: 'text-accent',
+  premium: 'text-profit',
+};
 
-const ROLE_LABELS: Record<string, { label: string; color: string }> = {
-  free: DEFAULT_ROLE_INFO,
-  basic: { label: '进阶版', color: 'text-accent' },
-  pro: { label: '专业版', color: 'text-profit' },
-  enterprise: { label: '企业版', color: 'text-cyan-400' },
-  // Legacy names for backward compat
-  standard: { label: '进阶版', color: 'text-accent' },
-  premium: { label: '专业版', color: 'text-profit' },
+const ROLE_I18N_KEYS: Record<string, TranslationKey> = {
+  free: 'upgrade.explorer',
+  basic: 'upgrade.trader',
+  pro: 'upgrade.pro',
+  enterprise: 'upgrade.enterprise',
+  standard: 'upgrade.trader',
+  premium: 'upgrade.pro',
 };
 
 /**
- * Get role info with fallback to default
+ * Get role color and i18n key with fallback
  */
-function getRoleInfo(role: string | undefined | null): { label: string; color: string } {
-  const key = role || 'free';
-  return ROLE_LABELS[key] ?? DEFAULT_ROLE_INFO;
+function getRoleColor(role: string | undefined | null): string {
+  return ROLE_COLORS[role || 'free'] ?? 'text-white/50';
+}
+
+function getRoleI18nKey(role: string | undefined | null): TranslationKey {
+  return ROLE_I18N_KEYS[role || 'free'] ?? 'upgrade.explorer';
 }
 
 /**
@@ -114,6 +124,7 @@ function isNavActive(pathname: string, href: string): boolean {
  */
 function QuotaBar({ userId, plan }: { userId: string; plan: string }) {
   const { remaining, total, loading } = useQuotaStatus(userId);
+  const { t } = useI18n();
 
   // Pro/Enterprise users have no limits — hide bar
   if (plan === 'pro' || plan === 'enterprise' || plan === 'premium' || loading || total <= 0) return null;
@@ -122,8 +133,8 @@ function QuotaBar({ userId, plan }: { userId: string; plan: string }) {
   const remainingPercent = 100 - usedPercent;
 
   return (
-    <div className="flex items-center gap-2 text-xs text-white/50" title={`今日配额: 剩余 ${remaining} / ${total} tokens`}>
-      <span className="hidden sm:inline">配额</span>
+    <div className="flex items-center gap-2 text-xs text-white/50" title={`${t('header.quota')}: ${remaining} / ${total} tokens`}>
+      <span className="hidden sm:inline">{t('header.quota')}</span>
       <div className="w-16 h-1.5 rounded-full bg-white/10 overflow-hidden">
         <div
           className={`h-full rounded-full transition-all ${remainingPercent < 20 ? 'bg-loss' : 'bg-accent'}`}
@@ -146,7 +157,9 @@ export function DashboardHeader() {
   const { saveDraft } = useStrategyWorkspaceStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const roleInfo = getRoleInfo(user?.role);
+  const { t } = useI18n();
+  const roleColor = getRoleColor(user?.role);
+  const roleLabel = t(getRoleI18nKey(user?.role));
   const userInitials = getUserInitials(user?.name, user?.email);
   const { data: accountOverview } = useAccountOverview();
 
@@ -182,7 +195,7 @@ export function DashboardHeader() {
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    {item.label}
+                    {t(item.key)}
                   </Link>
                 );
               })}
@@ -197,7 +210,7 @@ export function DashboardHeader() {
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    更多
+                    {t('nav.more')}
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                     </svg>
@@ -210,7 +223,7 @@ export function DashboardHeader() {
                         href={item.href}
                         className={isNavActive(pathname, item.href) ? 'text-accent' : ''}
                       >
-                        {item.label}
+                        {t(item.key)}
                       </Link>
                     </DropdownMenuItem>
                   ))}
@@ -257,8 +270,8 @@ export function DashboardHeader() {
                       className="flex items-center gap-2 px-2 py-1 h-auto hover:bg-surface/50"
                     >
                       {/* Role badge */}
-                      <span className={`text-xs ${roleInfo.color} hidden sm:inline`}>
-                        {roleInfo.label}
+                      <span className={`text-xs ${roleColor} hidden sm:inline`}>
+                        {roleLabel}
                       </span>
 
                       {/* Avatar */}
@@ -286,17 +299,17 @@ export function DashboardHeader() {
                     <DropdownMenuLabel className="font-normal">
                       <div className="flex flex-col space-y-1">
                         <p className="text-sm font-medium leading-none">
-                          {user.name || '未设置名称'}
+                          {user.name || t('role.noName')}
                         </p>
                         <p className="text-xs leading-none text-muted-foreground">
                           {user.email}
                         </p>
                         <div className="flex items-center gap-2 mt-1">
-                          <span className={`text-xs ${roleInfo.color} font-medium`}>
-                            {roleInfo.label}
+                          <span className={`text-xs ${roleColor} font-medium`}>
+                            {roleLabel}
                           </span>
                           <span className="text-xs text-muted-foreground">
-                            会员
+                            {t('role.member')}
                           </span>
                         </div>
                       </div>
@@ -306,25 +319,25 @@ export function DashboardHeader() {
 
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/account">
-                        账户设置
+                        {t('nav.account')}
                       </Link>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/settings">
-                        偏好设置
+                        {t('nav.settings')}
                       </Link>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/strategies">
-                        我的策略
+                        {t('nav.strategies')}
                       </Link>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem asChild>
                       <Link href="/dashboard/referral">
-                        邀请返利
+                        {t('nav.referral')}
                       </Link>
                     </DropdownMenuItem>
 
@@ -334,7 +347,7 @@ export function DashboardHeader() {
                       className="text-loss focus:text-loss cursor-pointer"
                       onClick={() => signOut({ callbackUrl: '/' })}
                     >
-                      退出登录
+                      {t('nav.logout')}
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -345,7 +358,7 @@ export function DashboardHeader() {
                   onClick={() => signIn()}
                   className="text-sm"
                 >
-                  登录
+                  {t('nav.login')}
                 </Button>
               )}
 
@@ -393,7 +406,7 @@ export function DashboardHeader() {
                       : 'text-white/60 hover:text-white hover:bg-white/5'
                   }`}
                 >
-                  {item.label}
+                  {t(item.key)}
                 </Link>
               );
             })}

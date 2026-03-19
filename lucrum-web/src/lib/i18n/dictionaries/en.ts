@@ -77,11 +77,17 @@ const en: Record<TranslationKey, string> = {
   "referral.totalRewards": "Total Rewards (LB)",
   "referral.rules": "Reward Rules",
 
-  // Upgrade
+  // Upgrade / Roles
   "upgrade.explorer": "Explorer",
   "upgrade.trader": "Trader",
   "upgrade.pro": "Pro",
   "upgrade.enterprise": "Enterprise",
+  "role.member": "Member",
+  "role.noName": "No name set",
+
+  // Header
+  "header.quota": "Quota",
+  "header.demoAccount": "Demo",
 
   // Risk
   "risk.disclaimer": "Risk Disclaimer",
