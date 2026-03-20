@@ -22,10 +22,10 @@ So that 我无需切换页面就能知道保存状态、数据来源、工作流
 **Given** StatusBar 渲染
 **When** 保存状态变化
 **Then** 显示对应状态:
-- "● 已保存" - 绿色状态灯 (`--gushen-color-status-ready`)
-- "● 保存中..." - 蓝色状态灯 (`--gushen-color-primary`)
-- "● 未保存" - 灰色状态灯 (`--gushen-color-step-pending`)
-- "● 保存失败" - 红色状态灯 (`--gushen-color-status-block`)
+- "● 已保存" - 绿色状态灯 (`--lucrum-color-status-ready`)
+- "● 保存中..." - 蓝色状态灯 (`--lucrum-color-primary`)
+- "● 未保存" - 灰色状态灯 (`--lucrum-color-step-pending`)
+- "● 保存失败" - 红色状态灯 (`--lucrum-color-status-block`)
 
 ### AC-3: 数据来源 Slot (data-source)
 **Given** StatusBar 渲染
@@ -113,10 +113,10 @@ So that 我无需切换页面就能知道保存状态、数据来源、工作流
 - **组件位置**: `src/components/layout/status-bar.tsx`
 - **Store 位置**: `src/lib/stores/status-bar-store.ts`
 - **设计令牌**: 使用 Story 1.1 实现的 CSS 变量
-  - 已保存: `rgb(var(--gushen-color-status-ready))` (绿色)
+  - 已保存: `rgb(var(--lucrum-color-status-ready))` (绿色)
   - 保存中: `--primary` (蓝色)
-  - 未保存: `rgb(var(--gushen-color-step-pending))` (灰色)
-  - 保存失败: `rgb(var(--gushen-color-status-block))` (红色)
+  - 未保存: `rgb(var(--lucrum-color-step-pending))` (灰色)
+  - 保存失败: `rgb(var(--lucrum-color-status-block))` (红色)
   - DB: `text-source-db` (蓝色)
   - API: `text-source-api` (黄色)
   - 模拟: `text-source-sim` (灰色)
@@ -165,7 +165,7 @@ interface StatusBarActions {
 
 ### Previous Story Intelligence
 
-- Story 1.1: 设计令牌已实现，可直接使用 `--gushen-color-*` 变量和 Tailwind 类
+- Story 1.1: 设计令牌已实现，可直接使用 `--lucrum-color-*` 变量和 Tailwind 类
 - Story 1.2: Toast 系统已实现，移动端可使用 `showToast` 替代 StatusBar 反馈
 
 ### References

@@ -47,10 +47,10 @@ const LOCALE_OPTIONS = [
  * - Email display (read-only, verified status)
  */
 export function ProfileSettings() {
-  // Mock user data - in production, this would come from auth context or API
+  // Default profile - in production, populated from auth context or API
   const [profile, setProfile] = useState<ProfileData>({
-    displayName: "演示用户",
-    email: "demo@lurus.cn",
+    displayName: "",
+    email: "",
     phone: "",
     timezone: "Asia/Shanghai",
     locale: "zh-CN",

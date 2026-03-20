@@ -13,7 +13,7 @@
 ### 1. 镜像未构建或未导入K3s
 **最常见的原因！**
 
-K8s配置显示 `image: gushen-web:v18`, `imagePullPolicy: Never`，这意味着：
+K8s配置显示 `image: lucrum-web:v18`, `imagePullPolicy: Never`，这意味着：
 - 使用本地镜像，不从远程拉取
 - 如果K3s containerd中**没有v18镜像**，Pod会一直使用旧镜像
 
@@ -22,7 +22,7 @@ Deployment配置更新后，旧Pod可能仍在运行旧镜像。
 
 ### 3. 访问路径问题
 您可能访问的不是正确的Pod：
-- **域名访问** (推荐): https://gushen.lurus.cn → 通过Traefik Ingress → 正确的Pod
+- **域名访问** (推荐): https://lucrum.lurus.cn → 通过Traefik Ingress → 正确的Pod
 - **IP直接访问**: http://43.226.46.164:3000 → 可能绕过Ingress，访问到其他服务
 
 ### 4. 浏览器缓存
@@ -41,7 +41,7 @@ ssh root@43.226.46.164
 
 ### Step 2: 执行诊断脚本
 ```bash
-cd /root/gushen
+cd /root/lucrum
 bash diagnose-and-fix-v18.sh
 ```
 
@@ -60,29 +60,29 @@ bash diagnose-and-fix-v18.sh
 
 ```bash
 # 1. 检查K3s中的镜像
-crictl images | grep gushen-web
+crictl images | grep lucrum-web
 
 # 应该看到：
-# docker.io/library/gushen-web  v18  <IMAGE_ID>  XXX MB
-# docker.io/library/gushen-web  v17  <IMAGE_ID>  XXX MB
+# docker.io/library/lucrum-web  v18  <IMAGE_ID>  XXX MB
+# docker.io/library/lucrum-web  v17  <IMAGE_ID>  XXX MB
 ```
 
 **如果没有v18镜像**，需要构建并导入：
 
 ```bash
-cd /root/gushen/gushen-web
+cd /root/lucrum/lucrum-web
 
 # 拉取最新代码
 git pull origin main
 git log -1 --oneline  # 应该显示 935bf56
 
 # 构建v18镜像（使用--no-cache确保最新代码）
-docker build --no-cache -t gushen-web:v18 \
+docker build --no-cache -t lucrum-web:v18 \
   --build-arg API_URL=http://43.226.46.164:30800 \
   --build-arg WS_URL=ws://43.226.46.164:30800 .
 
 # 导入到K3s containerd
-docker save gushen-web:v18 | k3s ctr images import -
+docker save lucrum-web:v18 | k3s ctr images import -
 
 # 验证导入成功
 crictl images | grep v18
@@ -113,7 +113,7 @@ kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o wide
 kubectl get pods -n ai-qtrd -l app=ai-qtrd-web \
   -o jsonpath='{.items[0].spec.containers[0].image}'
 
-# 应该输出: gushen-web:v18
+# 应该输出: lucrum-web:v18
 ```
 
 **如果输出不是v18**：
@@ -167,7 +167,7 @@ kubectl describe pod -n ai-qtrd -l app=ai-qtrd-web | tail -30
 ```
 http://43.226.46.164:3000/dashboard
 或
-https://gushen.lurus.cn/dashboard
+https://lucrum.lurus.cn/dashboard
 ```
 
 ### 2. 创建测试策略
@@ -310,12 +310,12 @@ kubectl exec -n ai-qtrd -it $(kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o 
 ### 避免此类问题的建议：
 
 1. **使用有意义的镜像tag**
-   - ❌ 避免: `gushen-web:latest`（会缓存）
-   - ✅ 推荐: `gushen-web:v18`, `gushen-web:935bf56`
+   - ❌ 避免: `lucrum-web:latest`（会缓存）
+   - ✅ 推荐: `lucrum-web:v18`, `lucrum-web:935bf56`
 
 2. **构建时使用--no-cache**
    ```bash
-   docker build --no-cache -t gushen-web:v18 .
+   docker build --no-cache -t lucrum-web:v18 .
    ```
 
 3. **部署后强制重启Pod**
@@ -325,7 +325,7 @@ kubectl exec -n ai-qtrd -it $(kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o 
 
 4. **验证镜像导入**
    ```bash
-   crictl images | grep gushen-web | grep v18
+   crictl images | grep lucrum-web | grep v18
    ```
 
 5. **记录每次部署**
@@ -349,7 +349,7 @@ echo "=== Pod Logs ===" >> /tmp/debug-v18.txt
 kubectl logs -n ai-qtrd -l app=ai-qtrd-web --tail=100 >> /tmp/debug-v18.txt
 
 echo "=== Images ===" >> /tmp/debug-v18.txt
-crictl images | grep gushen >> /tmp/debug-v18.txt
+crictl images | grep lucrum >> /tmp/debug-v18.txt
 
 echo "=== Events ===" >> /tmp/debug-v18.txt
 kubectl get events -n ai-qtrd --sort-by='.lastTimestamp' | tail -50 >> /tmp/debug-v18.txt

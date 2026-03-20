@@ -86,7 +86,7 @@ export interface UseKLineDataResult {
   error: string | null;
   lastUpdate: Date | null;
   source: string; // Data source name
-  isMock: boolean; // Whether data is mock
+  isMock: boolean; // Always false (reserved for interface compatibility)
   refresh: () => Promise<void>;
   updateLastBar: (tick: TickData) => void;
 }
@@ -120,7 +120,7 @@ export const TIMEFRAME_LABELS: Record<TimeFrame, { zh: string; en: string }> = {
  * - Fetches new data whenever symbol or timeframe changes
  * - Shows loading state during fetches
  * - Cancels pending requests when parameters change
- * - Falls back to intelligent mock data if APIs fail
+ * - Returns error if all real data sources fail
  * - Auto-refreshes during market hours (optional)
  */
 export function useKLineData(options: UseKLineDataOptions): UseKLineDataResult {
@@ -425,47 +425,3 @@ export function getBarStartTime(
   return alignToBarStart(timestamp, timeframe);
 }
 
-/**
- * Legacy mock data generator for backward compatibility
- * Use the intelligent mock in kline-fetcher instead
- */
-export function generateMockKLineData(
-  days: number = 200,
-  startPrice: number = 100,
-): KLineData[] {
-  const data: KLineData[] = [];
-  let price = startPrice;
-  const now = getChinaTime();
-  now.setHours(15, 0, 0, 0);
-
-  for (let i = days; i >= 0; i--) {
-    const date = new Date(now);
-    date.setDate(date.getDate() - i);
-
-    if (date.getDay() === 0 || date.getDay() === 6) continue;
-
-    const time = Math.floor(date.getTime() / 1000);
-    const volatility = 0.02;
-    const trend = Math.sin(i / 30) * 0.001;
-    const change = (Math.random() - 0.5) * 2 * volatility + trend;
-
-    const open = price;
-    const close = price * (1 + change);
-    const high = Math.max(open, close) * (1 + Math.random() * volatility * 0.5);
-    const low = Math.min(open, close) * (1 - Math.random() * volatility * 0.5);
-    const volume = Math.floor(1000000 + Math.random() * 5000000);
-
-    data.push({
-      time,
-      open: parseFloat(open.toFixed(2)),
-      high: parseFloat(high.toFixed(2)),
-      low: parseFloat(low.toFixed(2)),
-      close: parseFloat(close.toFixed(2)),
-      volume,
-    });
-
-    price = close;
-  }
-
-  return data;
-}

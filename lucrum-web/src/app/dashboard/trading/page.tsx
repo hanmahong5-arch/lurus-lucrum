@@ -82,48 +82,11 @@ interface Order {
 }
 
 // =============================================================================
-// MOCK DATA / 模拟数据
+// INITIAL STATE (empty - populated from real broker connections)
 // =============================================================================
 
-// Initial mock position data for A-shares
-const INITIAL_POSITIONS: Position[] = [
-  {
-    symbol: "600519",
-    name: "贵州茅台",
-    side: "long",
-    size: 100,
-    entryPrice: 1720.0,
-    currentPrice: 1750.0,
-    pnl: 3000.0,
-    pnlPercent: 1.74,
-  },
-  {
-    symbol: "000333",
-    name: "美的集团",
-    side: "long",
-    size: 500,
-    entryPrice: 55.0,
-    currentPrice: 56.8,
-    pnl: 900.0,
-    pnlPercent: 3.27,
-  },
-];
-
-// Initial mock order data
-const INITIAL_ORDERS: Order[] = [
-  {
-    id: "ORD001",
-    symbol: "601318",
-    name: "中国平安",
-    side: "buy",
-    type: "limit",
-    price: 47.5,
-    size: 200,
-    filled: 0,
-    status: "open",
-    time: "2026-01-19 10:30:00",
-  },
-];
+const INITIAL_POSITIONS: Position[] = [];
+const INITIAL_ORDERS: Order[] = [];
 
 // =============================================================================
 // UTILITY FUNCTIONS / 工具函数

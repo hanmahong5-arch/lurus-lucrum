@@ -49,7 +49,7 @@ async function sendVerificationEmail(
 ): Promise<boolean> {
   // In production, integrate with email service (e.g., SendGrid, Resend, SES)
   // For demo, we log the verification link
-  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://gushen.lurus.cn"}/auth/verify-email?token=${token}`;
+  const verifyUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://lucrum.lurus.cn"}/auth/verify-email?token=${token}`;
 
   console.log("=".repeat(60));
   console.log("EMAIL VERIFICATION (Demo Mode)");

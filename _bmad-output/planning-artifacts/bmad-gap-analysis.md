@@ -63,7 +63,7 @@ scope: Full platform assessment across all 4 BMAD phases
 
 | Item | Previous | Current | Status |
 |------|----------|---------|--------|
-| Formal PRD | ❌ Missing | ✅ Generated | `prd-gushen.md` with 6 user journeys |
+| Formal PRD | ❌ Missing | ✅ Generated | `prd-lucrum.md` with 6 user journeys |
 | Functional requirements | ⚠️ Implicit | ✅ 8 FR categories | FR-1 to FR-8, 60+ requirements tracked |
 | Non-functional requirements | ⚠️ Partial | ✅ 5 NFR categories | Performance, reliability, security, a11y, testing |
 | User journeys | ❌ Missing | ✅ 6 journeys | Core flow, validation, advisor, workspace, workflow, crawler |
@@ -115,7 +115,7 @@ scope: Full platform assessment across all 4 BMAD phases
 | Backlog grooming | ❌ Missing | ⚠️ Partial | plan.md populated but no formal backlog tool |
 
 **Remaining Gaps**:
-- 📋 Formal epics document for lurus-lucrum (`epics-gushen.md`)
+- 📋 Formal epics document for lurus-lucrum (`epics-lucrum.md`)
 - 📋 Story estimation and velocity tracking
 
 ---
@@ -211,7 +211,7 @@ scope: Full platform assessment across all 4 BMAD phases
 1. ✅ **Product brief generated** → `product-brief.md`
 2. ✅ **Architecture document generated** → `architecture.md` (11 ADRs)
 3. ✅ **Project context generated** → `project-context.md`
-4. ✅ **PRD created for lurus-lucrum** → `prd-gushen.md` (6 journeys, 60+ FRs)
+4. ✅ **PRD created for lurus-lucrum** → `prd-lucrum.md` (6 journeys, 60+ FRs)
 5. ✅ **Gap analysis generated** → `bmad-gap-analysis.md`
 6. ✅ **Financial engine tests** → 680+ tests, 85%+ coverage
 7. ✅ **Staging environment deployed** → `lucrum-staging` namespace
@@ -228,7 +228,7 @@ scope: Full platform assessment across all 4 BMAD phases
 
 ### Short-Term (Next Sprint) / 短期
 
-4. **Create `epics-gushen.md`** with formal epic/story breakdown
+4. **Create `epics-lucrum.md`** with formal epic/story breakdown
 5. **Create `doc/structure.md`** from architecture.md output
 6. **Document rollback procedure** in `doc/runbook/`
 7. **Increase component test coverage** to 40%+
@@ -258,7 +258,7 @@ Based on the updated gap analysis, recommended next BMAD workflows:
 |-------|----------|-------|---------|--------|
 | 1 | `generate-project-context` | BMad Master | Project context | ✅ Done (regenerated) |
 | 2 | `create-product-brief` | Mary (Analyst) | Product brief | ✅ Done (regenerated) |
-| 3 | `create-prd` (gushen) | John (PM) | Gushen PRD | ✅ Done (regenerated) |
+| 3 | `create-prd` (lucrum) | John (PM) | Lucrum PRD | ✅ Done (regenerated) |
 | 4 | `create-architecture` | Winston (Architect) | Architecture doc | ✅ Done (regenerated) |
 | 5 | `check-implementation-readiness` | Bob (SM) | Gap analysis | ✅ Done (regenerated) |
 | 6 | `create-epics-and-stories` | Bob (SM) | **Next** - Break PRD into epics |

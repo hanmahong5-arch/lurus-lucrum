@@ -382,7 +382,7 @@ bun run test -- src/lib/backtest     # Run tests in specific directory
 - **GitOps**: ArgoCD manages deployment from `deploy/k8s` in this repo.
 - **CI/CD**: GitHub Actions builds image -> GHCR (`ghcr.io/hanmahong5-arch/lucrum-web`) -> ArgoCD Sync.
 - **Namespace**: `lucrum`
-- **Domain**: `https://gushen.lurus.cn`
+- **Domain**: `https://lucrum.lurus.cn`
 - **Service Port**: 3000 (NodePort available but use Ingress)
 
 **Server Roles**:

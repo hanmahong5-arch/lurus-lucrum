@@ -1,9 +1,13 @@
 /**
- * Unified Backtest API Route
- * 统一回测API路由
+ * Unified Backtest API Route — THE primary entry point for all backtest modes.
+ * 统一回测API路由 — 所有回测模式的主入口
  *
- * Handles multi-level backtest requests (sector, stock, portfolio)
- * 处理多层级回测请求（板块、个股、组合）
+ * Supported modes (target.mode):
+ *   "single"    — Single stock backtest (个股回测, alias for legacy "stock")
+ *   "multi"     — Multi-stock batch backtest (多股批量回测)
+ *   "sector"    — Sector/industry backtest (板块回测)
+ *   "portfolio" — Weighted portfolio backtest (组合回测)
+ *   "stock"     — Legacy alias for "single", kept for backward compatibility
  *
  * Features:
  * - Comprehensive input validation
@@ -43,6 +47,9 @@ import {
 } from "@/lib/data-service/sources/eastmoney-sector";
 import { runBacktest } from "@/lib/backtest/engine";
 import { getKLineFromDatabase } from "@/lib/backtest/db-kline-provider";
+import { db, sectors, stockSectorMapping, stocks } from "@/lib/db";
+import { eq, inArray } from "drizzle-orm";
+import { cacheGet, cacheSet } from "@/lib/redis";
 
 // =============================================================================
 // CONSTANTS / 常量
@@ -203,17 +210,20 @@ function validateRequest(
   }
 
   const target = request.target as Record<string, unknown>;
-  const mode = target.mode as string;
+  const rawMode = target.mode as string;
+  // Normalize: "single" is an alias for "stock", "multi" also accepted
+  const VALID_MODES = ["single", "multi", "sector", "stock", "portfolio"];
+  const mode = rawMode === "single" ? "stock" : rawMode;
 
-  if (!mode || !["sector", "stock", "portfolio"].includes(mode)) {
+  if (!rawMode || !VALID_MODES.includes(rawMode)) {
     return {
       valid: false,
       error: createErrorResponse(
         ErrorCodes.INVALID_TARGET,
         "无效的回测模式",
-        `Invalid target mode: ${mode}`,
+        `Invalid target mode: ${rawMode}`,
         400,
-        { validModes: ["sector", "stock", "portfolio"] },
+        { validModes: VALID_MODES },
         "请选择有效的回测模式",
       ),
     };
@@ -240,12 +250,44 @@ function validateRequest(
       error: createErrorResponse(
         ErrorCodes.INVALID_TARGET,
         "请选择股票",
-        "Stock is required for stock mode",
+        "Stock is required for stock/single mode",
         400,
         undefined,
         "在个股选项卡中选择一只股票",
       ),
     };
+  }
+
+  // "multi" mode reuses the portfolio structure for its stock list
+  if (rawMode === "multi") {
+    const portfolio = target.portfolio as Record<string, unknown> | undefined;
+    const stocks = portfolio?.stocks as unknown[] | undefined;
+    if (!stocks || !Array.isArray(stocks) || stocks.length === 0) {
+      return {
+        valid: false,
+        error: createErrorResponse(
+          ErrorCodes.EMPTY_PORTFOLIO,
+          "请添加股票到多股回测列表",
+          "Stock list required for multi mode (set in target.portfolio.stocks)",
+          400,
+          undefined,
+          "请在 target.portfolio.stocks 中提供股票列表",
+        ),
+      };
+    }
+    if (stocks.length > MAX_PORTFOLIO_STOCKS) {
+      return {
+        valid: false,
+        error: createErrorResponse(
+          ErrorCodes.PORTFOLIO_TOO_LARGE,
+          `股票数量超过限制 (最多${MAX_PORTFOLIO_STOCKS}只)`,
+          `Stock list exceeds maximum size (${MAX_PORTFOLIO_STOCKS})`,
+          400,
+          { maxSize: MAX_PORTFOLIO_STOCKS, actualSize: stocks.length },
+          `请减少股票数量至${MAX_PORTFOLIO_STOCKS}只以内`,
+        ),
+      };
+    }
   }
 
   if (mode === "portfolio") {
@@ -657,24 +699,72 @@ async function runSectorBacktest(
     throw new Error("Sector target is required for sector mode");
   }
 
-  // Get sector stocks with error handling
-  let stocks: SectorStock[];
-  try {
-    const sectorResponse = await getSectorStocks(
-      target.sector.code,
-      MAX_SECTOR_STOCKS,
-    );
-    if (!sectorResponse.success || !sectorResponse.data) {
-      throw new Error(sectorResponse.error || "Failed to fetch sector stocks");
-    }
-    stocks = sectorResponse.data.stocks;
-  } catch (error) {
-    throw new Error(
-      `获取板块成分股失败: ${error instanceof Error ? error.message : "未知错误"}`,
-    );
+  // Get sector stocks: DB-first, Redis cache, API fallback
+  let sectorStocks: Array<{ symbol: string; name: string }> = [];
+
+  // --- Priority 1: Redis cache ---
+  const cacheKey = `sector:stocks:${target.sector.code}`;
+  const cachedStocks = await cacheGet<Array<{ symbol: string; name: string }>>(cacheKey);
+  if (cachedStocks && cachedStocks.length > 0) {
+    sectorStocks = cachedStocks;
   }
 
-  if (stocks.length === 0) {
+  // --- Priority 2: Database (sectors + stock_sector_mapping) ---
+  if (sectorStocks.length === 0) {
+    try {
+      const sectorRow = await db.query.sectors.findFirst({
+        where: eq(sectors.code, target.sector.code),
+      });
+      if (sectorRow) {
+        const mappings = await db
+          .select({ stockId: stockSectorMapping.stockId })
+          .from(stockSectorMapping)
+          .where(eq(stockSectorMapping.sectorId, sectorRow.id));
+        if (mappings.length > 0) {
+          const stockIds = mappings.map((m) => m.stockId);
+          const dbStocks = await db
+            .select({ symbol: stocks.symbol, name: stocks.name, isST: stocks.isST, status: stocks.status })
+            .from(stocks)
+            .where(inArray(stocks.id, stockIds));
+          // Filter: active, exclude ST
+          sectorStocks = dbStocks
+            .filter((s) => s.status === "active" && !s.isST)
+            .map((s) => ({ symbol: s.symbol, name: s.name }));
+          if (sectorStocks.length > 0) {
+            await cacheSet(cacheKey, sectorStocks, 86400);
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn("[UnifiedBacktest] DB sector query failed, falling back to API:", dbErr);
+    }
+  }
+
+  // --- Priority 3: EastMoney API fallback ---
+  if (sectorStocks.length === 0) {
+    try {
+      const sectorResponse = await getSectorStocks(
+        target.sector.code,
+        MAX_SECTOR_STOCKS,
+      );
+      if (!sectorResponse.success || !sectorResponse.data) {
+        throw new Error(sectorResponse.error || "Failed to fetch sector stocks");
+      }
+      sectorStocks = sectorResponse.data.stocks.map((s) => ({
+        symbol: s.symbol,
+        name: s.name,
+      }));
+      if (sectorStocks.length > 0) {
+        await cacheSet(cacheKey, sectorStocks, 86400);
+      }
+    } catch (error) {
+      throw new Error(
+        `获取板块成分股失败: ${error instanceof Error ? error.message : "未知错误"}`,
+      );
+    }
+  }
+
+  if (sectorStocks.length === 0) {
     throw new Error("板块中没有股票");
   }
 
@@ -688,7 +778,7 @@ async function runSectorBacktest(
   let allTrades: DetailedTrade[] = [];
 
   // Run backtest for each stock (limited for performance)
-  const limitedStocks = stocks.slice(0, 20);
+  const limitedStocks = sectorStocks.slice(0, 20);
   for (const stock of limitedStocks) {
     // Check timeout
     if (Date.now() - startTime > REQUEST_TIMEOUT - 5000) {
@@ -767,7 +857,7 @@ async function runSectorBacktest(
   const sectorResult: SectorAggregatedResult = {
     sectorCode: target.sector.code,
     sectorName: target.sector.name,
-    stockCount: stocks.length,
+    stockCount: sectorStocks.length,
     backtestCount: stockResults.length,
     avgReturn,
     medianReturn:
@@ -1051,8 +1141,16 @@ export async function POST(request: NextRequest) {
     let result: UnifiedBacktestResult;
 
     try {
+      // Normalize mode: "single" → "stock", "multi" → "portfolio"
+      const normalizedMode = (() => {
+        const m = validatedRequest.target.mode;
+        if (m === "single") return "stock";
+        if (m === "multi") return "portfolio";
+        return m;
+      })();
+
       const backtestPromise = (async () => {
-        switch (validatedRequest.target.mode) {
+        switch (normalizedMode) {
           case "sector":
             return await runSectorBacktest(
               validatedRequest.target,

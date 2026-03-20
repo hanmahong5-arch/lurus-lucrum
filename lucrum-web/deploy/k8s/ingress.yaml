@@ -9,7 +9,7 @@ spec:
   entryPoints:
     - websecure
   routes:
-    - match: Host(`gushen.lurus.cn`)
+    - match: Host(`lucrum.lurus.cn`)
       kind: Rule
       services:
         - name: lucrum-web

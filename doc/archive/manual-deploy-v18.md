@@ -1,5 +1,5 @@
-# GuShen Web v18 手动部署指南
-# Manual Deployment Guide for GuShen Web v18
+# Lucrum Web v18 手动部署指南
+# Manual Deployment Guide for Lucrum Web v18
 
 **创建时间**: 2026-01-22
 **版本**: v18
@@ -96,7 +96,7 @@ kubectl get pods -n ai-qtrd -l app=ai-qtrd-web
 kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o jsonpath='{.items[0].spec.containers[0].image}'
 
 # 查看可用的Docker镜像
-crictl images | grep gushen-web
+crictl images | grep lucrum-web
 ```
 
 ---
@@ -107,10 +107,10 @@ crictl images | grep gushen-web
 
 ```bash
 # 进入项目目录
-cd /root/gushen
+cd /root/lucrum
 
 # 备份当前代码（可选但推荐）
-tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz gushen-web/src
+tar -czf backup-$(date +%Y%m%d-%H%M%S).tar.gz lucrum-web/src
 
 # 拉取GitHub最新代码（commit 935bf56）
 git pull origin main
@@ -122,7 +122,7 @@ git log -1 --oneline
 
 **预期输出**:
 ```
-From github.com:hanmahong5-arch/lurus-gushen
+From github.com:hanmahong5-arch/lurus-lucrum
  * branch            main       -> FETCH_HEAD
    b307f67..935bf56  main       -> origin/main
 Updating b307f67..935bf56
@@ -137,7 +137,7 @@ Fast-forward
 ### 步骤2：验证关键文件 | Verify Critical Files
 
 ```bash
-cd /root/gushen/gushen-web
+cd /root/lucrum/lucrum-web
 
 # 验证Redis导入修复
 grep "cacheGet, cacheSet" src/app/api/backtest/multi-stocks/route.ts
@@ -160,9 +160,9 @@ wc -l src/components/strategy-editor/parameter-info-dialog.tsx
 
 ```bash
 # 清理v17和更早版本的镜像（释放空间）
-crictl rmi gushen-web:v17 2>/dev/null || true
-crictl rmi gushen-web:v16 2>/dev/null || true
-crictl rmi gushen-web:v15 2>/dev/null || true
+crictl rmi lucrum-web:v17 2>/dev/null || true
+crictl rmi lucrum-web:v16 2>/dev/null || true
+crictl rmi lucrum-web:v15 2>/dev/null || true
 
 # 清理悬空的Docker镜像
 docker image prune -f
@@ -173,17 +173,17 @@ echo "✓ 旧镜像缓存已清理"
 ### 步骤4：构建Docker镜像v18 | Build Docker Image v18
 
 ```bash
-cd /root/gushen/gushen-web
+cd /root/lucrum/lucrum-web
 
 # 构建镜像（使用--no-cache确保使用最新代码）
 docker build --no-cache \
-  -t gushen-web:v18 \
+  -t lucrum-web:v18 \
   --build-arg API_URL=http://43.226.46.164:30800 \
   --build-arg WS_URL=ws://43.226.46.164:30800 \
   --build-arg REDIS_HOST=43.226.46.164 \
   --build-arg REDIS_PORT=6379 \
   --build-arg REDIS_PASSWORD=lurus2024 \
-  . 2>&1 | tee /root/gushen/docker-build-v18-$(date +%H%M%S).log
+  . 2>&1 | tee /root/lucrum/docker-build-v18-$(date +%H%M%S).log
 ```
 
 **预计时间**: 3-5分钟
@@ -199,38 +199,38 @@ docker build --no-cache \
 **验证构建成功**:
 ```bash
 # 检查镜像是否创建
-docker images | grep gushen-web:v18
+docker images | grep lucrum-web:v18
 
 # 应该显示类似:
-# gushen-web  v18  <IMAGE_ID>  About a minute ago  XXX MB
+# lucrum-web  v18  <IMAGE_ID>  About a minute ago  XXX MB
 ```
 
 **如果构建失败，检查日志**:
 ```bash
-tail -100 /root/gushen/docker-build-v18-*.log
+tail -100 /root/lucrum/docker-build-v18-*.log
 ```
 
 ### 步骤5：导入镜像到K3s | Import Image to K3s
 
 ```bash
 # 导出Docker镜像并导入到K3s containerd
-docker save gushen-web:v18 | k3s ctr images import -
+docker save lucrum-web:v18 | k3s ctr images import -
 
 # 验证导入成功
-k3s crictl images | grep gushen-web
+k3s crictl images | grep lucrum-web
 ```
 
 **预期输出**:
 ```
-docker.io/library/gushen-web  v18     <IMAGE_ID>     XXX MB
-docker.io/library/gushen-web  v17     <IMAGE_ID>     XXX MB  (旧版本)
+docker.io/library/lucrum-web  v18     <IMAGE_ID>     XXX MB
+docker.io/library/lucrum-web  v17     <IMAGE_ID>     XXX MB  (旧版本)
 ```
 
 ### 步骤6：更新K8s部署 | Update Kubernetes Deployment
 
 ```bash
 # 更新deployment使用新镜像v18
-kubectl set image deployment/ai-qtrd-web web=gushen-web:v18 -n ai-qtrd
+kubectl set image deployment/ai-qtrd-web web=lucrum-web:v18 -n ai-qtrd
 
 # 等待10秒让系统开始滚动更新
 sleep 10
@@ -282,7 +282,7 @@ kubectl describe pods -n ai-qtrd -l app=ai-qtrd-web | grep -A 20 "Events:"
 **成功标志**:
 - ✅ Pod状态为 `Running`
 - ✅ Ready列显示 `1/1`
-- ✅ 镜像显示 `gushen-web:v18`
+- ✅ 镜像显示 `lucrum-web:v18`
 - ✅ 日志中没有错误信息
 - ✅ Events中显示 `Started container` 或 `Pulled`
 
@@ -433,11 +433,11 @@ http://43.226.46.164:3000/dashboard
 kubectl rollout undo deployment/ai-qtrd-web -n ai-qtrd
 
 # 方法2：手动指定v17镜像
-kubectl set image deployment/ai-qtrd-web web=gushen-web:v17 -n ai-qtrd
+kubectl set image deployment/ai-qtrd-web web=lucrum-web:v17 -n ai-qtrd
 
 # 验证回滚
 kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o jsonpath='{.items[0].spec.containers[0].image}'
-# 应该显示: gushen-web:v17
+# 应该显示: lucrum-web:v17
 ```
 
 ---
@@ -483,7 +483,7 @@ import { backtestCache } from "@/lib/redis";  // ❌ 错误
 **解决方案**:
 ```bash
 # 重新导入镜像
-docker save gushen-web:v18 | k3s ctr images import -
+docker save lucrum-web:v18 | k3s ctr images import -
 
 # 验证
 k3s crictl images | grep v18

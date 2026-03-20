@@ -6,7 +6,7 @@
 
 # Deployment artifacts / 部署产物
 deploy-v*.sh
-gushen-web-v*.tar*
+lucrum-web-v*.tar*
 SERVER-DEPLOYMENT-GUIDE.md
 
 # Temporary files / 临时文件

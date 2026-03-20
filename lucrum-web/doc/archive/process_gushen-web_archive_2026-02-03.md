@@ -1,10 +1,10 @@
-# GuShen Web 开发进度文档
+# Lucrum Web 开发进度文档
 
 ## 2026-01-22 (晚间): 专业金融终端 UI/UX 全面升级
 ## Professional Fintech Terminal UI/UX Complete Overhaul
 
 **用户需求 User Request:**
-- 将 GuShen 平台升级为专业量化交易员驾驶舱风格
+- 将 Lucrum 平台升级为专业量化交易员驾驶舱风格
 - 参考 Bloomberg Terminal, 富途牛牛, Webull 的视觉设计
 - 实现 CN/US 市场颜色模式切换 (中国市场红涨绿跌, 美国市场绿涨红跌)
 - Glass Morphism 玻璃态设计系统
@@ -237,7 +237,7 @@ RUN apk add --no-cache python3 make g++
 **修改文件 Modified Files:**
 1. `src/components/strategy-editor/backtest-panel.tsx` (第562-681行重写)
 2. `src/lib/backtest/types.ts` (扩展BacktestResult接口)
-3. `gushen-web/Dockerfile` (第7-17行，添加构建工具)
+3. `lucrum-web/Dockerfile` (第7-17行，添加构建工具)
 4. `src/app/api/backtest/multi-stocks/route.ts` (第18行，修复Redis导入)
 
 **统计数据 Statistics:**
@@ -310,17 +310,17 @@ RUN apk add --no-cache python3 make g++
 - 更新 README.md 的部署流程
 
 **修改内容 Modified Content:**
-- `gushen-web/Dockerfile`: 完全重写，使用 Bun 运行时
+- `lucrum-web/Dockerfile`: 完全重写，使用 Bun 运行时
 - `CLAUDE.md`: 新建，定义使用 Bun 的开发工作流
-- `gushen-web/BUN-MIGRATION.md`: 新建，详细的迁移指南
+- `lucrum-web/BUN-MIGRATION.md`: 新建，详细的迁移指南
 - `README.md`: 更新部署流程，添加 Bun 最佳实践章节
-- `gushen-web/.gitignore`: 添加 Bun 相关注释
+- `lucrum-web/.gitignore`: 添加 Bun 相关注释
 
 **删除内容 Deleted Content:**
-- 过时压缩包: `gushen-web-v15.tar.gz`, `gushen-web-v16.tar.gz`
-- 过时部署脚本: `gushen-web/deploy-v14.sh`, `gushen-web/deploy-v16.sh`
-- 过时文档: `gushen-web/SERVER-DEPLOYMENT-GUIDE.md`, `doc/phase14-deployment-steps.md`
-- 错误文件: `nul` (根目录、gushen-web、gushen-web/doc)
+- 过时压缩包: `lucrum-web-v15.tar.gz`, `lucrum-web-v16.tar.gz`
+- 过时部署脚本: `lucrum-web/deploy-v14.sh`, `lucrum-web/deploy-v16.sh`
+- 过时文档: `lucrum-web/SERVER-DEPLOYMENT-GUIDE.md`, `doc/phase14-deployment-steps.md`
+- 错误文件: `nul` (根目录、lucrum-web、lucrum-web/doc)
 
 **结果 Result:**
 - ✅ 依赖安装速度提升 **10-20x** (~60s → ~3-5s)
@@ -984,7 +984,7 @@ const currentValue = isValidNumber(parameter.value) ? parameter.value : null;
    - 修复: 优先使用enhanced trades
 
 **Dockerfile修复 (已完成但未部署):**
-- File: `gushen-web/Dockerfile`
+- File: `lucrum-web/Dockerfile`
 - 添加: apk add python3 make g++ (支持better-sqlite3原生模块)
 - 修复: bun install --frozen-lockfile → bun install
 
@@ -1523,10 +1523,10 @@ const currentWorkflowStep = useMemo(() => {
 
 **2.1 更新K3s部署配置**
 - File: `lurus-ai-qtrd/k8s/ai-qtrd/04-web-deployment.yaml`
-- Change: `image: gushen-web:v14-new` → `image: gushen-web:v14`
+- Change: `image: lucrum-web:v14-new` → `image: lucrum-web:v14`
 
 **2.2 创建部署脚本**
-- File: `gushen-web/deploy-v14.sh`
+- File: `lucrum-web/deploy-v14.sh`
 - Features:
   - Docker镜像构建
   - 导入到containerd
@@ -1547,7 +1547,7 @@ const currentWorkflowStep = useMemo(() => {
 
 #### 新建的文件 New Files (1个)
 
-1. `gushen-web/deploy-v14.sh` (~120行)
+1. `lucrum-web/deploy-v14.sh` (~120行)
    - 自动化部署脚本
    - 4步骤：构建、导入、更新、验证
 
@@ -1594,7 +1594,7 @@ const currentWorkflowStep = useMemo(() => {
 ```bash
 # 1. 上传更新的代码到服务器
 # 2. 在服务器上执行部署脚本
-cd /root/lurus/gushen/gushen-web
+cd /root/lurus/lucrum/lucrum-web
 chmod +x deploy-v14.sh
 ./deploy-v14.sh
 
@@ -1604,7 +1604,7 @@ kubectl logs -f deployment/ai-qtrd-web -n ai-qtrd
 ```
 
 **部署脚本功能:**
-1. 构建Docker镜像 (gushen-web:v14)
+1. 构建Docker镜像 (lucrum-web:v14)
 2. 导入镜像到containerd
 3. 应用K3s部署配置
 4. 等待滚动更新完成
@@ -1635,7 +1635,7 @@ kubectl logs -f deployment/ai-qtrd-web -n ai-qtrd
 ### 架构设计 Architecture Design
 ```
 Redis Instance (redis-service:6379)
-├── DB 0: 前端缓存 (gushen-web)
+├── DB 0: 前端缓存 (lucrum-web)
 │   ├── gw:stocks:list:{hash}    → 股票列表 (TTL 1h)
 │   ├── gw:kline:{symbol}:{tf}   → K线数据 (TTL 5min-24h)
 │   └── gw:backtest:multi:{hash} → 回测结果 (TTL 24h)
@@ -1646,32 +1646,32 @@ Redis Instance (redis-service:6379)
 ```
 
 **删除内容 Deleted Files:**
-1. `gushen-web/src/lib/redis/cache-manager.ts` (412 行) - 过于复杂的分层缓存管理器
-2. `gushen-web/src/middleware.ts` (207 行) - HTTP 缓存头（改用 Next.js 内置）
+1. `lucrum-web/src/lib/redis/cache-manager.ts` (412 行) - 过于复杂的分层缓存管理器
+2. `lucrum-web/src/middleware.ts` (207 行) - HTTP 缓存头（改用 Next.js 内置）
 
 **新建/重写内容 New/Rewritten Files:**
 
-1. **`gushen-web/src/lib/redis/client.ts`** (165 行，含注释)
+1. **`lucrum-web/src/lib/redis/client.ts`** (165 行，含注释)
    - 重写为极简实现（核心代码约 100 行）
    - 单例模式 Redis 客户端
    - 简单的 `cacheGet`、`cacheSet`、`cacheDel` 函数
    - 自动优雅降级（Redis 不可用时返回 null）
    - Key 前缀隔离（`gw:` 前缀）
 
-2. **`gushen-web/src/lib/redis/index.ts`** (10 行)
+2. **`lucrum-web/src/lib/redis/index.ts`** (10 行)
    - 简化导出
 
 **修改内容 Modified Files:**
 
-1. **`gushen-web/src/app/api/stocks/list/route.ts`**
+1. **`lucrum-web/src/app/api/stocks/list/route.ts`**
    - 使用新的 `cacheGet`/`cacheSet` 替代 `stockListCache`
    - 缓存 TTL: 1 小时
 
-2. **`gushen-web/src/app/api/backtest/multi-stocks/route.ts`**
+2. **`lucrum-web/src/app/api/backtest/multi-stocks/route.ts`**
    - 使用新的 `cacheGet`/`cacheSet` 替代 `backtestCache`
    - 缓存 TTL: 24 小时
 
-3. **`gushen-web/src/app/api/market/kline/route.ts`**
+3. **`lucrum-web/src/app/api/market/kline/route.ts`**
    - 添加 Redis 缓存支持
    - 根据 timeframe 设置不同 TTL（1min-24h）
 
@@ -1736,8 +1736,8 @@ Redis Instance (redis-service:6379)
 
 **更新的文件 Updated Files:**
 1. `lurus-ai-qtrd/k8s/ai-qtrd/04-web-deployment.yaml` - image: v14 → v16
-2. `gushen-web/deploy-v14.sh` → `deploy-v16.sh` (重命名并更新)
-3. `gushen-web/SERVER-DEPLOYMENT-GUIDE.md` - 全文v14 → v16
+2. `lucrum-web/deploy-v14.sh` → `deploy-v16.sh` (重命名并更新)
+3. `lucrum-web/SERVER-DEPLOYMENT-GUIDE.md` - 全文v14 → v16
 4. 添加crictl缓存清理步骤 (根据重要信息-updated.md)
 
 **关键改进 Key Improvements:**
@@ -1757,11 +1757,11 @@ Redis Instance (redis-service:6379)
 **执行时间 Execution Time:** 2026-01-22 00:32
 
 **部署流程 Deployment Process:**
-1. ✅ 打包本地代码 gushen-web-v16.tar.gz (625KB)
-2. ✅ 上传到服务器 /root/lurus-gushen/
+1. ✅ 打包本地代码 lucrum-web-v16.tar.gz (625KB)
+2. ✅ 上传到服务器 /root/lurus-lucrum/
 3. ✅ 解压代码包
 4. ✅ 上传K8s部署配置 (image: v16)
-5. ✅ 修正部署脚本路径 (lurus/gushen → lurus-gushen)
+5. ✅ 修正部署脚本路径 (lurus/lucrum → lurus-lucrum)
 6. ✅ 执行deploy-v16.sh自动化部署
 
 **构建统计 Build Statistics:**
@@ -1781,10 +1781,10 @@ ai-qtrd-web-75898b6b57-x5c7s   1/1     Running   0          75s
 **镜像验证 Image Verification:**
 ```bash
 # kubectl检查
-image: gushen-web:v16
+image: lucrum-web:v16
 
 # crictl检查
-docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
+docker.io/library/lucrum-web  v16  6d0d6206b8df5  53.5MB
 ```
 
 **应用启动日志 Application Logs:**
@@ -1804,7 +1804,7 @@ docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
 **功能验证清单 Feature Verification:**
 - [x] Pod状态: Running
 - [x] Pod重启次数: 0
-- [x] 镜像版本: gushen-web:v16 (kubectl + crictl)
+- [x] 镜像版本: lucrum-web:v16 (kubectl + crictl)
 - [x] 应用启动: 正常 (254ms)
 - [x] 旧镜像清理: crictl缓存已清理
 - [x] 强制重启Pod: 已执行
@@ -1823,7 +1823,7 @@ docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
 - ✅ 强制删除旧Pod确保使用新镜像
 
 **下次部署注意事项 Next Deployment Notes:**
-- 服务器路径是 /root/lurus-gushen 而非 /root/lurus/gushen
+- 服务器路径是 /root/lurus-lucrum 而非 /root/lurus/lucrum
 - 需要转换Windows换行符(CRLF→LF)或直接用bash执行
 - GitHub访问不稳定,优先使用tar包上传方式
 
@@ -1833,7 +1833,7 @@ docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
 ## Deploy v18 + Create Version Consistency Check Skill
 
 **用户需求 User Request:**
-- k3s集群运行`gushen-web:v16`，但本地代码已更新到commit `935bf56`（对应v18），导致投资顾问缺少1,747行上下文配置代码
+- k3s集群运行`lucrum-web:v16`，但本地代码已更新到commit `935bf56`（对应v18），导致投资顾问缺少1,747行上下文配置代码
 - 创建版本一致性检查Skill，用于检测k3s deployment配置与本地代码的版本差异
 
 **方法 Method:**
@@ -1842,7 +1842,7 @@ docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
 
 **修改文件 Modified Files:**
 1. `lurus-ai-qtrd/k8s/ai-qtrd/04-web-deployment.yaml`
-   - 第37行: `image: gushen-web:v16` → `image: gushen-web:v18`
+   - 第37行: `image: lucrum-web:v16` → `image: lucrum-web:v18`
 
 **部署命令 Deployment Commands (待手动执行):**
 ```bash
@@ -1850,19 +1850,19 @@ docker.io/library/gushen-web  v16  6d0d6206b8df5  53.5MB
 ssh cloud-ubuntu-3-2c2g
 
 # 2. 拉取最新代码
-cd /root/gushen && git pull origin main
+cd /root/lucrum && git pull origin main
 
 # 3. 构建v18镜像
-cd gushen-web
-docker build --no-cache -t gushen-web:v18 \
+cd lucrum-web
+docker build --no-cache -t lucrum-web:v18 \
   --build-arg API_URL=http://43.226.46.164:30800 \
   --build-arg WS_URL=ws://43.226.46.164:30800 .
 
 # 4. 导入到k3s
-docker save gushen-web:v18 | k3s ctr images import -
+docker save lucrum-web:v18 | k3s ctr images import -
 
 # 5. 更新deployment
-kubectl set image deployment/ai-qtrd-web web=gushen-web:v18 -n ai-qtrd
+kubectl set image deployment/ai-qtrd-web web=lucrum-web:v18 -n ai-qtrd
 
 # 6. 重启Pod
 kubectl delete pods -n ai-qtrd -l app=ai-qtrd-web
@@ -1938,7 +1938,7 @@ kubectl wait --for=condition=Ready pod -l app=ai-qtrd-web -n ai-qtrd --timeout=9
 
 **初始状态 Initial State:**
 - GitHub代码: commit 935bf56 (v18 - Phase 1,3,4 robustness rewrite)
-- K8s Deployment配置: image: gushen-web:v18
+- K8s Deployment配置: image: lucrum-web:v18
 - 但网页仍显示旧版本（推测v16）
 
 **根本原因分析 Root Cause Analysis:**
@@ -1953,14 +1953,14 @@ kubectl wait --for=condition=Ready pod -l app=ai-qtrd-web -n ai-qtrd --timeout=9
 # 主控节点上有v18镜像
 hostname: cloud-ubuntu-1-16c32g
 crictl images | grep v18
-# 输出: docker.io/library/gushen-web  v18  ac79476b9aae5  50MB
+# 输出: docker.io/library/lucrum-web  v18  ac79476b9aae5  50MB
 
 # 但Pod调度到工作节点
 kubectl get pods -n ai-qtrd -o wide
 # 输出: NODE=cloud-ubuntu-3-2c2g
 
 # 工作节点没有v18镜像
-crictl images | grep gushen-web
+crictl images | grep lucrum-web
 # 输出: 只有v10-v16，没有v18
 ```
 
@@ -1981,7 +1981,7 @@ crictl images | grep gushen-web
 **Step 1: 在主控节点准备镜像文件**
 ```bash
 # 导出镜像为tar文件
-docker save gushen-web:v18 -o /tmp/gushen-web-v18.tar
+docker save lucrum-web:v18 -o /tmp/lucrum-web-v18.tar
 # 文件大小: 48MB
 
 # 启动临时HTTP服务器
@@ -2023,7 +2023,7 @@ kubectl wait --for=condition=Ready pod -l app=ai-qtrd-web -n ai-qtrd --timeout=9
 - 导入时间: 1.9秒
 
 **K8s资源 K8s Resources:**
-- Job创建: 1个 (import-gushen-web-v18-v3)
+- Job创建: 1个 (import-lucrum-web-v18-v3)
 - Pod重启: 1次
 - 镜像: v18 (50MB compressed)
 
@@ -2054,8 +2054,8 @@ ai-qtrd-web-cb7b6f7fb-259xb   1/1     Running   0          47s   10.42.4.106   c
 ```
 
 **镜像验证 Image Verification:**
-- Deployment配置: docker.io/library/gushen-web:v18
-- Pod实际使用: docker.io/library/gushen-web:v18
+- Deployment配置: docker.io/library/lucrum-web:v18
+- Pod实际使用: docker.io/library/lucrum-web:v18
 - imagePullPolicy: Never
 - 工作节点containerd: 已确认有v18镜像
 

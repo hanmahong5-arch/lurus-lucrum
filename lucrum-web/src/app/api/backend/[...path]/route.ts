@@ -16,7 +16,7 @@ import { NextRequest, NextResponse } from 'next/server';
 
 // Backend API base URL - in production, this uses the internal K8s service
 // In development, you can use localhost or the external URL
-const BACKEND_URL = process.env.BACKEND_API_URL || 'https://gushen.lurus.cn';
+const BACKEND_URL = process.env.BACKEND_API_URL || 'https://lucrum.lurus.cn';
 
 /**
  * Handle all HTTP methods for backend proxy

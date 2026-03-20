@@ -38,7 +38,7 @@
             },
             {
               "scheme": "https",
-              "host": "gushen.lurus.cn",
+              "host": "lucrum.lurus.cn",
               "pathPrefix": "/app"
             }
           ],
@@ -63,7 +63,7 @@
     },
     "extra": {
       "router": {
-        "origin": "https://gushen.lurus.cn"
+        "origin": "https://lucrum.lurus.cn"
       },
       "eas": {
         "projectId": "your-eas-project-id"

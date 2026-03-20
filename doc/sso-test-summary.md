@@ -114,7 +114,7 @@
 
 **预期行为**:
 1. 调用 `redirectToLurusLogin()`
-2. 跳转到 `https://api.lurus.cn/api/v2/gushen/auth/login?redirect_url=...`
+2. 跳转到 `https://api.lurus.cn/api/v2/lucrum/auth/login?redirect_url=...`
 3. 如果 lurus-api 运行，进入 Zitadel OAuth 流程
 4. 如果 lurus-api 未运行，显示连接错误
 
@@ -159,7 +159,7 @@ Zitadel 认证
   ↓
 Set Cookie (Domain=.lurus.cn)
   ↓
-Callback to gushen.lurus.cn/auth/callback
+Callback to lucrum.lurus.cn/auth/callback
   ↓
 NextAuth signIn("lurus-sso")
   ├─ Verify Cookie
@@ -169,7 +169,7 @@ Dashboard (Logged In)
 ```
 
 **优势**:
-- 跨子域共享 Session (gushen.lurus.cn + api.lurus.cn)
+- 跨子域共享 Session (lucrum.lurus.cn + api.lurus.cn)
 - 无需复杂的 Token 传递
 - 利用浏览器原生 Cookie 机制
 
@@ -215,7 +215,7 @@ Frontend → /api/lurus/billing/*
   ↓
 Next.js API Route
   ├─ Verify Session (401 if unauthorized)
-  └─ Proxy to api.lurus.cn/api/v2/gushen/*
+  └─ Proxy to api.lurus.cn/api/v2/lucrum/*
   ↓
 Return Data
 ```
@@ -241,16 +241,16 @@ Return Data
 **方案 A: 使用 hosts 文件** (推荐)
 ```bash
 # 编辑 C:\Windows\System32\drivers\etc\hosts
-127.0.0.1 gushen.lurus.cn
+127.0.0.1 lucrum.lurus.cn
 
-# 访问 http://gushen.lurus.cn:3000 进行测试
+# 访问 http://lucrum.lurus.cn:3000 进行测试
 ```
 
 **方案 B: 部署到测试环境**
 ```bash
 # 部署到 K8s 测试环境
 kubectl apply -f deploy/k8s/
-# 访问 https://gushen-test.lurus.cn
+# 访问 https://lucrum-test.lurus.cn
 ```
 
 **方案 C: 使用本地登录**
@@ -268,8 +268,8 @@ kubectl apply -f deploy/k8s/
 // internal/adapter/middleware/cors.go
 AllowOrigins: []string{
   "http://localhost:3000",        // 开发环境
-  "http://gushen.lurus.cn:3000",  // hosts 文件方案
-  "https://gushen.lurus.cn",      // 生产环境
+  "http://lucrum.lurus.cn:3000",  // hosts 文件方案
+  "https://lucrum.lurus.cn",      // 生产环境
 }
 AllowCredentials: true
 ```

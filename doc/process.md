@@ -47,20 +47,20 @@ Verification: `bun run test -- --run [per-story files]` → 605 passed, 0 failed
 
 ## 2026-02-11: SSO + 计费集成 Phase 1 — Bug Fixes + Deploy
 Fixed 4 critical SSO issues discovered during manual testing:
-1. TENANT_SLUG `gushen`→`lurus` (lurus-api only has `lurus` tenant, gushen is a product not a tenant)
+1. TENANT_SLUG `lucrum`→`lurus` (lurus-api only has `lurus` tenant, lucrum is a product not a tenant)
 2. Session endpoint `/api/v1/auth/session`→`/api/v2/auth/session-info` (old endpoint doesn't exist)
 3. Response parsing `data.user`→`data` (session-info returns flat structure, no nested user)
-4. OAuth redirect_url: relative `/dashboard`→full `https://gushen.lurus.cn/auth/callback?callbackUrl=/dashboard`
+4. OAuth redirect_url: relative `/dashboard`→full `https://lucrum.lurus.cn/auth/callback?callbackUrl=/dashboard`
 Also: register page mock→SSO redirect, callback page added Suspense, Dockerfile added NEXT_PUBLIC_* build args, K8s deployment added SSO env vars + NEXTAUTH_SECRET secret.
 Verification: `bun run typecheck → 0 errors` | `bun run test → 1502 passed, 0 failed`
-Status: 🔧 Deployed to main, ⏳ waiting CI build + ArgoCD sync for E2E verification on gushen.lurus.cn.
+Status: 🔧 Deployed to main, ⏳ waiting CI build + ArgoCD sync for E2E verification on lucrum.lurus.cn.
 
 ---
 
-## 2026-02-11: K8s Deployment — gushen-web Ingress + SSO Env Vars
-Created Ingress (gushen.lurus.cn → ai-qtrd-web:3000) + SSL certificate. Updated running deployment with missing SSO env vars (LURUS_API_URL, TENANT_SLUG, NEXTAUTH_URL). Pod rolled out successfully (Next.js Ready in 201ms).
+## 2026-02-11: K8s Deployment — lucrum-web Ingress + SSO Env Vars
+Created Ingress (lucrum.lurus.cn → ai-qtrd-web:3000) + SSL certificate. Updated running deployment with missing SSO env vars (LURUS_API_URL, TENANT_SLUG, NEXTAUTH_URL). Pod rolled out successfully (Next.js Ready in 201ms).
 Verification: `kubectl -n ai-qtrd get ingress → Load Balancer IPs assigned (80, 443)` | `curl http://10.43.116.107:3000 → HTTP 200 OK (24682 bytes)`
-Status: ✅ K8s config complete, ⏳ external HTTPS access blocked (external load balancer 43.226.46.164 needs gushen.lurus.cn routing rule). Internal cluster tests pass, HTTP routing works (308 redirect), TLS cert valid. Detailed report: `k8s-deployment-update-gushen-2026-02-11.md`.
+Status: ✅ K8s config complete, ⏳ external HTTPS access blocked (external load balancer 43.226.46.164 needs lucrum.lurus.cn routing rule). Internal cluster tests pass, HTTP routing works (308 redirect), TLS cert valid. Detailed report: `k8s-deployment-update-lucrum-2026-02-11.md`.
 
 ---
 
@@ -68,7 +68,7 @@ Status: ✅ K8s config complete, ⏳ external HTTPS access blocked (external loa
 CI/CD pipeline builds but doesn't push images to GHCR. Built Docker image locally on master (100.98.57.55) with `--provenance=false` to avoid OCI index format incompatibility with K3s containerd CRI.
 Key fix: K3s uses `/run/k3s/containerd/containerd.sock` not `/run/containerd/containerd.sock` — must specify `--address` when using nerdctl/ctr to load images into K3s.
 Also fixed: billing test page prerender error (split into server wrapper + client component), disabled ArgoCD auto-sync during manual deploy then re-enabled.
-Verification: `curl https://gushen.lurus.cn/ → 200` | `/api/lurus/billing/plans → {"success":false,"error":"未授权"}` (401, not 404) | `/api/auth/providers → ["lurus-sso","credentials"]`
+Verification: `curl https://lucrum.lurus.cn/ → 200` | `/api/lurus/billing/plans → {"success":false,"error":"未授权"}` (401, not 404) | `/api/auth/providers → ["lurus-sso","credentials"]`
 Status: ✅ SSO routes deployed. ⏳ E2E SSO login flow pending manual verification.
 
 ---
@@ -103,7 +103,7 @@ Status: ⏳ 待 bun run dev 手动验证。
 ## 2026-02-27: DB 连接修复 — /api/agent/custom 500 错误
 根因：`web-deployment.yaml` 缺少 `DATABASE_URL`，应用回退到 `localhost:5432` 导致所有 DB 查询失败。
 次因：migration 0002 的 4 张表由 `postgres` 拥有，`lurus` 用户无权限。
-修复：① patch `ai-qtrd-secrets` 添加 `DATABASE_URL=postgresql://lurus:...@lurus-pg-rw.database.svc.cluster.local:5432/gushen`；② `web-deployment.yaml` 引用该 secret；③ GRANT ALL ON custom_agents/custom_agent_runs/strategy_versions/user_events TO lurus；④ kubectl apply 触发滚动重启。
-Verification: `curl https://gushen.lurus.cn/api/agent/custom → 401`（非 500）| Pod 日志显示 `[Database] Connecting to: postgresql://lurus:****@lurus-pg-rw.database.svc.cluster.local:5432/gushen`
+修复：① patch `ai-qtrd-secrets` 添加 `DATABASE_URL=postgresql://lurus:...@lurus-pg-rw.database.svc.cluster.local:5432/lucrum`；② `web-deployment.yaml` 引用该 secret；③ GRANT ALL ON custom_agents/custom_agent_runs/strategy_versions/user_events TO lurus；④ kubectl apply 触发滚动重启。
+Verification: `curl https://lucrum.lurus.cn/api/agent/custom → 401`（非 500）| Pod 日志显示 `[Database] Connecting to: postgresql://lurus:****@lurus-pg-rw.database.svc.cluster.local:5432/lucrum`
 Status: 🔧 已部署。⏳ 需用户登录后手动验证"创建并运行" Agent 流程。
 ⚠️ 注意：`web-deployment.yaml` 已改动，需 git push 到 main 使 ArgoCD 同步持久化（当前为直接 apply 临时生效）。

@@ -161,9 +161,9 @@ const CONFIDENCE_CONFIG = {
 
 AI 相关 CSS 变量已在 `globals.css` 定义:
 ```css
---gushen-color-ai: 167 139 250;    /* #a78bfa 紫色 */
---gushen-bg-ai: 167 139 250;       /* 用于 bg-ai/10 */
---gushen-border-ai: 167 139 250;   /* 用于 border-ai/20 */
+--lucrum-color-ai: 167 139 250;    /* #a78bfa 紫色 */
+--lucrum-bg-ai: 167 139 250;       /* 用于 bg-ai/10 */
+--lucrum-border-ai: 167 139 250;   /* 用于 border-ai/20 */
 ```
 
 Tailwind 类可用: `text-ai`, `bg-ai/10`, `border-ai/20`。

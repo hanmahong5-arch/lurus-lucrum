@@ -1,18 +1,18 @@
-# GuShen K3s集群架构文档 | K3s Cluster Architecture
+# Lucrum K3s集群架构文档 | K3s Cluster Architecture
 
 ## 1. 概览 | Overview
 
 ### 1.1 集群基本信息 | Cluster Information
 
 **集群类型**: K3s (Lightweight Kubernetes)
-**主域名**: gushen.lurus.cn
+**主域名**: lucrum.lurus.cn
 **网络方案**: Tailscale VPN + K3s 内部网络
 **Ingress控制器**: Traefik v2 (使用IngressRoute CRD)
 **证书管理**: cert-manager + Let's Encrypt
 
 ### 1.2 业务系统 | Business System
 
-**系统名称**: GuShen (股神) - AI量化交易平台
+**系统名称**: Lucrum (股神) - AI量化交易平台
 **核心功能**:
 - AI策略生成与回测
 - 多Agent投资顾问系统
@@ -65,7 +65,7 @@ cloud-ubuntu-1    cloud-ubuntu-2    cloud-ubuntu-3
 
 ```
 Kubernetes Namespaces
-├── ai-qtrd               # GuShen业务主命名空间
+├── ai-qtrd               # Lucrum业务主命名空间
 │   ├── Deployments
 │   │   ├── ai-qtrd-api   (FastAPI Backend)
 │   │   └── ai-qtrd-web   (Next.js Frontend)
@@ -93,7 +93,7 @@ Kubernetes Namespaces
 
 **组件名称**: ai-qtrd-web
 **技术栈**: Next.js 14 + Bun Runtime
-**镜像版本**: `gushen-web:v18` (当前生产版本)
+**镜像版本**: `lucrum-web:v18` (当前生产版本)
 **容器配置**:
 ```yaml
 Resources:
@@ -155,7 +155,7 @@ Environment Variables:
   - DEEPSEEK_API_KEY: <from secret>
   - DATABASE_PASSWORD: <from secret>
   - REDIS_PASSWORD: <from secret>
-  - CORS_ORIGINS: ["https://gushen.lurus.cn"]
+  - CORS_ORIGINS: ["https://lucrum.lurus.cn"]
 
 Node Affinity:
   Prefers: cloud-ubuntu-2-4c8g (8GB节点，适合计算密集型任务)
@@ -268,7 +268,7 @@ Traefik根据请求路径将流量分发到前端或后端服务：
 # 路由规则优先级顺序 (数字越大优先级越高)
 
 # 规则1: 前端UI路由 (优先级: 10)
-Match: Host(`gushen.lurus.cn`) &&
+Match: Host(`lucrum.lurus.cn`) &&
        !PathPrefix(`/api`) &&
        !PathPrefix(`/ws`) &&
        !PathPrefix(`/docs`)
@@ -276,54 +276,54 @@ Target: ai-qtrd-web:3000
 Purpose: 所有非API请求由Next.js处理（页面、静态资源）
 
 # 规则2: 前端API路由 (优先级: 30)
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/strategy/generate`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/strategy/generate`)
 Target: ai-qtrd-web:3000
 Purpose: 策略生成API由前端处理（调用AI服务）
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/auth`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/auth`)
 Target: ai-qtrd-web:3000
 Purpose: 身份认证由NextAuth.js处理
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/advisor`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/advisor`)
 Target: ai-qtrd-web:3000
 Purpose: AI顾问逻辑在前端实现
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/stocks`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/stocks`)
 Target: ai-qtrd-web:3000
 Purpose: 股票数据查询由前端数据库查询
 
 # 规则3: 后端API路由 (优先级: 20)
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/strategy`) &&
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/strategy`) &&
        !PathPrefix(`/api/strategy/generate`)
 Target: ai-qtrd-api:8000
 Purpose: 策略管理API由后端处理
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/backtest`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/backtest`)
 Target: ai-qtrd-api:8000
 Purpose: 回测执行由后端VNPy引擎处理
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api/data`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api/data`)
 Target: ai-qtrd-api:8000
 Purpose: 行情数据代理
 
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/api`) && !PathPrefix(`/api/strategy/generate`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/api`) && !PathPrefix(`/api/strategy/generate`)
 Target: ai-qtrd-api:8000
 Purpose: 其他所有/api/*请求默认由后端处理
 
 # 规则4: WebSocket路由 (优先级: 40)
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/ws`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/ws`)
 Target: ai-qtrd-api:8000
 Purpose: WebSocket实时推送
 
 # 规则5: API文档路由 (优先级: 50)
-Match: Host(`gushen.lurus.cn`) && PathPrefix(`/docs`)
+Match: Host(`lucrum.lurus.cn`) && PathPrefix(`/docs`)
 Target: ai-qtrd-api:8000
 Purpose: Swagger UI文档界面
 ```
 
 **路由决策流程图**:
 ```
-Request: https://gushen.lurus.cn/xxx
+Request: https://lucrum.lurus.cn/xxx
            │
            ▼
     ┌──────────────┐
@@ -383,9 +383,9 @@ Request: https://gushen.lurus.cn/xxx
 
 ```yaml
 Certificate Specification:
-  Domain: gushen.lurus.cn
+  Domain: lucrum.lurus.cn
   Issuer: letsencrypt-prod (ClusterIssuer)
-  Secret Name: gushen-lurus-cn-tls
+  Secret Name: lucrum-lurus-cn-tls
 
   ACME Challenge: HTTP-01
   Renewal: 30天前自动续期
@@ -457,10 +457,10 @@ kubectl rollout restart statefulset/redis -n ai-qtrd
 **PostgreSQL备份** (外部服务):
 ```bash
 # 数据库备份
-pg_dump -h <db-host> -U postgres -d gushen > backup.sql
+pg_dump -h <db-host> -U postgres -d lucrum > backup.sql
 
 # 数据库恢复
-psql -h <db-host> -U postgres -d gushen < backup.sql
+psql -h <db-host> -U postgres -d lucrum < backup.sql
 ```
 
 ---
@@ -507,7 +507,7 @@ const redis = new Redis({
 **前端 → 后端** (通过Ingress):
 ```typescript
 // 前端调用后端API时使用外部域名（经过Traefik路由）
-const response = await fetch("https://gushen.lurus.cn/api/backtest/run", {
+const response = await fetch("https://lucrum.lurus.cn/api/backtest/run", {
   method: "POST",
   body: JSON.stringify(backtestParams),
 });
@@ -541,7 +541,7 @@ r = redis.Redis(
 **镜像版本**:
 ```
 当前生产版本:
-- gushen-web:v18        (Next.js Frontend)
+- lucrum-web:v18        (Next.js Frontend)
 - lurus-ai-qtrd:v1.0.4  (FastAPI Backend)
 - redis:7.2-alpine      (官方Redis镜像)
 ```
@@ -553,20 +553,20 @@ r = redis.Redis(
 **解决方案** (已实施):
 ```bash
 # 步骤1: 在构建节点导出镜像
-docker save gushen-web:v18 -o gushen-web-v18.tar
+docker save lucrum-web:v18 -o lucrum-web-v18.tar
 
 # 步骤2: 启动临时HTTP服务器
 cd /tmp
 python3 -m http.server 8765 &
-# URL: http://<node-ip>:8765/gushen-web-v18.tar
+# URL: http://<node-ip>:8765/lucrum-web-v18.tar
 
 # 步骤3: 其他节点下载并导入
 ssh user@<target-node>
-wget http://<source-node-ip>:8765/gushen-web-v18.tar
-ctr -n k8s.io images import gushen-web-v18.tar
+wget http://<source-node-ip>:8765/lucrum-web-v18.tar
+ctr -n k8s.io images import lucrum-web-v18.tar
 
 # 步骤4: 验证
-ctr -n k8s.io images ls | grep gushen-web
+ctr -n k8s.io images ls | grep lucrum-web
 ```
 
 **自动化脚本** (示例):
@@ -574,7 +574,7 @@ ctr -n k8s.io images ls | grep gushen-web
 #!/bin/bash
 # distribute-image.sh
 
-IMAGE_NAME="gushen-web"
+IMAGE_NAME="lucrum-web"
 IMAGE_TAG="v18"
 TAR_FILE="${IMAGE_NAME}-${IMAGE_TAG}.tar"
 
@@ -1003,22 +1003,22 @@ strategy:
 **更新流程**:
 ```bash
 # 步骤1: 构建新版本镜像
-cd gushen-web
-docker build --no-cache -t gushen-web:v19 .
+cd lucrum-web
+docker build --no-cache -t lucrum-web:v19 .
 
 # 步骤2: 分发镜像到所有节点
-./distribute-image.sh gushen-web v19
+./distribute-image.sh lucrum-web v19
 
 # 步骤3: 更新Deployment镜像
 kubectl set image deployment/ai-qtrd-web -n ai-qtrd \
-  web=gushen-web:v19
+  web=lucrum-web:v19
 
 # 步骤4: 监控更新进度
 kubectl rollout status deployment/ai-qtrd-web -n ai-qtrd
 
 # 步骤5: 验证新版本
 kubectl get pods -n ai-qtrd -w
-curl -I https://gushen.lurus.cn
+curl -I https://lucrum.lurus.cn
 ```
 
 **回滚操作**:
@@ -1087,17 +1087,17 @@ lifecycle:
 ```bash
 # 1. 更新前检查
 kubectl get pods -n ai-qtrd
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 
 # 2. 触发更新
-kubectl set image deployment/ai-qtrd-web -n ai-qtrd web=gushen-web:v19
+kubectl set image deployment/ai-qtrd-web -n ai-qtrd web=lucrum-web:v19
 
 # 3. 监控更新过程
 watch kubectl get pods -n ai-qtrd
 
 # 4. 持续访问测试（另一个终端）
 while true; do
-  curl -s -o /dev/null -w "%{http_code}\n" https://gushen.lurus.cn/api/health
+  curl -s -o /dev/null -w "%{http_code}\n" https://lucrum.lurus.cn/api/health
   sleep 1
 done
 # 预期输出: 持续200状态码，无中断
@@ -1211,7 +1211,7 @@ kubectl get events -n ai-qtrd --sort-by='.lastTimestamp' | grep <pod-name>
 
 ### 14.2 服务无法访问 | Service Unreachable
 
-**症状**: 外部访问 `https://gushen.lurus.cn` 返回 502/503/504
+**症状**: 外部访问 `https://lucrum.lurus.cn` 返回 502/503/504
 
 **排查步骤**:
 ```bash
@@ -1230,11 +1230,11 @@ kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
 
 # 4. 检查Ingress路由
 kubectl get ingressroute -n ai-qtrd
-kubectl describe ingressroute gushen-web-https -n ai-qtrd
+kubectl describe ingressroute lucrum-web-https -n ai-qtrd
 
 # 5. 检查TLS证书
 kubectl get certificate -n ai-qtrd
-kubectl describe certificate gushen-lurus-cn-tls -n ai-qtrd
+kubectl describe certificate lucrum-lurus-cn-tls -n ai-qtrd
 
 # 6. 查看Traefik日志
 kubectl logs -n kube-system -l app.kubernetes.io/name=traefik --tail=100
@@ -1295,8 +1295,8 @@ kubectl top pod -n ai-qtrd -l app.kubernetes.io/component=api
 # 查看是否达到CPU/Memory限制
 
 # 3. 测试后端API健康状态
-curl https://gushen.lurus.cn/api/health
-curl https://gushen.lurus.cn/docs  # Swagger UI
+curl https://lucrum.lurus.cn/api/health
+curl https://lucrum.lurus.cn/docs  # Swagger UI
 
 # 4. 检查数据库连接
 kubectl exec -n ai-qtrd deployment/ai-qtrd-api -- python3 -c \
@@ -1656,9 +1656,9 @@ BACKUP_DIR="./db-backup-$(date +%Y%m%d)"
 mkdir -p $BACKUP_DIR
 
 # PostgreSQL备份
-pg_dump -h <db-host> -U postgres -d gushen -F c -f $BACKUP_DIR/gushen.dump
+pg_dump -h <db-host> -U postgres -d lucrum -F c -f $BACKUP_DIR/lucrum.dump
 
-echo "数据库备份完成: $BACKUP_DIR/gushen.dump"
+echo "数据库备份完成: $BACKUP_DIR/lucrum.dump"
 ```
 
 ### 18.3 完整恢复流程 | Full Recovery
@@ -1675,11 +1675,11 @@ kubectl cp redis-backup-20260122/dump.rdb ai-qtrd/redis-0:/data/dump.rdb
 kubectl rollout restart statefulset/redis -n ai-qtrd
 
 # 步骤3: 恢复数据库
-pg_restore -h <db-host> -U postgres -d gushen db-backup-20260122/gushen.dump
+pg_restore -h <db-host> -U postgres -d lucrum db-backup-20260122/lucrum.dump
 
 # 步骤4: 验证
 kubectl get pods -n ai-qtrd
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 ```
 
 ---
@@ -1891,8 +1891,8 @@ kubectl get pods -n ai-qtrd -w
 
 | 服务名称 | 容器端口 | Service端口 | 外部访问 | 用途 |
 |---------|---------|-----------|---------|------|
-| ai-qtrd-web | 3000 | 3000 | https://gushen.lurus.cn | Next.js前端 |
-| ai-qtrd-api | 8000 | 8000 | https://gushen.lurus.cn/api | FastAPI后端 |
+| ai-qtrd-web | 3000 | 3000 | https://lucrum.lurus.cn | Next.js前端 |
+| ai-qtrd-api | 8000 | 8000 | https://lucrum.lurus.cn/api | FastAPI后端 |
 | redis-service | 6379 | 6379 | 集群内部 | Redis缓存 |
 | redis-headless | 6379 | 6379 | StatefulSet内部 | Redis主从通信 |
 | traefik | 80/443 | 80/443 | 0.0.0.0:80/443 | Ingress入口 |
@@ -1908,7 +1908,7 @@ REDIS_PORT: 6379
 REDIS_PASSWORD: <from secret>
 REDIS_DB: 0
 REDIS_ENABLED: true
-NEXTAUTH_URL: https://gushen.lurus.cn
+NEXTAUTH_URL: https://lucrum.lurus.cn
 NEXTAUTH_SECRET: <from secret>
 BACKEND_API_URL: http://ai-qtrd-api:8000
 LURUS_API_URL: https://api.lurus.cn
@@ -1927,13 +1927,13 @@ DATABASE_PASSWORD: <from secret>
 REDIS_HOST: redis-service
 REDIS_PORT: 6379
 REDIS_PASSWORD: <from secret>
-CORS_ORIGINS: ["https://gushen.lurus.cn"]
-WEB_URL: https://gushen.lurus.cn
-API_URL: https://gushen.lurus.cn/api
+CORS_ORIGINS: ["https://lucrum.lurus.cn"]
+WEB_URL: https://lucrum.lurus.cn
+API_URL: https://lucrum.lurus.cn/api
 ```
 
 ---
 
 **文档版本**: v1.0
 **最后更新**: 2026-01-22
-**维护者**: GuShen DevOps Team
+**维护者**: Lucrum DevOps Team

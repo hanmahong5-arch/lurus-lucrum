@@ -23,16 +23,18 @@ const en: Record<TranslationKey, string> = {
   "common.copied": "Copied",
   "common.share": "Share",
 
-  // Navigation
-  "nav.strategyEditor": "Strategy Editor",
+  // Navigation — primary 7 modules
+  "nav.strategyEditor": "Workspace",
   "nav.marketplace": "Marketplace",
   "nav.validation": "Validation",
   "nav.trading": "Trading",
+  "nav.analysis": "Analysis",
+  "nav.advisor": "AI Advisor",
+  "nav.history": "History",
+  // Navigation — legacy (kept for backward compat)
   "nav.scanner": "Scanner",
   "nav.agents": "Agents",
-  "nav.history": "History",
   "nav.insights": "Insights",
-  "nav.advisor": "Advisor",
   "nav.diagnostics": "Diagnostics",
   "nav.smartBacktest": "Smart Backtest",
   "nav.more": "More",

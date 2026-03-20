@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "gushen-app",
+      "name": "lucrum-app",
       "dependencies": {
         "@expo/vector-icons": "^14.0.0",
         "@react-navigation/bottom-tabs": "^7.0.0",

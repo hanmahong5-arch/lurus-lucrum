@@ -1,6 +1,6 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
-inputDocuments: ['lurus.yaml', 'CLAUDE.md', 'doc/decisions/0001-single-source-of-truth.md', 'product-brief.md', 'project-context.md', 'prd-gushen.md', 'epics-gushen.md']
+inputDocuments: ['lurus.yaml', 'CLAUDE.md', 'doc/decisions/0001-single-source-of-truth.md', 'product-brief.md', 'project-context.md', 'prd-lucrum.md', 'epics-lucrum.md']
 date: 2026-02-02
 regenerated: 2026-02-03
 author: Anita (via BMAD Architecture Review)
@@ -22,7 +22,7 @@ sectionsAdded: ['8-implementation-patterns', '9-project-structure-boundaries']
 │                                                                         │
 │  ┌─────────┐  ┌──────────┐  ┌──────────┐  ┌─────────┐  ┌───────────┐ │
 │  │lurus-api│  │lurus-    │  │lurus-    │  │lurus-   │  │lurus-     │ │
-│  │(Gateway)│  │gushen    │  │webmail   │  │newapi   │  │switch     │ │
+│  │(Gateway)│  │lucrum    │  │webmail   │  │newapi   │  │switch     │ │
 │  │         │  │(Quant)   │  │(Mail)    │  │(LLM Mgr)│  │(Desktop)  │ │
 │  └────┬────┘  └────┬─────┘  └────┬─────┘  └────┬────┘  └───────────┘ │
 │       │            │             │              │                       │

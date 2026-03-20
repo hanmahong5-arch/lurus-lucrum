@@ -8,7 +8,7 @@
 ### 1. 服务依赖检查
 
 **必须运行的服务**:
-- ✅ gushen-web dev server (http://localhost:3000)
+- ✅ lucrum-web dev server (http://localhost:3000)
 - ⚠️ lurus-api (https://api.lurus.cn)
 - ⚠️ Zitadel OAuth (https://auth.lurus.cn)
 
@@ -25,24 +25,24 @@ curl -I https://auth.lurus.cn/.well-known/openid-configuration
 
 **检查 .env.local**:
 ```bash
-cd /c/Users/Anita/Desktop/lurus/lurus-gushen/gushen-web
+cd /c/Users/Anita/Desktop/lurus/lurus-lucrum/lucrum-web
 cat .env.local
 ```
 
 应该包含:
 ```env
 LURUS_API_URL=https://api.lurus.cn
-TENANT_SLUG=gushen
+TENANT_SLUG=lucrum
 NEXT_PUBLIC_LURUS_API_URL=https://api.lurus.cn
-NEXT_PUBLIC_TENANT_SLUG=gushen
-NEXTAUTH_URL=https://gushen.lurus.cn
-NEXTAUTH_SECRET=gushen_sso_secret_key_2026_change_in_production_use_openssl_rand
+NEXT_PUBLIC_TENANT_SLUG=lucrum
+NEXTAUTH_URL=https://lucrum.lurus.cn
+NEXTAUTH_SECRET=lucrum_sso_secret_key_2026_change_in_production_use_openssl_rand
 ```
 
 ### 3. 启动开发服务器
 
 ```bash
-cd /c/Users/Anita/Desktop/lurus/lurus-gushen/gushen-web
+cd /c/Users/Anita/Desktop/lurus/lurus-lucrum/lucrum-web
 bun run dev
 ```
 
@@ -70,7 +70,7 @@ bun run dev
 2. 观察 Network 标签页的请求
 
 **预期行为**:
-- ✅ 浏览器跳转到 `https://api.lurus.cn/api/v2/gushen/auth/login?redirect_url=...`
+- ✅ 浏览器跳转到 `https://api.lurus.cn/api/v2/lucrum/auth/login?redirect_url=...`
 - ✅ URL 中包含正确的 redirect_url（当前页面或 /dashboard）
 
 **如果 lurus-api 未运行**:
@@ -355,7 +355,7 @@ has been blocked by CORS policy
    ```go
    AllowOrigins: []string{
      "http://localhost:3000",  // 添加这行
-     "https://gushen.lurus.cn",
+     "https://lucrum.lurus.cn",
    }
    AllowCredentials: true
    ```

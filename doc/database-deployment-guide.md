@@ -1,5 +1,5 @@
-# GuShen Database Deployment Guide
-# GuShen数据库部署指南
+# Lucrum Database Deployment Guide
+# Lucrum数据库部署指南
 
 > 最后更新: 2026-01-22
 
@@ -17,11 +17,11 @@
 
 ```bash
 # From local Windows machine
-cd gushen-web
+cd lucrum-web
 tar --exclude='node_modules' --exclude='.next' --exclude='.git' \
-    --exclude='test-*' -czvf gushen-db-setup.tar.gz .
+    --exclude='test-*' -czvf lucrum-db-setup.tar.gz .
 
-scp gushen-db-setup.tar.gz root@100.98.57.55:/root/
+scp lucrum-db-setup.tar.gz root@100.98.57.55:/root/
 ```
 
 **2. SSH to master node and extract:**
@@ -30,9 +30,9 @@ scp gushen-db-setup.tar.gz root@100.98.57.55:/root/
 ssh root@100.98.57.55
 
 cd /root
-mkdir -p gushen-db-setup
-tar -xzf gushen-db-setup.tar.gz -C gushen-db-setup
-cd gushen-db-setup
+mkdir -p lucrum-db-setup
+tar -xzf lucrum-db-setup.tar.gz -C lucrum-db-setup
+cd lucrum-db-setup
 ```
 
 **3. Install dependencies:**
@@ -50,7 +50,7 @@ npm install
 ```bash
 # Create .env.local
 cat > .env.local << EOF
-DATABASE_URL=postgresql://postgres:password@postgres-service:5432/gushen
+DATABASE_URL=postgresql://postgres:password@postgres-service:5432/lucrum
 NODE_ENV=production
 EOF
 ```
@@ -85,7 +85,7 @@ kubectl port-forward -n ai-qtrd svc/postgres-service 5432:5432
 **2. Update .env.local:**
 
 ```bash
-DATABASE_URL=postgresql://postgres:password@localhost:5432/gushen
+DATABASE_URL=postgresql://postgres:password@localhost:5432/lucrum
 ```
 
 **3. Run db:push:**
@@ -166,7 +166,7 @@ bun run db:import:klines  # or: npm run db:import:klines
 **1. Check table counts:**
 
 ```bash
-kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d gushen -c "
+kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d lucrum -c "
 SELECT
   'stocks' AS table_name, COUNT(*) AS row_count FROM stocks
 UNION ALL SELECT 'sectors', COUNT(*) FROM sectors
@@ -194,8 +194,8 @@ Expected output:
 **2. Check database size:**
 
 ```bash
-kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d gushen -c "
-SELECT pg_size_pretty(pg_database_size('gushen')) AS db_size;
+kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d lucrum -c "
+SELECT pg_size_pretty(pg_database_size('lucrum')) AS db_size;
 "
 ```
 
@@ -204,7 +204,7 @@ Expected: ~300MB for 2 years of data
 **3. Sample data query:**
 
 ```bash
-kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d gushen -c "
+kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d lucrum -c "
 SELECT s.symbol, s.name, COUNT(k.id) AS kline_count
 FROM stocks s
 LEFT JOIN kline_daily k ON k.stock_id = s.id
@@ -229,7 +229,7 @@ Expected output:
 Verify cron job is running:
 
 ```bash
-curl https://gushen.lurus.cn/api/cron/init
+curl https://lucrum.lurus.cn/api/cron/init
 ```
 
 Expected response:
@@ -251,12 +251,12 @@ Expected response:
 
 **Admin dashboard:**
 
-Navigate to: https://gushen.lurus.cn/admin/data-updates
+Navigate to: https://lucrum.lurus.cn/admin/data-updates
 
 **Manual trigger (if needed):**
 
 ```bash
-curl -X POST https://gushen.lurus.cn/api/data/update \
+curl -X POST https://lucrum.lurus.cn/api/data/update \
   -H "Content-Type: application/json" \
   -d '{"updateType": "daily", "force": false}'
 ```
@@ -264,7 +264,7 @@ curl -X POST https://gushen.lurus.cn/api/data/update \
 **Check update logs:**
 
 ```bash
-kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d gushen -c "
+kubectl exec -n ai-qtrd -it $(kubectl get pod -n ai-qtrd -l app=postgres -o jsonpath='{.items[0].metadata.name}') -- psql -U postgres -d lucrum -c "
 SELECT * FROM data_update_log ORDER BY created_at DESC LIMIT 10;
 "
 ```
@@ -290,7 +290,7 @@ Error: connect ECONNREFUSED
 3. Test connection from within cluster:
    ```bash
    kubectl run -it --rm debug --image=postgres:15 --restart=Never -- \
-     psql -h postgres-service -U postgres -d gushen
+     psql -h postgres-service -U postgres -d lucrum
    ```
 
 ### Issue 2: Schema Push Fails
@@ -306,7 +306,7 @@ Error: relation "stocks" already exists
 3. Or manually drop and recreate:
    ```bash
    kubectl exec -n ai-qtrd -it <postgres-pod> -- \
-     psql -U postgres -d gushen -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
+     psql -U postgres -d lucrum -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public;"
    ```
 
 ### Issue 3: Import Takes Too Long

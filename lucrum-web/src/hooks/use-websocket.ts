@@ -66,7 +66,7 @@ interface UseWebSocketReturn {
  * Default WebSocket URL
  * 默认 WebSocket URL
  */
-const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://gushen.lurus.cn/ws";
+const DEFAULT_WS_URL = process.env.NEXT_PUBLIC_WS_URL || "wss://lucrum.lurus.cn/ws";
 
 /**
  * Custom hook for WebSocket connection with auto-reconnect and heartbeat

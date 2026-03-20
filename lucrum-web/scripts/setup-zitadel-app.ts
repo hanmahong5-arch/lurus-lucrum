@@ -18,11 +18,11 @@ const APP_NAME = "lucrum-web";
 
 const REDIRECT_URIS = [
   "http://localhost:3000/api/auth/callback/zitadel",
-  "https://gushen.lurus.cn/api/auth/callback/zitadel",
+  "https://lucrum.lurus.cn/api/auth/callback/zitadel",
 ];
 const POST_LOGOUT_URIS = [
   "http://localhost:3000/auth/login",
-  "https://gushen.lurus.cn/auth/login",
+  "https://lucrum.lurus.cn/auth/login",
 ];
 
 async function run() {

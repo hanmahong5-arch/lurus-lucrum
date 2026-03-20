@@ -65,7 +65,7 @@ Password: demo123
 curl -I https://api.lurus.cn/health
 
 # 检查 V2 API 端点
-curl -I https://api.lurus.cn/api/v2/gushen/billing/plans
+curl -I https://api.lurus.cn/api/v2/lucrum/billing/plans
 ```
 
 ---
@@ -267,7 +267,7 @@ curl -b cookies.txt -X POST http://localhost:3000/api/lurus/tokens \
     "remain_quota": 100000,
     "unlimited_quota": false,
     "expired_time": -1,
-    "group": "gushen"
+    "group": "lucrum"
   }'
 ```
 
@@ -706,7 +706,7 @@ has been blocked by CORS policy
 ```go
 AllowOrigins: []string{
   "http://localhost:3000",
-  "https://gushen.lurus.cn",
+  "https://lucrum.lurus.cn",
 }
 AllowCredentials: true
 ```

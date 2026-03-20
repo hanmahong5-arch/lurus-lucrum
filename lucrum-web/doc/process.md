@@ -42,4 +42,4 @@ DB migration applied via kubectl exec peer auth (postgres superuser):
 - user_events: created table with 3 indexes (user_id, event_type, created_at)
 ArgoCD synced to commit 4281818 (Kustomize image override: main tag). Pod restarted, Running 1/1.
 Verification: GET /api/advisor/chat → 200 OK; GET /api/agent/scanner → 405 (route registered ✓)
-Remaining: ⏳ 端到端验证（缓存命中、配额执行、Scanner SSE 流）需在 https://gushen.lurus.cn 手动测试
+Remaining: ⏳ 端到端验证（缓存命中、配额执行、Scanner SSE 流）需在 https://lucrum.lurus.cn 手动测试

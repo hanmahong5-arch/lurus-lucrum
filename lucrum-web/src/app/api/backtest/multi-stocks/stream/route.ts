@@ -1,7 +1,12 @@
 /**
- * Multi-Stocks Batch Backtest SSE Streaming API
+ * Multi-Stocks Batch Backtest SSE Streaming API — DEPRECATED for non-SSE usage.
  * POST /api/backtest/multi-stocks/stream
  * Streams progress via SSE, returns complete results at end.
+ *
+ * For non-streaming multi-stock backtests, prefer /api/backtest/unified with
+ * target.mode="multi". This SSE endpoint remains the recommended choice when
+ * the client needs real-time progress updates for batch operations.
+ *
  * @module app/api/backtest/multi-stocks/stream/route
  */
 

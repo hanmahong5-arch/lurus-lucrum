@@ -2,28 +2,22 @@
 
 /**
  * History Page - Trading and Strategy History
- * 历史记录页面 - 交易和策略历史
  *
- * Features:
- * - View trading history
- * - View strategy generation history
- * - View advisor conversation history
- * - Filter and search functionality
- * - Unified DashboardHeader with user status
+ * Fetches real data from the history API endpoints:
+ * - GET /api/history?type=strategy  for strategy generation history
+ * - GET /api/history?type=backtest  for backtest history
+ * - GET /api/history?type=trading   for trading history
  *
- * 功能：
- * - 查看交易历史
- * - 查看策略生成历史
- * - 查看顾问对话历史
- * - 筛选和搜索功能
- * - 统一的仪表板头部，包含用户状态
+ * Shows an empty state when no data exists.
  */
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 
-// History entry type definitions
-// 历史记录条目类型定义
+// =============================================================================
+// Types
+// =============================================================================
+
 interface TradeHistory {
   id: string;
   type: "trade";
@@ -53,120 +47,156 @@ interface AdvisorHistory {
   type: "advisor";
   query: string;
   responsePreview: string;
-  category: "天道" | "地道" | "人道";
+  category: string;
   timestamp: string;
 }
 
 type HistoryEntry = TradeHistory | StrategyHistory | AdvisorHistory;
 
-// Mock history data for demonstration
-// 演示用的模拟历史数据
-const MOCK_HISTORY: HistoryEntry[] = [
-  {
-    id: "T001",
-    type: "trade",
-    symbol: "BTC/USDT",
-    side: "buy",
-    price: 43250.0,
-    size: 0.5,
-    total: 21625.0,
-    timestamp: "2026-01-18 10:30:00",
-    status: "completed",
-  },
-  {
-    id: "S001",
-    type: "strategy",
-    name: "双均线突破策略",
-    prompt: "当5日均线向上穿过20日均线时买入，向下穿过时卖出",
-    backtestReturn: 23.5,
-    backtestWinRate: 58.2,
-    timestamp: "2026-01-18 09:15:00",
-    status: "success",
-  },
-  {
-    id: "A001",
-    type: "advisor",
-    query: "当前A股市场环境如何？",
-    responsePreview: "根据三道六术分析框架，当前市场处于震荡整理期...",
-    category: "天道",
-    timestamp: "2026-01-18 08:45:00",
-  },
-  {
-    id: "T002",
-    type: "trade",
-    symbol: "ETH/USDT",
-    side: "sell",
-    price: 2380.0,
-    size: 2.0,
-    total: 4760.0,
-    pnl: 200.0,
-    timestamp: "2026-01-17 16:20:00",
-    status: "completed",
-  },
-  {
-    id: "S002",
-    type: "strategy",
-    name: "RSI超卖反弹策略",
-    prompt: "当RSI低于30时买入，高于70时卖出",
-    backtestReturn: 15.8,
-    backtestWinRate: 52.1,
-    timestamp: "2026-01-17 14:30:00",
-    status: "success",
-  },
-  {
-    id: "A002",
-    type: "advisor",
-    query: "新能源板块后续走势分析",
-    responsePreview: "结合地道分析，新能源板块当前估值处于历史中位数...",
-    category: "地道",
-    timestamp: "2026-01-17 11:00:00",
-  },
-  {
-    id: "T003",
-    type: "trade",
-    symbol: "SOL/USDT",
-    side: "buy",
-    price: 95.5,
-    size: 20,
-    total: 1910.0,
-    timestamp: "2026-01-17 09:30:00",
-    status: "cancelled",
-  },
-  {
-    id: "A003",
-    type: "advisor",
-    query: "北向资金持续流出的影响",
-    responsePreview: "从人道角度分析，北向资金流向反映了外资风险偏好...",
-    category: "人道",
-    timestamp: "2026-01-16 15:00:00",
-  },
-];
+// =============================================================================
+// Data Fetching
+// =============================================================================
 
-/**
- * Format date for display
- * 格式化日期显示
- */
+async function fetchHistoryData(): Promise<HistoryEntry[]> {
+  const entries: HistoryEntry[] = [];
+
+  // Fetch all three history types in parallel
+  const [strategyRes, backtestRes, tradingRes] = await Promise.allSettled([
+    fetch("/api/history?type=strategy&limit=50"),
+    fetch("/api/history?type=backtest&limit=50"),
+    fetch("/api/history?type=trading&limit=50"),
+  ]);
+
+  // Parse strategy history
+  if (strategyRes.status === "fulfilled" && strategyRes.value.ok) {
+    try {
+      const data = await strategyRes.value.json();
+      if (data.success && Array.isArray(data.data)) {
+        for (const s of data.data) {
+          entries.push({
+            id: `S${s.id}`,
+            type: "strategy",
+            name: s.strategyName || s.strategy_name || "Unnamed Strategy",
+            prompt: s.description || s.strategyCode?.slice(0, 80) || "",
+            backtestReturn: s.totalReturn ?? s.total_return ?? undefined,
+            backtestWinRate: s.winRate ?? s.win_rate ?? undefined,
+            timestamp: s.createdAt || s.created_at || new Date().toISOString(),
+            status: s.isActive === false ? "failed" : "success",
+          });
+        }
+      }
+    } catch {
+      // Strategy history fetch failed silently
+    }
+  }
+
+  // Parse backtest history (map to strategy-like entries for display)
+  if (backtestRes.status === "fulfilled" && backtestRes.value.ok) {
+    try {
+      const data = await backtestRes.value.json();
+      if (data.success && Array.isArray(data.data)) {
+        for (const b of data.data) {
+          entries.push({
+            id: `B${b.id}`,
+            type: "strategy",
+            name: b.stockName ? `${b.symbol} ${b.stockName}` : b.symbol || "Backtest",
+            prompt: `${b.startDate} ~ ${b.endDate} | ${b.timeframe || "1d"}`,
+            backtestReturn: b.totalReturn ?? b.total_return ?? undefined,
+            backtestWinRate: b.winRate ?? b.win_rate ?? undefined,
+            timestamp: b.createdAt || b.created_at || new Date().toISOString(),
+            status: "success",
+          });
+        }
+      }
+    } catch {
+      // Backtest history fetch failed silently
+    }
+  }
+
+  // Parse trading history
+  if (tradingRes.status === "fulfilled" && tradingRes.value.ok) {
+    try {
+      const data = await tradingRes.value.json();
+      if (data.success && Array.isArray(data.data)) {
+        for (const t of data.data) {
+          entries.push({
+            id: `T${t.id}`,
+            type: "trade",
+            symbol: t.symbol || "",
+            side: t.side === "sell" ? "sell" : "buy",
+            price: t.price ?? 0,
+            size: t.size ?? 0,
+            total: t.amount ?? (t.price ?? 0) * (t.size ?? 0),
+            pnl: t.realizedPnl ?? t.realized_pnl ?? undefined,
+            timestamp: t.executedAt || t.executed_at || t.createdAt || new Date().toISOString(),
+            status: t.status === "cancelled" ? "cancelled" : "completed",
+          });
+        }
+      }
+    } catch {
+      // Trading history fetch failed silently
+    }
+  }
+
+  // Sort by timestamp descending
+  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+
+  return entries;
+}
+
+// =============================================================================
+// Helpers
+// =============================================================================
+
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
   const now = new Date();
   const diff = now.getTime() - date.getTime();
   const days = Math.floor(diff / (1000 * 60 * 60 * 24));
 
-  if (days === 0) return "今天 " + (dateStr.split(" ")[1] ?? "");
-  if (days === 1) return "昨天 " + (dateStr.split(" ")[1] ?? "");
+  if (days === 0) {
+    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+  }
+  if (days === 1) return "昨天";
   if (days < 7) return `${days}天前`;
-  return dateStr.split(" ")[0] ?? dateStr;
+  return date.toLocaleDateString("zh-CN");
 }
+
+// =============================================================================
+// Page Component
+// =============================================================================
 
 export default function HistoryPage() {
   const [activeTab, setActiveTab] = useState<
     "all" | "trade" | "strategy" | "advisor"
   >("all");
-  const [history, setHistory] = useState<HistoryEntry[]>(MOCK_HISTORY);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const loadHistory = useCallback(async () => {
+    setIsLoading(true);
+    setFetchError(null);
+    try {
+      const data = await fetchHistoryData();
+      setHistory(data);
+    } catch (err) {
+      setFetchError(
+        err instanceof Error ? err.message : "Failed to load history"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   // Filter history based on active tab and search
-  // 根据当前标签和搜索过滤历史记录
   const filteredHistory = history.filter((entry) => {
     const matchesTab = activeTab === "all" || entry.type === activeTab;
     const matchesSearch =
@@ -185,7 +215,6 @@ export default function HistoryPage() {
   });
 
   // Statistics calculation
-  // 统计数据计算
   const stats = {
     totalTrades: history.filter((h) => h.type === "trade").length,
     completedTrades: history.filter(
@@ -200,10 +229,8 @@ export default function HistoryPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Unified Dashboard Header with user status / 统一的仪表板头部，包含用户状态 */}
       <DashboardHeader />
 
-      {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
         {/* Page title and stats */}
         <div className="mb-8">
@@ -221,7 +248,7 @@ export default function HistoryPage() {
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
             <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
               <div className="text-white/50 text-xs mb-1">总交易次数</div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-white font-mono tabular-nums">
                 {stats.totalTrades}
               </div>
               <div className="text-xs text-[#10b981]">
@@ -230,7 +257,7 @@ export default function HistoryPage() {
             </div>
             <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
               <div className="text-white/50 text-xs mb-1">生成策略数</div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-white font-mono tabular-nums">
                 {stats.totalStrategies}
               </div>
               <div className="text-xs text-[#10b981]">
@@ -239,15 +266,17 @@ export default function HistoryPage() {
             </div>
             <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
               <div className="text-white/50 text-xs mb-1">顾问咨询</div>
-              <div className="text-2xl font-bold text-white">
+              <div className="text-2xl font-bold text-white font-mono tabular-nums">
                 {stats.totalAdvisorQueries}
               </div>
               <div className="text-xs text-[#f5a623]">三道六术分析</div>
             </div>
             <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
-              <div className="text-white/50 text-xs mb-1">活跃天数</div>
-              <div className="text-2xl font-bold text-white">3</div>
-              <div className="text-xs text-white/50">最近7天</div>
+              <div className="text-white/50 text-xs mb-1">记录总数</div>
+              <div className="text-2xl font-bold text-white font-mono tabular-nums">
+                {history.length}
+              </div>
+              <div className="text-xs text-white/50">全部类型</div>
             </div>
           </div>
         </div>
@@ -303,13 +332,37 @@ export default function HistoryPage() {
 
         {/* History list */}
         <div className="space-y-3">
-          {filteredHistory.length === 0 ? (
+          {isLoading ? (
             <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
-              <div className="text-white/30 text-lg mb-2">暂无记录</div>
+              <div className="text-white/50 text-lg mb-2">加载中...</div>
+              <div className="text-white/30 text-sm">
+                正在获取历史记录
+              </div>
+            </div>
+          ) : fetchError ? (
+            <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
+              <div className="text-white/50 text-lg mb-2">加载失败</div>
+              <div className="text-white/30 text-sm mb-4">
+                {fetchError}
+              </div>
+              <button
+                onClick={loadHistory}
+                className="px-4 py-2 text-sm bg-[#f5a623]/10 text-[#f5a623] rounded-lg hover:bg-[#f5a623]/20 transition"
+              >
+                重试
+              </button>
+            </div>
+          ) : filteredHistory.length === 0 ? (
+            <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
+              <div className="text-white/30 text-lg mb-2">
+                {history.length === 0 ? "暂无历史记录" : "暂无记录"}
+              </div>
               <div className="text-white/20 text-sm">
-                {searchQuery
-                  ? "尝试其他搜索关键词"
-                  : "开始交易或生成策略后，记录将显示在这里"}
+                {history.length === 0
+                  ? "No history yet. Run your first backtest to see results here."
+                  : searchQuery
+                    ? "尝试其他搜索关键词"
+                    : "当前筛选条件下无记录"}
               </div>
             </div>
           ) : (
@@ -330,10 +383,10 @@ export default function HistoryPage() {
   );
 }
 
-/**
- * History Card Component
- * 历史记录卡片组件
- */
+// =============================================================================
+// Card Component
+// =============================================================================
+
 function HistoryCard({ entry }: { entry: HistoryEntry }) {
   if (entry.type === "trade") {
     return (
@@ -366,20 +419,20 @@ function HistoryCard({ entry }: { entry: HistoryEntry }) {
                   {entry.status === "completed" ? "已完成" : "已取消"}
                 </span>
               </div>
-              <div className="text-sm text-white/50">
-                {entry.size} @ ${entry.price.toLocaleString()}
+              <div className="text-sm text-white/50 font-mono tabular-nums">
+                {entry.size} @ {entry.price.toLocaleString()}
               </div>
             </div>
           </div>
           <div className="text-right">
-            <div className="text-white font-medium">
-              ${entry.total.toLocaleString()}
+            <div className="text-white font-medium font-mono tabular-nums">
+              {entry.total.toLocaleString()}
             </div>
             {entry.pnl !== undefined && (
               <div
-                className={`text-sm ${entry.pnl >= 0 ? "text-[#10b981]" : "text-[#ef4444]"}`}
+                className={`text-sm font-mono tabular-nums ${entry.pnl >= 0 ? "text-[#10b981]" : "text-[#ef4444]"}`}
               >
-                {entry.pnl >= 0 ? "+" : ""}${entry.pnl.toFixed(2)}
+                {entry.pnl >= 0 ? "+" : ""}{entry.pnl.toFixed(2)}
               </div>
             )}
             <div className="text-xs text-white/30">
@@ -426,19 +479,19 @@ function HistoryCard({ entry }: { entry: HistoryEntry }) {
           <div className="text-right">
             {entry.backtestReturn !== undefined && (
               <div
-                className={`text-lg font-medium ${
+                className={`text-lg font-medium font-mono tabular-nums ${
                   entry.backtestReturn >= 0
                     ? "text-[#10b981]"
                     : "text-[#ef4444]"
                 }`}
               >
                 {entry.backtestReturn >= 0 ? "+" : ""}
-                {entry.backtestReturn}%
+                {entry.backtestReturn.toFixed(1)}%
               </div>
             )}
             {entry.backtestWinRate !== undefined && (
-              <div className="text-sm text-white/50">
-                胜率 {entry.backtestWinRate}%
+              <div className="text-sm text-white/50 font-mono tabular-nums">
+                胜率 {entry.backtestWinRate.toFixed(1)}%
               </div>
             )}
             <div className="text-xs text-white/30">
@@ -461,15 +514,7 @@ function HistoryCard({ entry }: { entry: HistoryEntry }) {
           <div>
             <div className="flex items-center gap-2">
               <span className="text-white font-medium">{entry.query}</span>
-              <span
-                className={`text-xs px-2 py-0.5 rounded ${
-                  entry.category === "天道"
-                    ? "bg-blue-500/10 text-blue-400"
-                    : entry.category === "地道"
-                      ? "bg-green-500/10 text-green-400"
-                      : "bg-purple-500/10 text-purple-400"
-                }`}
-              >
+              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-400">
                 {entry.category}
               </span>
             </div>

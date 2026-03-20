@@ -2,7 +2,7 @@
 # 检查v18部署状态的PowerShell脚本
 
 Write-Host "=================================="
-Write-Host "GuShen Web v18 部署状态检查"
+Write-Host "Lucrum Web v18 部署状态检查"
 Write-Host "=================================="
 Write-Host ""
 
@@ -30,7 +30,7 @@ if ($LASTEXITCODE -eq 0) {
 
 # 3. 检查可用的镜像版本
 Write-Host "[3] 检查服务器上可用的镜像版本..."
-$availableImages = ssh cloud-ubuntu-3-2c2g "k3s crictl images | grep gushen-web" 2>$null
+$availableImages = ssh cloud-ubuntu-3-2c2g "k3s crictl images | grep lucrum-web" 2>$null
 if ($LASTEXITCODE -eq 0) {
     Write-Host $availableImages
     Write-Host ""
@@ -41,7 +41,7 @@ if ($LASTEXITCODE -eq 0) {
 
 # 4. 检查部署日志（如果存在）
 Write-Host "[4] 检查部署日志..."
-$deployLog = ssh cloud-ubuntu-3-2c2g "tail -30 /root/gushen/deploy-v18-output.log 2>&1" 2>$null
+$deployLog = ssh cloud-ubuntu-3-2c2g "tail -30 /root/lucrum/deploy-v18-output.log 2>&1" 2>$null
 if ($LASTEXITCODE -eq 0 -and $deployLog) {
     Write-Host $deployLog
     Write-Host ""
@@ -52,7 +52,7 @@ if ($LASTEXITCODE -eq 0 -and $deployLog) {
 
 # 5. 检查Docker构建日志
 Write-Host "[5] 检查Docker构建日志..."
-$buildLog = ssh cloud-ubuntu-3-2c2g "tail -20 /root/gushen/docker-build-v18.log 2>&1" 2>$null
+$buildLog = ssh cloud-ubuntu-3-2c2g "tail -20 /root/lucrum/docker-build-v18.log 2>&1" 2>$null
 if ($LASTEXITCODE -eq 0 -and $buildLog) {
     Write-Host $buildLog
     Write-Host ""
@@ -68,7 +68,7 @@ Write-Host "=================================="
 # 6. 保存状态到本地文件
 $statusFile = "deployment-status-$(Get-Date -Format 'yyyyMMdd-HHmmss').txt"
 @"
-GuShen Web v18 部署状态
+Lucrum Web v18 部署状态
 检查时间: $(Get-Date)
 
 Pod状态:

@@ -28,34 +28,11 @@ interface ResetPasswordBody {
 }
 
 // =============================================================================
-// MOCK USER DATABASE (Replace with real database in production)
-// 模拟用户数据库（生产环境应替换为真实数据库）
+// TODO: Replace with real database integration (Drizzle ORM / PostgreSQL)
+// This in-memory store is a temporary placeholder.
 // =============================================================================
-
-// In-memory user store for demo purposes
-// This should be imported from a shared location or database
-const USERS = new Map([
-  [
-    "demo@lurus.cn",
-    {
-      id: "1",
-      email: "demo@lurus.cn",
-      name: "Demo User",
-      password: "$2a$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSsvqNu/1u",
-      role: "free",
-    },
-  ],
-  [
-    "admin@lurus.cn",
-    {
-      id: "2",
-      email: "admin@lurus.cn",
-      name: "Admin User",
-      password: "$2a$10$K7L1OJ45/4Y2nIvhRVpCe.FSmhDdWoXehVzJptJ/op0lSsvqNu/1u",
-      role: "premium",
-    },
-  ],
-]);
+// TODO: Replace with database queries via Drizzle ORM
+const USERS = new Map<string, { id: string; email: string; name: string; password: string; role: string }>();
 
 // =============================================================================
 // HELPER FUNCTIONS / 辅助函数
@@ -107,16 +84,15 @@ function isValidPassword(password: string): {
 }
 
 /**
- * Send reset email (mock implementation)
- * 发送重置邮件（模拟实现）
+ * Send reset email
+ * TODO: Integrate with real email service (Stalwart SMTP / notification service)
  */
 async function sendResetEmail(email: string, token: string): Promise<boolean> {
-  // In production, integrate with email service (e.g., SendGrid, Resend, SES)
-  // For demo, we log the reset link
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://gushen.lurus.cn"}/auth/reset-password?token=${token}`;
+  // TODO: Replace console logging with actual email delivery
+  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://lucrum.lurus.cn"}/auth/reset-password?token=${token}`;
 
   console.log("=".repeat(60));
-  console.log("PASSWORD RESET EMAIL (Demo Mode)");
+  console.log("PASSWORD RESET EMAIL (Development)");
   console.log("=".repeat(60));
   console.log(`To: ${email}`);
   console.log(`Subject: 重置您的 Lucrum 密码 / Reset Your Lucrum Password`);
@@ -259,7 +235,7 @@ export async function PUT(request: NextRequest) {
     // Hash new password
     const hashedPassword = await hash(password, 10);
 
-    // Update user password (in-memory for demo)
+    // Update user password (TODO: persist to database)
     user.password = hashedPassword;
     USERS.set(tokenResult.email, user);
 

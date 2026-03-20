@@ -1,4 +1,4 @@
-# Lurus Gushen Android APP Development Plan
+# Lurus Lucrum Android APP Development Plan
 
 ## 1. Technology Selection / 技术选型
 
@@ -12,7 +12,7 @@
 | 增强 PWA | 零成本、已有基础 | 无推送通知（国内）、无法上架应用商店、体验差 | 补充方案 |
 
 **Core Rationale**:
-- gushen-web 已有 22 个 custom hooks、30+ lib modules，大量可直接移植
+- lucrum-web 已有 22 个 custom hooks、30+ lib modules，大量可直接移植
 - Zustand + React Query + Zod 在 RN 中完全兼容
 - lightweight-charts 需替换为 react-native-wagmi-charts 或自研 native module
 - Expo Router (file-based routing) 与 Next.js 路由思路一致
@@ -59,7 +59,7 @@
 ## 3. Architecture / 架构设计
 
 ```
-lurus-gushen/
+lurus-lucrum/
 ├── lucrum-web/              # Existing Next.js (unchanged)
 ├── lucrum-app/              # NEW: React Native (Expo)
 │   ├── app/                 # Expo Router (file-based routing)
@@ -83,7 +83,7 @@ lurus-gushen/
 │   │   ├── trading/         # Orderbook, indicators
 │   │   ├── common/          # Shared UI primitives
 │   │   └── feedback/        # Toast, loading, error
-│   ├── lib/                 # Business logic (REUSE from gushen-web)
+│   ├── lib/                 # Business logic (REUSE from lucrum-web)
 │   │   ├── api/             # API client (axios/ky)
 │   │   ├── auth/            # Zitadel OIDC (expo-auth-session)
 │   │   ├── stores/          # Zustand stores (reuse)
@@ -108,7 +108,7 @@ lurus-gushen/
 ### 3.1 API Communication Layer
 
 ```
-Mobile App ──► gushen-web API Routes ──► PostgreSQL / Redis / AI Services
+Mobile App ──► lucrum-web API Routes ──► PostgreSQL / Redis / AI Services
                    (existing)
 
 Mobile App ──► lurus-api (api.lurus.cn) ──► Auth, Billing, Quota
@@ -131,7 +131,7 @@ App Launch
 
 ### 3.3 State Management (Reuse Strategy)
 
-| Layer | Web (gushen-web) | App (gushen-app) | Reuse? |
+| Layer | Web (lucrum-web) | App (lucrum-app) | Reuse? |
 |-------|------------------|-------------------|--------|
 | Server State | React Query | React Query | 100% hooks reuse |
 | Client State | Zustand | Zustand | 95% store reuse |
@@ -166,7 +166,7 @@ App Launch
 ### 4.2 Push Notifications
 - **FCM** (Firebase Cloud Messaging) via `expo-notifications`
 - lurus-notification service already supports FCM channel
-- Deep link: `gushen://backtest/{id}`, `gushen://advisor/chat`
+- Deep link: `lucrum://backtest/{id}`, `lucrum://advisor/chat`
 
 ### 4.3 Real-time Data
 - **WebSocket**: Stock quotes via RN native WebSocket
@@ -251,7 +251,7 @@ Web design system → Mobile adaptation:
 
 ## 6. API Optimization for Mobile / API 移动端优化
 
-### 6.1 New Endpoints Needed (in gushen-web)
+### 6.1 New Endpoints Needed (in lucrum-web)
 
 | Endpoint | Purpose | Notes |
 |----------|---------|-------|
@@ -458,7 +458,7 @@ Web design system → Mobile adaptation:
 | Dimension | Decision |
 |-----------|----------|
 | **Framework** | React Native (Expo SDK 52) |
-| **Code Reuse** | ~60% business logic from gushen-web |
+| **Code Reuse** | ~60% business logic from lucrum-web |
 | **Backend Changes** | Minimal (4 new mobile-optimized endpoints) |
 | **MVP Timeline** | 8 weeks (5 sprints) |
 | **Full App Timeline** | 16-18 weeks (+ Phase 2 & 3) |

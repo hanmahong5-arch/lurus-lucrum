@@ -398,8 +398,9 @@ function getUnit(symbol: string): string {
 }
 
 /**
- * Format quantity with unit
- * 格式化数量带单位
+ * Format quantity with both lots and shares for display.
+ * For A-shares: "12手 (1,200股)"
+ * For fractional assets: "0.0500枚"
  */
 export function formatQuantityWithUnit(
   quantity: number,
@@ -413,9 +414,10 @@ export function formatQuantityWithUnit(
     return `${quantity.toFixed(4)}${unit}`;
   }
 
-  if (lots === Math.floor(lots)) {
-    return `${quantity}${unit} (${lots}手)`;
+  if (lots === Math.floor(lots) && lots > 0) {
+    const formattedShares = quantity.toLocaleString("zh-CN");
+    return `${lots}手 (${formattedShares}${unit})`;
   }
 
-  return `${quantity}${unit}`;
+  return `${quantity.toLocaleString("zh-CN")}${unit}`;
 }

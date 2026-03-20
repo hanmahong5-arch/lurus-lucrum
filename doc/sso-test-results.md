@@ -7,7 +7,7 @@
 ## 前置检查
 
 ### 1. 开发服务器状态
-- ✅ gushen-web dev server 运行中 (http://localhost:3000)
+- ✅ lucrum-web dev server 运行中 (http://localhost:3000)
 - ⏳ lurus-api 状态未验证 (https://api.lurus.cn)
 - ⏳ Zitadel 状态未验证 (https://auth.lurus.cn)
 
@@ -62,7 +62,7 @@
 4. 观察浏览器行为和 Console 输出
 
 **预期结果**:
-- 浏览器跳转到: `https://api.lurus.cn/api/v2/gushen/auth/login?redirect_url=http://localhost:3000/dashboard`
+- 浏览器跳转到: `https://api.lurus.cn/api/v2/lucrum/auth/login?redirect_url=http://localhost:3000/dashboard`
 - Console 无 JavaScript 错误
 - 如果 lurus-api 未运行，显示浏览器连接错误
 
@@ -134,7 +134,7 @@ export function redirectToLurusLogin(returnUrl?: string): void {
 
   const currentURL = returnUrl || window.location.href;
   const LURUS_API_URL = process.env.NEXT_PUBLIC_LURUS_API_URL || "https://api.lurus.cn";
-  const tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || "gushen";
+  const tenantSlug = process.env.NEXT_PUBLIC_TENANT_SLUG || "lucrum";
 
   const loginURL = `${LURUS_API_URL}/api/v2/${tenantSlug}/auth/login?redirect_url=${encodeURIComponent(currentURL)}`;
 
@@ -193,7 +193,7 @@ curl -I https://auth.lurus.cn/.well-known/openid-configuration
    - lurus-api 设置的 Cookie Domain=.lurus.cn
    - localhost:3000 无法接收 .lurus.cn 的 Cookie
    - 🔧 **解决方案**:
-     - 方案 A: 使用 hosts 文件将 gushen.lurus.cn 指向 127.0.0.1
+     - 方案 A: 使用 hosts 文件将 lucrum.lurus.cn 指向 127.0.0.1
      - 方案 B: 在测试/生产环境部署后测试
      - 方案 C: 修改 lurus-api 开发环境 Cookie Domain 为 localhost
 
@@ -203,7 +203,7 @@ curl -I https://auth.lurus.cn/.well-known/openid-configuration
      ```go
      AllowOrigins: []string{
        "http://localhost:3000",
-       "https://gushen.lurus.cn",
+       "https://lucrum.lurus.cn",
      }
      ```
 

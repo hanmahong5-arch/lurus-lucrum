@@ -32,8 +32,6 @@ const DASHBOARD_PATH = "/dashboard";
 const VALIDATION_PATH = "/dashboard/strategy-validation";
 
 const PREVIEW_TRADING_DAYS = 250;
-const PREVIEW_START_PRICE = 1800;
-const PREVIEW_VOLATILITY = 0.02;
 const DEFAULT_INITIAL_CAPITAL = 100000;
 const DEFAULT_COMMISSION = 0.0003;
 const DEFAULT_SLIPPAGE = 0.001;
@@ -98,18 +96,28 @@ export function useOnboardingImport(): UseOnboardingImportReturn {
       fillWorkspaceWithTemplate(template);
       await new Promise((resolve) => setTimeout(resolve, 100));
 
-      const { runBacktest, generateBacktestData } =
-        await import("@/lib/backtest");
+      const { runBacktest } = await import("@/lib/backtest");
+      const { getKLineData } = await import("@/lib/data-service");
 
       const endDate = new Date();
       const startDate = new Date();
       startDate.setFullYear(startDate.getFullYear() - 1);
 
-      const klines = generateBacktestData(
-        PREVIEW_TRADING_DAYS,
-        PREVIEW_START_PRICE,
-        PREVIEW_VOLATILITY,
-      );
+      // Fetch real K-line data for the default symbol
+      const klineResult = await getKLineData(DEFAULT_SYMBOL, "1d", PREVIEW_TRADING_DAYS + 60);
+
+      if (!klineResult.success || !klineResult.data || klineResult.data.length === 0) {
+        throw new Error("Unable to fetch market data. Please try again later.");
+      }
+
+      const klines = klineResult.data.map((k) => ({
+        time: typeof k.time === "number" ? k.time : Math.floor(new Date(String(k.time)).getTime() / 1000),
+        open: k.open,
+        high: k.high,
+        low: k.low,
+        close: k.close,
+        volume: k.volume,
+      }));
 
       const config = {
         symbol: DEFAULT_SYMBOL,

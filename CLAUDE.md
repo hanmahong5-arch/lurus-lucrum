@@ -7,7 +7,7 @@ AI 量化交易平台，包含两个子项目：
 | `lucrum-web/` | Next.js 14 + TypeScript + Bun | 前端 + API 路由层 + 回测引擎 |
 | `lurus-ai-qtrd/` | Python 3.11 + FastAPI + vnpy | 量化引擎后端（vnpy 框架） |
 
-- 域名：`https://gushen.lurus.cn`
+- 域名：`https://lucrum.lurus.cn`
 - 命名空间：`lucrum`
 - Web image：`ghcr.io/hanmahong5-arch/lucrum-web:main`（GitOps，推 main 自动同步）
 - API image：`ghcr.io/hanmahong5-arch/lurus-ai-qtrd:main`（GitOps，推 main 自动同步）
@@ -128,7 +128,7 @@ ssh root@100.98.57.55 "kubectl -n lucrum rollout restart deployment/lucrum-api"
 | `LURUS_API_URL` | lurus-api 服务地址 | `https://api.lurus.cn` |
 | `NEXT_PUBLIC_LURUS_API_URL` | 客户端可见的 API URL | `https://api.lurus.cn` |
 | `TENANT_SLUG` | 租户标识 | `lurus` |
-| `NEXTAUTH_URL` | NextAuth 回调基础 URL | `https://gushen.lurus.cn` |
+| `NEXTAUTH_URL` | NextAuth 回调基础 URL | `https://lucrum.lurus.cn` |
 | `NEXTAUTH_SECRET` | NextAuth 签名密钥 | `openssl rand -hex 32` |
 | `ZITADEL_ISSUER` | Zitadel OIDC issuer | `https://auth.lurus.cn` |
 | `ZITADEL_CLIENT_ID` | Zitadel 应用 Client ID | `358400000000065537@lurus-api` |

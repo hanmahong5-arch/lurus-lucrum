@@ -558,11 +558,11 @@ Each backtest result receives a composite score (S/A/B/C/D) computed from 4 scor
 
 | Grade | Composite Range | Label | Color Token | Hex | Icon |
 |-------|----------------|-------|-------------|-----|------|
-| S | ≥ 3.7 | 卓越 | `--gushen-color-score-s` | #fbbf24 | ★★★ |
-| A | ≥ 3.0 | 优秀 | `--gushen-color-score-a` | #22d3ee | ★★ |
-| B | ≥ 2.3 | 良好 | `--gushen-color-score-b` | #3b82f6 | ★ |
-| C | ≥ 1.5 | 一般 | `--gushen-color-score-c` | #6b7280 | ○ |
-| D | < 1.5 | 需改进 | `--gushen-color-score-d` | #fb923c | ✕ |
+| S | ≥ 3.7 | 卓越 | `--lucrum-color-score-s` | #fbbf24 | ★★★ |
+| A | ≥ 3.0 | 优秀 | `--lucrum-color-score-a` | #22d3ee | ★★ |
+| B | ≥ 2.3 | 良好 | `--lucrum-color-score-b` | #3b82f6 | ★ |
+| C | ≥ 1.5 | 一般 | `--lucrum-color-score-c` | #6b7280 | ○ |
+| D | < 1.5 | 需改进 | `--lucrum-color-score-d` | #fb923c | ✕ |
 
 ### 9.6 Display Rules / 展示规则
 

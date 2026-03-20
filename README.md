@@ -8,8 +8,8 @@
 
 | 组件 | 技术栈 | 部署状态 | 访问地址 |
 |------|--------|---------|----------|
-| lucrum-web | Next.js 14 + TypeScript + TailwindCSS + **Bun** + LangGraphJS | ✅ 运行中 (v21) | https://gushen.lurus.cn |
-| lurus-ai-qtrd | FastAPI + VNPy 4.x + Python 3.11 | ✅ 运行中 (v1.0.4) | https://gushen.lurus.cn/api/* |
+| lucrum-web | Next.js 14 + TypeScript + TailwindCSS + **Bun** + LangGraphJS | ✅ 运行中 (v21) | https://lucrum.lurus.cn |
+| lurus-ai-qtrd | FastAPI + VNPy 4.x + Python 3.11 | ✅ 运行中 (v1.0.4) | https://lucrum.lurus.cn/api/* |
 
 > **⚠️ 重要**: 前端项目统一使用 **bun** 作为包管理器和运行时，不使用 npm。详见根目录 CLAUDE.md。
 
@@ -79,7 +79,7 @@
 
 ## GitHub 仓库
 
-- **统一仓库**: https://github.com/hanmahong5-arch/lurus-gushen
+- **统一仓库**: https://github.com/hanmahong5-arch/lurus-lucrum
 - **分支**: main
 - **包含内容**: lucrum-web (前端) + lurus-ai-qtrd (后端)
 
@@ -410,10 +410,10 @@ kubectl rollout status deployment/lucrum-web -n lucrum
 kubectl get pods -n lucrum
 
 # 5.2 检查 HTTP 响应
-curl -sI https://gushen.lurus.cn/
+curl -sI https://lucrum.lurus.cn/
 
 # 5.3 浏览器验证新功能
-# 打开 https://gushen.lurus.cn/dashboard/advisor
+# 打开 https://lucrum.lurus.cn/dashboard/advisor
 # 检查是否显示新的 UI 元素
 ```
 

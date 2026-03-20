@@ -521,11 +521,11 @@ Deploy the complete frontend-backend system to K3s cluster with industrial-grade
 ### Result / 结果
 
 **Backend API Endpoints Verified:**
-- `GET https://gushen.lurus.cn/health` ✓
-- `GET https://gushen.lurus.cn/api/account/info` ✓
-- `GET https://gushen.lurus.cn/api/strategy/list` ✓
-- `POST https://gushen.lurus.cn/api/strategy/generate` ✓ (routed to frontend)
-- `GET https://gushen.lurus.cn/docs` ✓ (Swagger UI)
+- `GET https://lucrum.lurus.cn/health` ✓
+- `GET https://lucrum.lurus.cn/api/account/info` ✓
+- `GET https://lucrum.lurus.cn/api/strategy/list` ✓
+- `POST https://lucrum.lurus.cn/api/strategy/generate` ✓ (routed to frontend)
+- `GET https://lucrum.lurus.cn/docs` ✓ (Swagger UI)
 
 **Services Running:**
 - ai-qtrd-api: 1/1 Running (FastAPI backend)

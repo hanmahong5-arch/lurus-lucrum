@@ -21,7 +21,7 @@ bun --version
 ### 2. 迁移现有项目 | Migrate Existing Project
 
 ```bash
-cd gushen-web
+cd lucrum-web
 
 # 安装依赖（自动识别 package-lock.json）
 # Install dependencies (auto-detects package-lock.json)

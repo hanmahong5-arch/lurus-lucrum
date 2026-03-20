@@ -1,4 +1,4 @@
-# GuShen 平台全面升级计划 | Platform Comprehensive Upgrade Plan
+# Lucrum 平台全面升级计划 | Platform Comprehensive Upgrade Plan
 
 > **版本 / Version**: v2.0
 > **创建日期 / Created**: 2026-01-23
@@ -10,9 +10,9 @@
 
 ## 🎯 执行摘要 | Executive Summary
 
-本计划旨在对GuShen AI量化交易平台进行**全面升级**，包括bug修复、UI优化、用户系统改造、以及后端AI Agent框架升级。
+本计划旨在对Lucrum AI量化交易平台进行**全面升级**，包括bug修复、UI优化、用户系统改造、以及后端AI Agent框架升级。
 
-This plan aims to comprehensively upgrade the GuShen AI quantitative trading platform, including bug fixes, UI optimization, user system renovation, and backend AI Agent framework upgrades.
+This plan aims to comprehensively upgrade the Lucrum AI quantitative trading platform, including bug fixes, UI optimization, user system renovation, and backend AI Agent framework upgrades.
 
 ### 核心目标 | Core Objectives
 

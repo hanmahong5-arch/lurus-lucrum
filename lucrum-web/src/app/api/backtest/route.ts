@@ -1,6 +1,9 @@
 /**
- * Backtest API Route
- * 回测API路由
+ * Backtest API Route (Single Stock) — DEPRECATED
+ * 回测API路由（个股）— 已弃用
+ *
+ * DEPRECATED: Prefer /api/backtest/unified with target.mode="single" for new integrations.
+ * This route is kept for backward compatibility and will be removed in a future release.
  *
  * POST /api/backtest - Run a backtest with generated strategy
  *
@@ -8,7 +11,6 @@
  * 1. PostgreSQL database (kline_daily table) - 数据库优先
  * 2. EastMoney API - 东方财富API
  * 3. Sina API (fallback) - 新浪API降级
- * 4. Mock generator (demo only) - 模拟数据（仅演示）
  *
  * Authentication:
  * - Optional authentication - anonymous users can run backtests
@@ -34,7 +36,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { withOptionalUser, type UserContext } from "@/lib/auth";
 import {
   runBacktest,
-  generateBacktestData,
   type BacktestConfig,
   type BacktestKline,
 } from "@/lib/backtest/engine";
@@ -44,7 +45,7 @@ import { persistKLinesAsync } from "@/lib/backtest/kline-persister";
 
 // Data source tracking interface
 interface DataSourceInfo {
-  type: "real" | "simulated" | "mixed";
+  type: "real" | "mixed";
   provider: string;
   reason: string;
   fallbackUsed: boolean;
@@ -64,9 +65,9 @@ export async function POST(request: NextRequest) {
 
     // Track data source information
     let dataSourceInfo: DataSourceInfo = {
-      type: "simulated",
-      provider: "mock-generator",
-      reason: "Default fallback",
+      type: "real",
+      provider: "pending",
+      reason: "Awaiting data fetch",
       fallbackUsed: false,
       realDataCount: 0,
       simulatedDataCount: 0,
@@ -128,8 +129,8 @@ export async function POST(request: NextRequest) {
     let klines: BacktestKline[] = [];
     let dataFetchAttempts: string[] = [];
 
-    // Only fetch real data if symbol is provided and not mock mode
-    if (config.symbol && config.symbol !== "mock" && config.symbol !== "") {
+    // Fetch real data if symbol is provided
+    if (config.symbol && config.symbol !== "") {
       // ====================================================================
       // Priority 1: Try PostgreSQL Database First (数据库优先)
       // ====================================================================
@@ -240,31 +241,25 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      dataFetchAttempts.push(
-        config.symbol === "mock"
-          ? "Mock mode requested by user"
-          : "No symbol provided"
-      );
+      dataFetchAttempts.push("No symbol provided");
     }
 
     // ====================================================================
-    // Priority 4: Generate Mock Data (模拟数据降级)
+    // All real data sources exhausted - return error
     // ====================================================================
     if (klines.length === 0) {
-      console.log(`[Backtest] Generating mock data for ${days} days...`);
-      klines = generateBacktestData(days, 50 + Math.random() * 100, 0.02);
-
-      // Update data source info for simulated data
-      dataSourceInfo = {
-        type: "simulated",
-        provider: "mock-generator",
-        reason: dataFetchAttempts.length > 0
-          ? `Fallback to mock (${dataFetchAttempts.join('; ')})`
-          : "Mock mode requested",
-        fallbackUsed: config.symbol !== "mock" && config.symbol !== undefined,
-        realDataCount: 0,
-        simulatedDataCount: klines.length,
-      };
+      const reasons = dataFetchAttempts.length > 0
+        ? dataFetchAttempts.join('; ')
+        : "No data source available";
+      console.warn(`[Backtest] All data sources failed for ${config.symbol}: ${reasons}`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `Unable to fetch market data for symbol "${config.symbol}". Please check the symbol or try again later.`,
+          details: reasons,
+        },
+        { status: 422 }
+      );
     }
 
     // Filter klines by date range
@@ -321,7 +316,7 @@ export async function POST(request: NextRequest) {
             persistedAsync: dataSourceInfo.persistedAsync || false,
           },
           // Legacy field for backward compatibility
-          dataSourceLegacy: dataSourceInfo.type === "real" ? "real" : "simulated",
+          dataSourceLegacy: "real",
           // User authentication status
           isAuthenticated: !!user,
           userId: user?.userId || null,

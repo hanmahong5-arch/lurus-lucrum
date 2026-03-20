@@ -5,14 +5,19 @@
  * GET /api/backtest/sector - Returns available strategies (builtin + user) and sectors
  * POST /api/backtest/sector - Validates strategy performance across all stocks in a sector.
  *
- * 验证策略在行业内所有股票的表现
+ * DEPRECATED: Prefer /api/backtest/unified with mode="sector" for new integrations.
+ *
+ * Data Source Priority (数据源优先级):
+ * 1. Database (sectors + stock_sector_mapping tables) — DB优先
+ * 2. Redis cache (24h TTL) — Redis缓存
+ * 3. EastMoney API fallback — 东方财富API降级
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth";
-import { db, strategyHistory } from "@/lib/db";
-import { eq, and, desc } from "drizzle-orm";
+import { db, strategyHistory, sectors, stockSectorMapping, stocks } from "@/lib/db";
+import { eq, and, desc, inArray } from "drizzle-orm";
 import {
   getSectorStocks,
   getSectorIndexKline,
@@ -44,6 +49,7 @@ import {
 } from "@/lib/backtest/statistics";
 import { createCostConfig, ZERO_COSTS } from "@/lib/backtest/transaction-costs";
 import { validateDateRange } from "@/lib/utils/trading-calendar";
+import { cacheGet, cacheSet } from "@/lib/redis";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -323,26 +329,128 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // 1. Fetch sector constituent stocks
-    const sectorResponse = await getSectorStocks(sectorCode, maxStocks ?? 100);
+    // 1. Fetch sector constituent stocks (DB-first, Redis cache, API fallback)
+    let filteredStocks: Array<{ symbol: string; name: string; marketCap: number | null }> = [];
+    let dataSource = "eastmoney";
 
-    if (!sectorResponse.success || !sectorResponse.data) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: sectorResponse.error ?? "Failed to fetch sector stocks",
-        },
-        { status: 500 },
-      );
+    // --- Priority 1: Check Redis cache ---
+    const cacheKey = `sector:stocks:${sectorCode}`;
+    const cachedStocks = await cacheGet<Array<{ symbol: string; name: string; marketCap: number | null }>>(cacheKey);
+    if (cachedStocks && cachedStocks.length > 0) {
+      filteredStocks = cachedStocks;
+      dataSource = "redis-cache";
+      warnings.push(`Loaded ${filteredStocks.length} stocks from Redis cache`);
     }
 
-    // Filter by market cap if specified
-    let filteredStocks = sectorResponse.data.stocks;
-    if (minMarketCap !== undefined) {
-      const minCapValue = minMarketCap * 1e8; // Convert billion to yuan
-      filteredStocks = filteredStocks.filter(
-        (s) => s.marketCap !== null && s.marketCap >= minCapValue,
-      );
+    // --- Priority 2: Try Database (sectors + stock_sector_mapping) ---
+    if (filteredStocks.length === 0) {
+      try {
+        const sectorRow = await db.query.sectors.findFirst({
+          where: eq(sectors.code, sectorCode),
+        });
+
+        if (sectorRow) {
+          // Get stock IDs in this sector via mapping table
+          const mappings = await db
+            .select({
+              stockId: stockSectorMapping.stockId,
+            })
+            .from(stockSectorMapping)
+            .where(eq(stockSectorMapping.sectorId, sectorRow.id));
+
+          if (mappings.length > 0) {
+            const stockIds = mappings.map((m) => m.stockId);
+            // Fetch stock details
+            const dbStocks = await db
+              .select({
+                symbol: stocks.symbol,
+                name: stocks.name,
+                marketCap: stocks.marketCap,
+                isST: stocks.isST,
+                status: stocks.status,
+                listingDate: stocks.listingDate,
+              })
+              .from(stocks)
+              .where(inArray(stocks.id, stockIds));
+
+            // Apply SectorFilter: exclude ST, filter by status, market cap, listing age
+            let sectorFilteredStocks = dbStocks.filter((s) => s.status === "active");
+
+            if (excludeSTStocks) {
+              sectorFilteredStocks = sectorFilteredStocks.filter((s) => !s.isST);
+            }
+
+            if (minMarketCap !== undefined) {
+              // marketCap in DB is stored in 亿元 (hundreds of millions CNY)
+              sectorFilteredStocks = sectorFilteredStocks.filter(
+                (s) => s.marketCap !== null && s.marketCap >= minMarketCap!,
+              );
+            }
+
+            if (excludeNewStocks && minListingDays) {
+              const cutoffDate = new Date();
+              cutoffDate.setDate(cutoffDate.getDate() - (minListingDays ?? 60));
+              const cutoffStr = cutoffDate.toISOString().split("T")[0] ?? "";
+              sectorFilteredStocks = sectorFilteredStocks.filter(
+                (s) => !s.listingDate || s.listingDate <= cutoffStr,
+              );
+            }
+
+            filteredStocks = sectorFilteredStocks.map((s) => ({
+              symbol: s.symbol,
+              name: s.name,
+              marketCap: s.marketCap,
+            }));
+
+            if (filteredStocks.length > 0) {
+              dataSource = "database";
+              // Cache to Redis with 24h TTL (86400 seconds)
+              await cacheSet(cacheKey, filteredStocks, 86400);
+            }
+          }
+        }
+      } catch (dbErr) {
+        console.warn("[SectorBacktest] Database query failed, falling back to API:", dbErr);
+        warnings.push("Database query failed, using API fallback");
+      }
+    }
+
+    // --- Priority 3: EastMoney API fallback ---
+    if (filteredStocks.length === 0) {
+      const sectorResponse = await getSectorStocks(sectorCode, maxStocks ?? 100);
+
+      if (!sectorResponse.success || !sectorResponse.data) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: sectorResponse.error ?? "Failed to fetch sector stocks from both database and API",
+          },
+          { status: 500 },
+        );
+      }
+
+      let apiStocks = sectorResponse.data.stocks;
+
+      // Apply market cap filter to API results
+      if (minMarketCap !== undefined) {
+        const minCapValue = minMarketCap * 1e8; // API returns marketCap in yuan
+        apiStocks = apiStocks.filter(
+          (s) => s.marketCap !== null && s.marketCap >= minCapValue,
+        );
+      }
+
+      filteredStocks = apiStocks.map((s) => ({
+        symbol: s.symbol,
+        name: s.name,
+        marketCap: s.marketCap,
+      }));
+
+      dataSource = "eastmoney";
+
+      // Cache API results to Redis with 24h TTL
+      if (filteredStocks.length > 0) {
+        await cacheSet(cacheKey, filteredStocks, 86400);
+      }
     }
 
     // Limit number of stocks
@@ -579,7 +687,7 @@ export async function POST(request: NextRequest) {
       signalTimeline,
       meta: {
         executionTime: Date.now() - startTime,
-        dataSource: "eastmoney",
+        dataSource,
         timestamp: Date.now(),
         warnings,
       },

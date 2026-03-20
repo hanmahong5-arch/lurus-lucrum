@@ -6,7 +6,6 @@
  * 创建和管理券商适配器实例。
  *
  * Supported Brokers:
- * - mock: 模拟券商（已实现）
  * - eastmoney: 东方财富（即将支持）
  * - futu: 富途证券（即将支持）
  * - tiger: 老虎证券（即将支持）
@@ -19,9 +18,7 @@ import type {
   IBrokerAdapter,
   BrokerType,
   BrokerCredentials,
-  MockBrokerCredentials,
 } from './interfaces';
-import { MockBrokerAdapter } from './adapters/mock-broker';
 
 // =============================================================================
 // Broker Registry
@@ -47,22 +44,7 @@ export interface BrokerInfo {
  * Registry of all supported brokers
  * 所有支持的券商注册表
  */
-export const BROKER_REGISTRY: Record<BrokerType, BrokerInfo> = {
-  mock: {
-    type: 'mock',
-    name: 'mock',
-    displayName: '模拟交易',
-    description: '本地模拟交易，无需真实账户，适合策略测试和学习',
-    status: 'available',
-    supportedMarkets: ['a_share'],
-    features: [
-      '即时成交模拟',
-      '真实市场规则',
-      '无资金限制',
-      '完整交易记录',
-    ],
-    requiresAuth: false,
-  },
+export const BROKER_REGISTRY: Partial<Record<BrokerType, BrokerInfo>> = {
   eastmoney: {
     type: 'eastmoney',
     name: 'eastmoney',
@@ -137,9 +119,6 @@ export function createBrokerAdapter(
   credentials?: BrokerCredentials
 ): IBrokerAdapter {
   switch (type) {
-    case 'mock':
-      return new MockBrokerAdapter(credentials as MockBrokerCredentials);
-
     case 'eastmoney':
       throw new Error('EastMoney broker is coming soon / 东方财富券商即将支持');
 
@@ -153,7 +132,7 @@ export function createBrokerAdapter(
       throw new Error('Interactive Brokers is coming soon / 盈透证券即将支持');
 
     default:
-      throw new Error(`Unknown broker type: ${type} / 未知的券商类型`);
+      throw new Error(`Unsupported broker type: ${type}. Available brokers: eastmoney, futu, tiger, ib / 不支持的券商类型`);
   }
 }
 
@@ -250,4 +229,4 @@ export async function clearAllBrokerInstances(): Promise<void> {
 // Export Convenience Types
 // =============================================================================
 
-export type { BrokerType, BrokerCredentials, MockBrokerCredentials };
+export type { BrokerType, BrokerCredentials };

@@ -5,9 +5,9 @@
 
 ## 概述 | Overview
 
-本文档记录了 GuShen 前端 (gushen-web) 组件的边缘情况测试策略和覆盖范围。测试目标是确保组件在各种异常输入和极端条件下仍能稳定运行，覆盖率目标为 95%+。
+本文档记录了 Lucrum 前端 (lucrum-web) 组件的边缘情况测试策略和覆盖范围。测试目标是确保组件在各种异常输入和极端条件下仍能稳定运行，覆盖率目标为 95%+。
 
-This document records the edge case testing strategy and coverage for GuShen frontend (gushen-web) components. The testing goal is to ensure components operate stably under various abnormal inputs and extreme conditions, with a target coverage of 95%+.
+This document records the edge case testing strategy and coverage for Lucrum frontend (lucrum-web) components. The testing goal is to ensure components operate stably under various abnormal inputs and extreme conditions, with a target coverage of 95%+.
 
 ---
 
@@ -108,7 +108,7 @@ This document records the edge case testing strategy and coverage for GuShen fro
 
 ```bash
 # 进入前端目录
-cd gushen-web
+cd lucrum-web
 
 # 运行所有测试
 bun run test
@@ -279,7 +279,7 @@ function createMockTrade(overrides: Partial<DetailedTrade> = {}): DetailedTrade 
 # GitHub Actions 示例
 - name: Run Tests
   run: |
-    cd gushen-web
+    cd lucrum-web
     bun install
     bun run test -- --reporter=verbose
     bun run test:coverage

@@ -1,12 +1,12 @@
-# GuShen Database Maintenance Guide
+# Lucrum Database Maintenance Guide
 > 最后更新: 2026-01-22
 # 数据库维护指南
 
 ## Overview | 概述
 
-This document provides comprehensive guidance for maintaining the GuShen PostgreSQL database, including backup, restore, performance tuning, and troubleshooting.
+This document provides comprehensive guidance for maintaining the Lucrum PostgreSQL database, including backup, restore, performance tuning, and troubleshooting.
 
-本文档提供GuShen PostgreSQL数据库维护的全面指南，包括备份、恢复、性能调优和故障排查。
+本文档提供Lucrum PostgreSQL数据库维护的全面指南，包括备份、恢复、性能调优和故障排查。
 
 ---
 
@@ -18,16 +18,16 @@ This document provides comprehensive guidance for maintaining the GuShen Postgre
 # Production / 生产环境
 Host: postgres-service (K3s内部DNS)
 Port: 5432
-Database: gushen
+Database: lucrum
 User: postgres
-Connection String: postgresql://postgres:password@postgres-service:5432/gushen
+Connection String: postgresql://postgres:password@postgres-service:5432/lucrum
 
 # Development / 开发环境
 Host: localhost
 Port: 5432
-Database: gushen
+Database: lucrum
 User: postgres
-Connection String: postgresql://postgres:postgres@localhost:5432/gushen
+Connection String: postgresql://postgres:postgres@localhost:5432/lucrum
 ```
 
 ### Tables | 表结构
@@ -88,7 +88,7 @@ curl -X POST http://localhost:3000/api/data/update \
 
 **Logs / 日志:**
 - Check update logs in database: `SELECT * FROM data_update_log ORDER BY created_at DESC LIMIT 10;`
-- Check application logs: `kubectl logs -f <pod-name> -n gushen` (K3s)
+- Check application logs: `kubectl logs -f <pod-name> -n lucrum` (K3s)
 
 ### Manual Data Import | 手动数据导入
 
@@ -151,11 +151,11 @@ curl -X POST http://localhost:3000/api/data/update \
 ```bash
 # Backup entire database
 # 备份整个数据库
-pg_dump -h postgres-service -U postgres -d gushen -F c -f gushen-backup-$(date +%Y%m%d).dump
+pg_dump -h postgres-service -U postgres -d lucrum -F c -f lucrum-backup-$(date +%Y%m%d).dump
 
 # With compression
 # 压缩备份
-pg_dump -h postgres-service -U postgres -d gushen | gzip > gushen-backup-$(date +%Y%m%d).sql.gz
+pg_dump -h postgres-service -U postgres -d lucrum | gzip > lucrum-backup-$(date +%Y%m%d).sql.gz
 ```
 
 **Table-specific Backup / 指定表备份:**
@@ -163,7 +163,7 @@ pg_dump -h postgres-service -U postgres -d gushen | gzip > gushen-backup-$(date 
 ```bash
 # Backup K-line data only (largest table)
 # 仅备份K线数据（最大表）
-pg_dump -h postgres-service -U postgres -d gushen -t kline_daily -F c -f kline_daily-$(date +%Y%m%d).dump
+pg_dump -h postgres-service -U postgres -d lucrum -t kline_daily -F c -f kline_daily-$(date +%Y%m%d).dump
 ```
 
 **Automated Backup Schedule / 自动备份计划:**
@@ -171,17 +171,17 @@ pg_dump -h postgres-service -U postgres -d gushen -t kline_daily -F c -f kline_d
 Create a cron job (运行在K3s集群外的备份服务器上):
 
 ```bash
-# /etc/cron.daily/gushen-backup.sh
+# /etc/cron.daily/lucrum-backup.sh
 
 #!/bin/bash
-BACKUP_DIR="/backups/gushen"
+BACKUP_DIR="/backups/lucrum"
 RETENTION_DAYS=7
 
 # Create backup
-pg_dump -h postgres-service -U postgres -d gushen -F c -f $BACKUP_DIR/gushen-$(date +%Y%m%d).dump
+pg_dump -h postgres-service -U postgres -d lucrum -F c -f $BACKUP_DIR/lucrum-$(date +%Y%m%d).dump
 
 # Delete old backups
-find $BACKUP_DIR -name "gushen-*.dump" -mtime +$RETENTION_DAYS -delete
+find $BACKUP_DIR -name "lucrum-*.dump" -mtime +$RETENTION_DAYS -delete
 
 echo "Backup completed at $(date)"
 ```
@@ -193,11 +193,11 @@ echo "Backup completed at $(date)"
 ```bash
 # Restore from dump file
 # 从dump文件恢复
-pg_restore -h postgres-service -U postgres -d gushen -c gushen-backup-20240115.dump
+pg_restore -h postgres-service -U postgres -d lucrum -c lucrum-backup-20240115.dump
 
 # Restore from SQL file
 # 从SQL文件恢复
-gunzip < gushen-backup-20240115.sql.gz | psql -h postgres-service -U postgres -d gushen
+gunzip < lucrum-backup-20240115.sql.gz | psql -h postgres-service -U postgres -d lucrum
 ```
 
 **Table-specific Restore / 指定表恢复:**
@@ -205,7 +205,7 @@ gunzip < gushen-backup-20240115.sql.gz | psql -h postgres-service -U postgres -d
 ```bash
 # Restore K-line data only
 # 仅恢复K线数据
-pg_restore -h postgres-service -U postgres -d gushen -t kline_daily kline_daily-20240115.dump
+pg_restore -h postgres-service -U postgres -d lucrum -t kline_daily kline_daily-20240115.dump
 ```
 
 ---
@@ -219,7 +219,7 @@ pg_restore -h postgres-service -U postgres -d gushen -t kline_daily kline_daily-
 ```sql
 -- Enable query logging (if not already enabled)
 -- 启用查询日志
-ALTER DATABASE gushen SET log_min_duration_statement = 1000; -- Log queries > 1s
+ALTER DATABASE lucrum SET log_min_duration_statement = 1000; -- Log queries > 1s
 
 -- Find slow queries in logs
 -- 在日志中查找慢查询
@@ -312,7 +312,7 @@ ALTER TABLE kline_daily SET (autovacuum_enabled = true);
 ```sql
 -- Database size
 -- 数据库大小
-SELECT pg_size_pretty(pg_database_size('gushen'));
+SELECT pg_size_pretty(pg_database_size('lucrum'));
 
 -- Table sizes
 -- 表大小
@@ -340,14 +340,14 @@ SELECT
   query_start,
   state_change
 FROM pg_stat_activity
-WHERE datname = 'gushen'
+WHERE datname = 'lucrum'
 ORDER BY query_start DESC;
 
 -- Connection count by state
 -- 按状态统计连接数
 SELECT state, COUNT(*)
 FROM pg_stat_activity
-WHERE datname = 'gushen'
+WHERE datname = 'lucrum'
 GROUP BY state;
 
 -- Kill long-running query
@@ -384,23 +384,23 @@ FROM pg_statio_user_tables;
 ```bash
 # Check if PostgreSQL is running in K3s
 # 检查PostgreSQL是否在K3s中运行
-kubectl get pods -n gushen | grep postgres
+kubectl get pods -n lucrum | grep postgres
 
 # Check service
 # 检查服务
-kubectl get svc -n gushen postgres-service
+kubectl get svc -n lucrum postgres-service
 
 # Check logs
 # 检查日志
-kubectl logs -f <postgres-pod-name> -n gushen
+kubectl logs -f <postgres-pod-name> -n lucrum
 
 # Test connection from within cluster
 # 从集群内测试连接
-kubectl run -it --rm debug --image=postgres:15 --restart=Never -- psql -h postgres-service -U postgres -d gushen
+kubectl run -it --rm debug --image=postgres:15 --restart=Never -- psql -h postgres-service -U postgres -d lucrum
 ```
 
 **Solutions / 解决方案:**
-1. Restart PostgreSQL pod: `kubectl delete pod <postgres-pod-name> -n gushen`
+1. Restart PostgreSQL pod: `kubectl delete pod <postgres-pod-name> -n lucrum`
 2. Check DATABASE_URL in application environment
 3. Verify network policies allow connection
 
@@ -457,11 +457,11 @@ LIMIT 20;
 ```bash
 # Check disk usage in K3s
 # 检查K3s中的磁盘使用
-kubectl exec -it <postgres-pod-name> -n gushen -- df -h
+kubectl exec -it <postgres-pod-name> -n lucrum -- df -h
 
 # Check database size
 # 检查数据库大小
-kubectl exec -it <postgres-pod-name> -n gushen -- psql -U postgres -d gushen -c "SELECT pg_size_pretty(pg_database_size('gushen'));"
+kubectl exec -it <postgres-pod-name> -n lucrum -- psql -U postgres -d lucrum -c "SELECT pg_size_pretty(pg_database_size('lucrum'));"
 ```
 
 **Solutions / 解决方案:**
@@ -485,7 +485,7 @@ curl http://localhost:3000/api/data/status
 
 # Check application logs
 # 检查应用日志
-kubectl logs -f <app-pod-name> -n gushen | grep DailyUpdater
+kubectl logs -f <app-pod-name> -n lucrum | grep DailyUpdater
 
 # Check if cron job is running
 # 检查定时任务是否运行
@@ -574,4 +574,4 @@ On-call rotation: [Schedule link]
 - [PostgreSQL Official Documentation](https://www.postgresql.org/docs/)
 - [Drizzle ORM Documentation](https://orm.drizzle.team/)
 - [K3s Documentation](https://docs.k3s.io/)
-- GuShen Internal Wiki: [Link to internal docs]
+- Lucrum Internal Wiki: [Link to internal docs]

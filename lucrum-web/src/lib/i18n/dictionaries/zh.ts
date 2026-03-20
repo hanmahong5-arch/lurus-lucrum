@@ -21,16 +21,18 @@ const zh = {
   "common.copied": "已复制",
   "common.share": "分享",
 
-  // Navigation
-  "nav.strategyEditor": "策略编辑器",
+  // Navigation — primary 7 modules
+  "nav.strategyEditor": "策略工作台",
   "nav.marketplace": "策略市场",
   "nav.validation": "策略验证",
-  "nav.trading": "交易面板",
+  "nav.trading": "交易中心",
+  "nav.analysis": "分析中心",
+  "nav.advisor": "AI 顾问",
+  "nav.history": "历史中心",
+  // Navigation — legacy (kept for backward compat)
   "nav.scanner": "扫描选板",
   "nav.agents": "分析任务",
-  "nav.history": "历史记录",
   "nav.insights": "机构洞察",
-  "nav.advisor": "投资顾问",
   "nav.diagnostics": "策略诊断",
   "nav.smartBacktest": "智能回测",
   "nav.more": "更多",

@@ -577,6 +577,8 @@ function runBacktestSegment(
         const slippageAmount = execPrice * config.slippage;
         const buyPrice = execPrice + slippageAmount;
 
+        // Round-lot enforcement: quantity MUST be multiple of lotSize (100 for A-shares).
+        // If capital is insufficient for even 1 lot, skip this signal entirely.
         const lotCalc = calculateMaxAffordableLots(
           cash,
           buyPrice,
@@ -584,7 +586,13 @@ function runBacktestSegment(
           config.commission,
         );
 
-        if (lotCalc.actualQuantity > 0) {
+        if (lotCalc.actualQuantity <= 0) {
+          // Insufficient capital for minimum 1 lot — skip signal
+          action = "资金不足，跳过信号";
+          const lotConfig = getLotSizeConfig(config.symbol);
+          const minCost = lotConfig.lotSize * buyPrice * (1 + config.commission);
+          actionDetail = `需${minCost.toFixed(0)}元买入1手(${lotConfig.lotSize}股), 可用${cash.toFixed(0)}元`;
+        } else if (lotCalc.actualQuantity > 0) {
           const buySize = lotCalc.actualQuantity;
           const cost = buySize * buyPrice;
           // Enforce minimum commission (5 yuan) + transfer fee (bilateral)
@@ -654,8 +662,9 @@ function runBacktestSegment(
         }
       }
     } else if (pendingSignal && pendingSignal.action === "sell" && position > 0) {
+      // Sell entire position — no fractional sells for A-shares.
       // T+1 check: cannot sell on the same day as purchase
-      // T+1 检查: 不能在买入当天卖出
+      // T+1 检查: 不能在买入当天卖出; 卖出时全仓清仓，不拆分零股
       const t1Blocked = enableT1 && date <= heldSinceDate;
       // Circuit breaker: if limit-down, cannot sell
       // 跌停检查: 若股价跌停，卖出失败

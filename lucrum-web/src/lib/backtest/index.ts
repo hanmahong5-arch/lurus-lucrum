@@ -6,7 +6,7 @@
  */
 
 // Core engine
-export { runBacktest, parseStrategyCode, generateBacktestData } from "./engine";
+export { runBacktest, parseStrategyCode } from "./engine";
 
 // Lot size utilities
 export {

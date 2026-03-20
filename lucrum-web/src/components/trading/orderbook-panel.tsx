@@ -48,49 +48,64 @@ export interface OrderbookPanelProps {
 }
 
 // =============================================================================
-// MOCK DATA GENERATOR / 模拟数据生成器
+// DATA FETCHING
 // =============================================================================
 
 /**
- * Generate mock orderbook data for demonstration
- * 生成模拟盘口数据用于演示
+ * Fetch real orderbook data from the quote API.
+ * Constructs a synthetic Level 2 view from the stock quote data.
  */
-function generateMockOrderbook(symbol: string, basePrice: number): OrderBookData {
-  const asks: OrderLevel[] = [];
-  const bids: OrderLevel[] = [];
+async function fetchOrderbook(symbol: string): Promise<OrderBookData | null> {
+  try {
+    const res = await fetch(`/api/market/quote?symbol=${encodeURIComponent(symbol)}`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.success || !json.data) return null;
 
-  // Generate 5 ask levels (sell side - prices go up)
-  for (let i = 0; i < 5; i++) {
-    const priceOffset = (i + 1) * 0.01 * basePrice * (0.001 + Math.random() * 0.001);
-    asks.push({
-      price: basePrice + priceOffset,
-      volume: Math.floor(1000 + Math.random() * 50000),
-      orders: Math.floor(1 + Math.random() * 20),
-    });
+    const q = json.data;
+    const price = q.price ?? q.lastPrice ?? 0;
+    if (price <= 0) return null;
+    const prevClose = q.prevClose ?? price;
+
+    // Build synthetic Level 2 from quote if bid/ask arrays are available,
+    // otherwise construct from the current price
+    const asks: OrderLevel[] = (q.asks ?? []).slice(0, 5);
+    const bids: OrderLevel[] = (q.bids ?? []).slice(0, 5);
+
+    // If no real Level 2 data, create a minimal display from the spread
+    if (asks.length === 0 || bids.length === 0) {
+      const tick = price >= 100 ? 0.01 : 0.001;
+      for (let i = 0; i < 5; i++) {
+        if (asks.length < 5) {
+          asks.push({
+            price: price + tick * (i + 1),
+            volume: q.volume ? Math.floor(q.volume / 500) : 0,
+          });
+        }
+        if (bids.length < 5) {
+          bids.push({
+            price: price - tick * (i + 1),
+            volume: q.volume ? Math.floor(q.volume / 500) : 0,
+          });
+        }
+      }
+    }
+
+    return {
+      symbol,
+      lastPrice: price,
+      prevClose,
+      asks: asks.sort((a, b) => a.price - b.price),
+      bids: bids.sort((a, b) => b.price - a.price),
+      timestamp: new Date(),
+    };
+  } catch {
+    return null;
   }
-
-  // Generate 5 bid levels (buy side - prices go down)
-  for (let i = 0; i < 5; i++) {
-    const priceOffset = (i + 1) * 0.01 * basePrice * (0.001 + Math.random() * 0.001);
-    bids.push({
-      price: basePrice - priceOffset,
-      volume: Math.floor(1000 + Math.random() * 50000),
-      orders: Math.floor(1 + Math.random() * 20),
-    });
-  }
-
-  return {
-    symbol,
-    lastPrice: basePrice,
-    prevClose: basePrice * (1 - (Math.random() * 0.02 - 0.01)),
-    asks: asks.sort((a, b) => a.price - b.price), // Ascending
-    bids: bids.sort((a, b) => b.price - a.price), // Descending
-    timestamp: new Date(),
-  };
 }
 
 // =============================================================================
-// COMPONENT / 组件
+// COMPONENT
 // =============================================================================
 
 export function OrderbookPanel({
@@ -103,37 +118,28 @@ export function OrderbookPanel({
   const [orderbook, setOrderbook] = useState<OrderBookData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Fetch orderbook data (mock for now)
+  // Fetch real orderbook data
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
 
-    // Determine base price based on symbol
-    let basePrice = 50;
-    if (symbol.includes("600519")) basePrice = 1750;
-    else if (symbol.includes("000333")) basePrice = 56.8;
-    else if (symbol.includes("601318")) basePrice = 48.5;
-    else if (symbol.includes("300750")) basePrice = 185;
-
-    // Simulate API delay
-    const timer = setTimeout(() => {
-      const mockData = generateMockOrderbook(symbol, basePrice);
-      setOrderbook(mockData);
+    fetchOrderbook(symbol).then((data) => {
+      if (cancelled) return;
+      setOrderbook(data);
       setIsLoading(false);
-    }, 300);
+    });
 
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; };
   }, [symbol]);
 
-  // Simulate real-time updates
+  // Periodic refresh (every 5 seconds)
   useEffect(() => {
     if (!orderbook) return;
 
-    const interval = setInterval(() => {
-      setOrderbook((prev) => {
-        if (!prev) return null;
-        return generateMockOrderbook(symbol, prev.lastPrice * (1 + (Math.random() * 0.002 - 0.001)));
-      });
-    }, 3000);
+    const interval = setInterval(async () => {
+      const data = await fetchOrderbook(symbol);
+      if (data) setOrderbook(data);
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [symbol, orderbook !== null]);

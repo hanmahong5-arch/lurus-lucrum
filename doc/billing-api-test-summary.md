@@ -97,7 +97,7 @@
 
 ```bash
 # 1. 确保开发服务器运行
-cd /c/Users/Anita/Desktop/lurus/lurus-gushen/gushen-web
+cd /c/Users/Anita/Desktop/lurus/lurus-lucrum/lucrum-web
 bun run dev
 
 # 2. 登录
@@ -200,7 +200,7 @@ fetch('/api/lurus/billing/plans')
 
 1. **启动开发服务器** (如果未运行):
    ```bash
-   cd /c/Users/Anita/Desktop/lurus/lurus-gushen/gushen-web
+   cd /c/Users/Anita/Desktop/lurus/lurus-lucrum/lucrum-web
    bun run dev
    ```
 

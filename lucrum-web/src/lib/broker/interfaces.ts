@@ -56,7 +56,7 @@ export type MarketType = 'a_share' | 'hk_stock' | 'us_stock' | 'crypto' | 'futur
  * Broker type
  * 券商类型
  */
-export type BrokerType = 'mock' | 'eastmoney' | 'futu' | 'tiger' | 'ib';
+export type BrokerType = 'eastmoney' | 'futu' | 'tiger' | 'ib';
 
 // =============================================================================
 // Credential Types
@@ -75,18 +75,6 @@ export interface BrokerCredentials {
   apiSecret?: string;
   /** Additional auth data / 额外认证数据 */
   authData?: Record<string, string>;
-}
-
-/**
- * Mock broker credentials
- * 模拟券商凭证
- */
-export interface MockBrokerCredentials extends BrokerCredentials {
-  brokerType: 'mock';
-  /** Initial balance / 初始资金 */
-  initialBalance?: number;
-  /** Simulation mode / 模拟模式 */
-  simulationMode?: 'instant' | 'delayed' | 'realistic';
 }
 
 // =============================================================================

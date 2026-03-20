@@ -15,38 +15,8 @@ interface SessionDevice {
   isCurrent: boolean;
 }
 
-/**
- * Mock session data
- */
-const MOCK_SESSIONS: SessionDevice[] = [
-  {
-    id: "1",
-    deviceName: "Windows PC",
-    browser: "Chrome 120",
-    ip: "192.168.1.100",
-    location: "北京, 中国",
-    lastActive: new Date(),
-    isCurrent: true,
-  },
-  {
-    id: "2",
-    deviceName: "iPhone 15 Pro",
-    browser: "Safari Mobile",
-    ip: "10.0.0.50",
-    location: "北京, 中国",
-    lastActive: new Date(Date.now() - 2 * 60 * 60 * 1000), // 2 hours ago
-    isCurrent: false,
-  },
-  {
-    id: "3",
-    deviceName: "MacBook Pro",
-    browser: "Firefox 121",
-    ip: "172.16.0.25",
-    location: "上海, 中国",
-    lastActive: new Date(Date.now() - 24 * 60 * 60 * 1000), // 1 day ago
-    isCurrent: false,
-  },
-];
+// Session data is populated from the auth provider when available
+const INITIAL_SESSIONS: SessionDevice[] = [];
 
 /**
  * Security Settings Component
@@ -61,7 +31,7 @@ const MOCK_SESSIONS: SessionDevice[] = [
 export function SecuritySettings() {
   const [isChangingPassword, setIsChangingPassword] = useState(false);
   const [is2FAEnabled, setIs2FAEnabled] = useState(false);
-  const [sessions, setSessions] = useState<SessionDevice[]>(MOCK_SESSIONS);
+  const [sessions, setSessions] = useState<SessionDevice[]>(INITIAL_SESSIONS);
 
   // Password form state
   const [passwordForm, setPasswordForm] = useState({

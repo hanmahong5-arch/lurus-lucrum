@@ -1,6 +1,6 @@
 # ============================================
 # Lucrum Web Frontend Deployment
-# Next.js Application for Gushen
+# Next.js Application for Lucrum
 # Phase 8.5: Agentic Investment Advisor Architecture
 # ============================================
 apiVersion: apps/v1

@@ -12,7 +12,7 @@ for i in {1..20}; do
     echo "=========================================="
 
     # 拉取最新的部署日志
-    scp -q cloud-ubuntu-3-2c2g:/root/gushen/deploy-v18-output.log ./deploy-v18-latest.log 2>/dev/null
+    scp -q cloud-ubuntu-3-2c2g:/root/lucrum/deploy-v18-output.log ./deploy-v18-latest.log 2>/dev/null
 
     if [ -f ./deploy-v18-latest.log ]; then
         # 显示最后30行

@@ -1,11 +1,11 @@
-# lurus-gushen SSO + 计费集成 - Phase 1 实现报告
+# lurus-lucrum SSO + 计费集成 - Phase 1 实现报告
 
 **实施日期**: 2026-02-11
 **状态**: ✅ 代码完成，待测试验证
 
 ## 实现概览
 
-已完成 lurus-gushen 与 lurus-api 的 SSO 单点登录和计费 API 集成的核心代码实现。用户将能够通过 api.lurus.cn 进行统一认证，并在古神平台使用 lurus-api 的计费功能。
+已完成 lurus-lucrum 与 lurus-api 的 SSO 单点登录和计费 API 集成的核心代码实现。用户将能够通过 api.lurus.cn 进行统一认证，并在古神平台使用 lurus-api 的计费功能。
 
 ## 已完成的核心文件
 
@@ -49,7 +49,7 @@
 **功能**:
 - 实现 GET/POST/PUT/DELETE 路由处理
 - 验证 NextAuth session（未登录返回 401）
-- 代理请求到 `api.lurus.cn/api/v2/gushen/{path}`
+- 代理请求到 `api.lurus.cn/api/v2/lucrum/{path}`
 - 转发 Cookies 和查询参数
 - 错误处理：503 Service Unavailable
 
@@ -77,13 +77,13 @@
 ```
 用户点击登录
     ↓
-redirectToLurusLogin() → api.lurus.cn/api/v2/gushen/auth/login
+redirectToLurusLogin() → api.lurus.cn/api/v2/lucrum/auth/login
     ↓
 Zitadel OAuth 认证
     ↓
 lurus-api 设置 Session Cookie (Domain=.lurus.cn)
     ↓
-302 重定向到 gushen.lurus.cn/auth/callback
+302 重定向到 lucrum.lurus.cn/auth/callback
     ↓
 NextAuth signIn("lurus-sso")
     ├─ 调用 lurus-api /api/v1/auth/session
@@ -101,7 +101,7 @@ NextAuth signIn("lurus-sso")
     ↓
 Next.js API Route (验证 NextAuth Session)
     ↓
-代理请求到 api.lurus.cn/api/v2/gushen/billing/tokens
+代理请求到 api.lurus.cn/api/v2/lucrum/billing/tokens
     ├─ 携带 Cookie (Domain=.lurus.cn)
     └─ 转发查询参数
     ↓
@@ -190,7 +190,7 @@ lurus-api ZitadelAuth 中间件
 
 ### SSO 功能
 - [ ] 用户点击登录跳转到 api.lurus.cn
-- [ ] Zitadel 登录成功后回调到 gushen.lurus.cn/auth/callback
+- [ ] Zitadel 登录成功后回调到 lucrum.lurus.cn/auth/callback
 - [ ] NextAuth Session 正确显示用户信息（id、email、name、lurusUserId）
 - [ ] Cookie (Domain=.lurus.cn) 在浏览器开发工具中可见
 - [ ] 登出后清除 Session 和 Cookie
@@ -217,19 +217,19 @@ lurus-api ZitadelAuth 中间件
 ```bash
 # .env.production
 LURUS_API_URL=https://api.lurus.cn
-TENANT_SLUG=gushen
+TENANT_SLUG=lucrum
 NEXT_PUBLIC_LURUS_API_URL=https://api.lurus.cn
-NEXT_PUBLIC_TENANT_SLUG=gushen
-NEXTAUTH_URL=https://gushen.lurus.cn
+NEXT_PUBLIC_TENANT_SLUG=lucrum
+NEXTAUTH_URL=https://lucrum.lurus.cn
 NEXTAUTH_SECRET=<生产环境随机密钥>
 ```
 
 ### DNS 配置
-- 确认 `gushen.lurus.cn` 和 `api.lurus.cn` 的 SSL 证书有效
-- 验证 Zitadel OAuth 回调 URL 已配置为 `https://api.lurus.cn/api/v2/gushen/auth/callback`
+- 确认 `lucrum.lurus.cn` 和 `api.lurus.cn` 的 SSL 证书有效
+- 验证 Zitadel OAuth 回调 URL 已配置为 `https://api.lurus.cn/api/v2/lucrum/auth/callback`
 
 ### Zitadel 租户配置
-- 在 Zitadel 中为 gushen 创建 Organization
+- 在 Zitadel 中为 lucrum 创建 Organization
 - 配置 OrgID → TenantID 映射（lurus-api 自动处理）
 
 ## 文件清单
@@ -261,7 +261,7 @@ lucrum-web/
 
 1. **运行类型检查**:
    ```bash
-   cd gushen-web
+   cd lucrum-web
    bun run typecheck
    ```
 
@@ -287,12 +287,12 @@ lucrum-web/
 ## 风险与注意事项
 
 ### 1. CORS 配置
-- 确保 lurus-api CORS AllowOrigins 包含 `gushen.lurus.cn`
+- 确保 lurus-api CORS AllowOrigins 包含 `lucrum.lurus.cn`
 - 验证 AllowCredentials = true
 
 ### 2. Cookie 域名
 - 确认 lurus-api Session Cookie 的 Domain 设置为 `.lurus.cn`
-- 测试 Cookie 在 gushen.lurus.cn 和 api.lurus.cn 间共享
+- 测试 Cookie 在 lucrum.lurus.cn 和 api.lurus.cn 间共享
 
 ### 3. NextAuth Session 策略
 - 使用 JWT 策略（不是 database 策略）

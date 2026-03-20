@@ -22,7 +22,6 @@ export type {
   BrokerType,
   // Credentials
   BrokerCredentials,
-  MockBrokerCredentials,
   // Account
   AccountInfo,
   BalanceInfo,
@@ -69,8 +68,3 @@ export {
 
 export type { BrokerInfo } from './broker-factory';
 
-// =============================================================================
-// Adapters
-// =============================================================================
-
-export { MockBrokerAdapter } from './adapters/mock-broker';

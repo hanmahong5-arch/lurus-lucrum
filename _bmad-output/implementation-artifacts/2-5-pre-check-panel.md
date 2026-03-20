@@ -23,9 +23,9 @@ So that 我不会因为遗漏配置而导致回测失败。
 **Given** 每项前置条件
 **When** 组件渲染
 **Then** 每项使用三态灯:
-- ● 绿 (`--gushen-color-status-ready`): 就绪
-- ● 黄 (`--gushen-color-status-warn`): 警告，可运行但有风险
-- ● 红 (`--gushen-color-status-block`): 阻断
+- ● 绿 (`--lucrum-color-status-ready`): 就绪
+- ● 黄 (`--lucrum-color-status-warn`): 警告，可运行但有风险
+- ● 红 (`--lucrum-color-status-block`): 阻断
 
 ### AC-3: 运行按钮联动
 **Given** PreCheckPanel 条件状态
@@ -159,9 +159,9 @@ const effectiveSymbol = backtestTarget.stock?.symbol ||
 
 | 令牌 | CSS 变量 | Tailwind 类 | 值 |
 |------|----------|-------------|-----|
-| 绿灯 | `--gushen-color-status-ready` | `text-status-ready`, `bg-status-ready` | #22c55e |
-| 黄灯 | `--gushen-color-status-warn` | `text-status-warn`, `bg-status-warn` | #eab308 |
-| 红灯 | `--gushen-color-status-block` | `text-status-block`, `bg-status-block` | #ef4444 |
+| 绿灯 | `--lucrum-color-status-ready` | `text-status-ready`, `bg-status-ready` | #22c55e |
+| 黄灯 | `--lucrum-color-status-warn` | `text-status-warn`, `bg-status-warn` | #eab308 |
+| 红灯 | `--lucrum-color-status-block` | `text-status-block`, `bg-status-block` | #ef4444 |
 | 按钮高亮 | - | `.glow-active` | box-shadow glow-primary |
 | 主按钮 | - | `.btn-primary` | 蓝色渐变按钮 |
 

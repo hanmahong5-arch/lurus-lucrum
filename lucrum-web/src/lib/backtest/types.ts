@@ -312,7 +312,7 @@ export interface StrategySignal {
  * Backtest target mode
  * 回测标的模式
  */
-export type BacktestTargetMode = "sector" | "stock" | "portfolio";
+export type BacktestTargetMode = "single" | "multi" | "sector" | "portfolio" | "stock";
 
 /**
  * Sector filter configuration

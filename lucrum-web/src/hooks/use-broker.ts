@@ -94,7 +94,7 @@ export interface UseBrokerResult {
 // =============================================================================
 
 export function useBroker(
-  brokerType: BrokerType = 'mock',
+  brokerType: BrokerType,
   options: UseBrokerOptions = {}
 ): UseBrokerResult {
   const { autoConnect = false, credentials, refreshInterval } = options;
@@ -371,17 +371,3 @@ export function useBroker(
   };
 }
 
-// =============================================================================
-// Convenience Hooks
-// =============================================================================
-
-/**
- * useMockBroker - Convenience hook for mock broker
- * 模拟券商便捷 Hook
- */
-export function useMockBroker(options: Omit<UseBrokerOptions, 'credentials'> = {}) {
-  return useBroker('mock', {
-    ...options,
-    autoConnect: options.autoConnect ?? true,
-  });
-}

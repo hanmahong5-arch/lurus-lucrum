@@ -14,10 +14,10 @@ So that 我始终知道操作是否成功、是否需要关注。
 **Given** 用户在平台执行任何操作
 **When** 操作产生需要通知的结果
 **Then** 右下角显示 Toast 通知，支持 4 种变体:
-- success: 左侧 2px 绿色标记 (`--gushen-color-step-done`) + ✓ 图标, 5s 后自动关闭 + 手动关闭
-- warning: 左侧 2px 黄色标记 (`--gushen-color-status-warn`) + ⚠ 图标, 不自动消失
-- error: 左侧 2px 红色标记 (`--gushen-color-status-block`) + ✕ 图标, 不自动消失
-- info: 左侧 2px 蓝色标记 (`--gushen-color-primary`) + ℹ 图标, 5s 后自动关闭
+- success: 左侧 2px 绿色标记 (`--lucrum-color-step-done`) + ✓ 图标, 5s 后自动关闭 + 手动关闭
+- warning: 左侧 2px 黄色标记 (`--lucrum-color-status-warn`) + ⚠ 图标, 不自动消失
+- error: 左侧 2px 红色标记 (`--lucrum-color-status-block`) + ✕ 图标, 不自动消失
+- info: 左侧 2px 蓝色标记 (`--lucrum-color-primary`) + ℹ 图标, 5s 后自动关闭
 
 ### AC-2: sonner 库集成
 **Given** Toast 系统需要实现
@@ -110,9 +110,9 @@ So that 我始终知道操作是否成功、是否需要关注。
 - **组件位置**: `src/components/feedback/toast-system.tsx`
 - **工具函数位置**: `src/lib/toast.ts`
 - **设计令牌**: 使用 Story 1.1 实现的 CSS 变量
-  - success: `rgb(var(--gushen-color-step-done))`
-  - warning: `rgb(var(--gushen-color-status-warn))`
-  - error: `rgb(var(--gushen-color-status-block))`
+  - success: `rgb(var(--lucrum-color-step-done))`
+  - warning: `rgb(var(--lucrum-color-status-warn))`
+  - error: `rgb(var(--lucrum-color-status-block))`
   - info: `--primary` (#3b82f6)
 
 ### 关键技术约束
@@ -180,7 +180,7 @@ promiseToast(
 
 ### Previous Story Intelligence (Story 1.1)
 
-- 设计令牌已实现，可直接使用 `--gushen-color-*` 变量
+- 设计令牌已实现，可直接使用 `--lucrum-color-*` 变量
 - `bg-surface-elevated` 已定义 (#1f1f23)
 - 动画系统已建立，可参考 `ai-pulse` 实现模式
 
@@ -206,7 +206,7 @@ None - implementation proceeded without blocking issues.
 
 - Installed sonner v2.0.7 for toast notifications
 - Created unified toast API in src/lib/toast.ts with showToast and promiseToast
-- Created ToastSystem component with Gushen design system styling
+- Created ToastSystem component with Lucrum design system styling
 - Added toast CSS styles in globals.css with 4 variants (success/warning/error/info)
 - Integrated into layout.tsx for global availability
 - All 34 unit tests pass, validating API surface and component structure

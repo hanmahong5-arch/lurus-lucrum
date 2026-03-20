@@ -25,7 +25,7 @@ export const fetchKLinesTool = tool(
     console.log(`[fetchKLinesTool] Fetching ${symbol} ${timeframe} data...`);
 
     let klines: KLineData[] = [];
-    let source = "mock";
+    let source = "unknown";
 
     // Priority 1: Database (only for daily)
     if (timeframe === "1d") {
@@ -140,8 +140,7 @@ export const checkDataAvailabilityTool = tool(
  */
 export const getMarketQuoteTool = tool(
   async ({ symbol }) => {
-    // This would integrate with real-time quote API
-    // For now, return a mock structure
+    // Fetch real-time quote from market API
     console.log(`[getMarketQuoteTool] Getting quote for ${symbol}...`);
 
     try {

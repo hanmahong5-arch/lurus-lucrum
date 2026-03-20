@@ -330,7 +330,12 @@ export const useWorkflowStore = create<WorkflowStore>()(
       name: 'lucrum-workflow-store',
       partialize: (state) => ({
         userId: state.userId,
-        // Don't persist session data - reload from server
+        // Persist session reference so it can be reloaded on navigation return
+        session: state.session,
+        currentStepDef: state.currentStepDef,
+        activeSessions: state.activeSessions,
+        lastStepCached: state.lastStepCached,
+        // Exclude transient: status, error
       }),
     }
   )

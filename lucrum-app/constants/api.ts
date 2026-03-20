@@ -7,7 +7,7 @@
 
 export const API_CONFIG = {
   // lucrum-web API base (Next.js API routes)
-  LUCRUM_API_URL: "https://gushen.lurus.cn/api",
+  LUCRUM_API_URL: "https://lucrum.lurus.cn/api",
 
   // lurus-api (AI gateway)
   LURUS_API_URL: "https://api.lurus.cn",
@@ -25,7 +25,7 @@ export const API_CONFIG = {
   SSE_TIMEOUT: 120_000,
 
   // WebSocket
-  WS_URL: "wss://gushen.lurus.cn/ws",
+  WS_URL: "wss://lucrum.lurus.cn/ws",
   WS_RECONNECT_INTERVAL: 3_000,
   WS_MAX_RECONNECT_ATTEMPTS: 10,
 } as const;

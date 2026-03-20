@@ -1,6 +1,5 @@
 /**
  * K-Line Data API Route
- * K线数据API路由
  *
  * GET /api/market/kline?symbol=600519&timeframe=1d&limit=200
  */
@@ -8,7 +7,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   getKLineData,
-  generateMockKLineData,
   KLineTimeFrame,
 } from "@/lib/data-service";
 import { cacheGet, cacheSet } from "@/lib/redis";
@@ -16,9 +14,6 @@ import { cacheGet, cacheSet } from "@/lib/redis";
 // =============================================================================
 // Constants
 // =============================================================================
-
-// Environment flag for using mock data
-const USE_MOCK = process.env.USE_MOCK_DATA === "true";
 
 // Valid timeframes
 const VALID_TIMEFRAMES: KLineTimeFrame[] = [
@@ -86,19 +81,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    if (USE_MOCK) {
-      // Generate mock data with appropriate starting price
-      const mockData = generateMockKLineData(symbol, limit);
-      return NextResponse.json({
-        success: true,
-        data: mockData,
-        source: "mock",
-        cached: false,
-        timestamp: Date.now(),
-        latency: 0,
-      });
-    }
-
     // Try Redis cache first
     const cacheKey = `kline:${symbol}:${timeframe}:${limit}`;
     const cached = await cacheGet<{

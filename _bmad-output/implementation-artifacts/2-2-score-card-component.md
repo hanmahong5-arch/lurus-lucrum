@@ -164,11 +164,11 @@ interface ScoreCardProps {
 
 评分颜色 CSS 变量已在 `globals.css` 和 `tailwind.config.ts` 中定义:
 ```css
---gushen-color-score-s: 251 191 36;   /* #fbbf24 金色 */
---gushen-color-score-a: 34 211 238;   /* #22d3ee 青色 */
---gushen-color-score-b: 59 130 246;   /* #3b82f6 蓝色 */
---gushen-color-score-c: 107 114 128;  /* #6b7280 灰色 */
---gushen-color-score-d: 251 146 60;   /* #fb923c 橙色 */
+--lucrum-color-score-s: 251 191 36;   /* #fbbf24 金色 */
+--lucrum-color-score-a: 34 211 238;   /* #22d3ee 青色 */
+--lucrum-color-score-b: 59 130 246;   /* #3b82f6 蓝色 */
+--lucrum-color-score-c: 107 114 128;  /* #6b7280 灰色 */
+--lucrum-color-score-d: 251 146 60;   /* #fb923c 橙色 */
 ```
 
 Tailwind 类: `text-score-s`, `bg-score-a/20`, `border-score-b` 等。

@@ -1,26 +1,26 @@
-# GuShen K3s集群运维手册 | K3s Cluster Operations Guide
+# Lucrum K3s集群运维手册 | K3s Cluster Operations Guide
 
 ## 快速开始 | Quick Start
 
 ### 访问地址 | Access URLs
 
 **主服务** | **Main Service**
-- **URL**: https://gushen.lurus.cn
-- **用途**: GuShen AI量化交易平台
+- **URL**: https://lucrum.lurus.cn
+- **用途**: Lucrum AI量化交易平台
 - **协议**: HTTPS (自动跳转)
 
 **API文档** | **API Documentation**
-- **URL**: https://gushen.lurus.cn/docs
+- **URL**: https://lucrum.lurus.cn/docs
 - **用途**: FastAPI Swagger UI
 - **协议**: HTTPS
 
 **健康检查** | **Health Check**
 ```bash
 # 前端健康检查
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 
 # 后端健康检查
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 
 # 预期返回: HTTP 200 OK
 ```
@@ -33,8 +33,8 @@ curl https://gushen.lurus.cn/api/health
 
 ```
 ┌─────────────────────────────────────────────────────────┐
-│             GuShen量化交易平台架构                        │
-│         GuShen Quantitative Trading Platform             │
+│             Lucrum量化交易平台架构                        │
+│         Lucrum Quantitative Trading Platform             │
 └─────────────────────────────────────────────────────────┘
 
                     ┌──────────────┐
@@ -77,7 +77,7 @@ curl https://gushen.lurus.cn/api/health
 
 ### 1. ai-qtrd-web (前端服务)
 
-**镜像**: `gushen-web:v18`
+**镜像**: `lucrum-web:v18`
 **端口**: 3000
 **节点**: cloud-ubuntu-3-2c2g (固定)
 **资源**: CPU 100m-500m, Memory 256Mi-512Mi
@@ -99,7 +99,7 @@ curl https://gushen.lurus.cn/api/health
 
 **健康检查**:
 ```bash
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 # 返回: {"status":"ok","timestamp":"..."}
 ```
 
@@ -129,7 +129,7 @@ curl https://gushen.lurus.cn/api/health
 **API文档访问**:
 ```bash
 # 浏览器访问
-https://gushen.lurus.cn/docs
+https://lucrum.lurus.cn/docs
 ```
 
 ### 3. Redis缓存集群
@@ -291,7 +291,7 @@ kubectl get pods -A -o wide --field-selector spec.nodeName=cloud-ubuntu-3-2c2g
 
 ```bash
 # 步骤1: 进入项目目录
-cd /path/to/gushen-web
+cd /path/to/lucrum-web
 
 # 步骤2: 确保代码已提交
 git status
@@ -299,10 +299,10 @@ git add .
 git commit -m "feat: 新功能描述"
 
 # 步骤3: 构建Docker镜像（使用--no-cache确保最新代码）
-docker build --no-cache -t gushen-web:v19 .
+docker build --no-cache -t lucrum-web:v19 .
 
 # 步骤4: 验证镜像
-docker images | grep gushen-web
+docker images | grep lucrum-web
 ```
 
 ### 分发镜像到集群节点 | Distribute Image
@@ -311,7 +311,7 @@ docker images | grep gushen-web
 # 方法1: 使用tar包分发（推荐）
 
 # 导出镜像
-docker save gushen-web:v19 -o /tmp/gushen-web-v19.tar
+docker save lucrum-web:v19 -o /tmp/lucrum-web-v19.tar
 
 # 启动临时HTTP服务器
 cd /tmp
@@ -320,21 +320,21 @@ HTTP_PID=$!
 
 # 获取主节点IP
 MASTER_IP=$(hostname -I | awk '{print $1}')
-echo "HTTP服务器: http://${MASTER_IP}:8765/gushen-web-v19.tar"
+echo "HTTP服务器: http://${MASTER_IP}:8765/lucrum-web-v19.tar"
 
 # 在每个worker节点上执行
-ssh root@<node-ip> "wget http://${MASTER_IP}:8765/gushen-web-v19.tar -O /tmp/gushen-web-v19.tar && \
-                     ctr -n k8s.io images import /tmp/gushen-web-v19.tar && \
-                     rm /tmp/gushen-web-v19.tar"
+ssh root@<node-ip> "wget http://${MASTER_IP}:8765/lucrum-web-v19.tar -O /tmp/lucrum-web-v19.tar && \
+                     ctr -n k8s.io images import /tmp/lucrum-web-v19.tar && \
+                     rm /tmp/lucrum-web-v19.tar"
 
 # 清理HTTP服务器
 kill $HTTP_PID
-rm /tmp/gushen-web-v19.tar
+rm /tmp/lucrum-web-v19.tar
 
 # 方法2: 使用SCP直接传输
 for NODE in 10.42.1.1 10.42.1.2 10.42.1.3; do
-  scp /tmp/gushen-web-v19.tar root@${NODE}:/tmp/
-  ssh root@${NODE} "ctr -n k8s.io images import /tmp/gushen-web-v19.tar && rm /tmp/gushen-web-v19.tar"
+  scp /tmp/lucrum-web-v19.tar root@${NODE}:/tmp/
+  ssh root@${NODE} "ctr -n k8s.io images import /tmp/lucrum-web-v19.tar && rm /tmp/lucrum-web-v19.tar"
 done
 ```
 
@@ -343,7 +343,7 @@ done
 ```bash
 # 步骤1: 更新镜像版本
 kubectl set image deployment/ai-qtrd-web -n ai-qtrd \
-  web=gushen-web:v19
+  web=lucrum-web:v19
 
 # 步骤2: 监控滚动更新进度
 kubectl rollout status deployment/ai-qtrd-web -n ai-qtrd
@@ -357,8 +357,8 @@ kubectl get pods -n ai-qtrd
 kubectl describe pod <new-pod-name> -n ai-qtrd | grep Image
 
 # 步骤4: 测试服务
-curl -I https://gushen.lurus.cn
-curl https://gushen.lurus.cn/api/health
+curl -I https://lucrum.lurus.cn
+curl https://lucrum.lurus.cn/api/health
 ```
 
 ### 回滚版本 | Rollback
@@ -375,7 +375,7 @@ kubectl rollout undo deployment/ai-qtrd-web -n ai-qtrd --to-revision=3
 
 # 验证回滚
 kubectl get pods -n ai-qtrd
-curl https://gushen.lurus.cn/api/health
+curl https://lucrum.lurus.cn/api/health
 ```
 
 ### 更新配置 | Update Configuration
@@ -400,7 +400,7 @@ kubectl get configmap ai-qtrd-config -n ai-qtrd -o yaml
 
 ### 问题1: 服务无法访问 (502/503)
 
-**症状**: 浏览器访问 https://gushen.lurus.cn 返回502或503错误
+**症状**: 浏览器访问 https://lucrum.lurus.cn 返回502或503错误
 
 **排查步骤**:
 
@@ -448,7 +448,7 @@ kubectl logs <pod-name> -n ai-qtrd --previous  # 崩溃前的日志
 
 # 3. 检查镜像是否存在
 ssh <node-ip>
-ctr -n k8s.io images ls | grep gushen-web
+ctr -n k8s.io images ls | grep lucrum-web
 
 # 4. 检查资源限制
 kubectl top pods -n ai-qtrd
@@ -512,7 +512,7 @@ kubectl logs deployment/ai-qtrd-api -n ai-qtrd --tail=200 | grep -i "backtest\|e
 kubectl top pod -n ai-qtrd -l app.kubernetes.io/component=api
 
 # 3. 测试后端API
-curl -X POST https://gushen.lurus.cn/api/backtest/run \
+curl -X POST https://lucrum.lurus.cn/api/backtest/run \
   -H "Content-Type: application/json" \
   -d '{"strategy":"test","symbol":"600519",...}'
 
@@ -542,7 +542,7 @@ kubectl get pod <pod-name> -n ai-qtrd -o jsonpath='{.spec.containers[0].image}'
 
 # 2. 检查节点上的镜像
 ssh <node-ip>
-ctr -n k8s.io images ls | grep gushen-web
+ctr -n k8s.io images ls | grep lucrum-web
 
 # 3. 强制删除Pod重建
 kubectl delete pod <pod-name> -n ai-qtrd
@@ -578,7 +578,7 @@ kubectl top pods -n ai-qtrd
 kubectl get events -n ai-qtrd --sort-by='.lastTimestamp' | tail -20
 
 # 4. 检查服务可用性
-curl -I https://gushen.lurus.cn
+curl -I https://lucrum.lurus.cn
 ```
 
 ### 每周检查 | Weekly Checks
@@ -595,7 +595,7 @@ kubectl exec redis-0 -n ai-qtrd -- redis-cli -a ${REDIS_PASSWORD} info memory
 
 # 4. 检查TLS证书有效期
 kubectl get certificate -n ai-qtrd
-kubectl describe certificate gushen-lurus-cn-tls -n ai-qtrd
+kubectl describe certificate lucrum-lurus-cn-tls -n ai-qtrd
 ```
 
 ### 每月任务 | Monthly Tasks
@@ -647,7 +647,7 @@ kubectl logs -f deployment/ai-qtrd-web -n ai-qtrd
 ```bash
 # 每分钟检查一次
 while true; do
-  STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://gushen.lurus.cn/api/health)
+  STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://lucrum.lurus.cn/api/health)
   echo "$(date) - Status: $STATUS"
   sleep 60
 done
@@ -661,7 +661,7 @@ kubectl exec redis-0 -n ai-qtrd -- redis-cli -a ${REDIS_PASSWORD} INFO stats | g
 **数据库连接数**:
 ```bash
 # 在数据库服务器上执行
-psql -U postgres -d gushen -c "SELECT count(*) FROM pg_stat_activity;"
+psql -U postgres -d lucrum -c "SELECT count(*) FROM pg_stat_activity;"
 ```
 
 ---
@@ -718,7 +718,7 @@ kubectl auth can-i --list --namespace=ai-qtrd
 
 **技术支持** | **Technical Support**
 - 邮箱: support@lurus.cn
-- 企业微信: GuShen运维群
+- 企业微信: Lucrum运维群
 
 **紧急联系** | **Emergency Contact**
 - 24/7热线: [待补充]
@@ -726,7 +726,7 @@ kubectl auth can-i --list --namespace=ai-qtrd
 
 **文档更新** | **Documentation Updates**
 - 最后更新: 2026-01-22
-- 维护者: GuShen DevOps Team
+- 维护者: Lucrum DevOps Team
 - 版本: v1.0
 
 ---

@@ -94,7 +94,7 @@ So that **回测结果基于真实行情数据，可信赖**.
 
 - **ADR-006**: All financial values use `Decimal.js` via `FinancialAmount`. Stock prices displayed in search results must NOT use native JS numbers for price formatting.
 - **ADR-009**: If stock selection is part of workflow step 1, the selected stock must be included in workflow input hash for cache invalidation.
-- **Schema isolation**: Only access `gushen` schema. Stock queries via `lib/db/queries.ts` (Drizzle ORM).
+- **Schema isolation**: Only access `lucrum` schema. Stock queries via `lib/db/queries.ts` (Drizzle ORM).
 - **API response format**: `{ success: true, data: T, meta?: {...}, timestamp: number }` per architecture §8.3.
 
 ### Existing Code to Reuse (DO NOT Reinvent)
@@ -165,7 +165,7 @@ src/
 
 ### References
 
-- [Source: epics-gushen.md → Story 1.3]
+- [Source: epics-lucrum.md → Story 1.3]
 - [Source: epics.md → Story 1.7 (UX details: Combobox, recent stocks, pinyin)]
 - [Source: architecture.md → §9.5 Data Flow, §9.3 API Route Map, §8.1 Naming]
 - [Source: architecture.md → ADR-006 Decimal.js, ADR-009 Workflow Cache]

@@ -1,11 +1,11 @@
 #!/bin/bash
-# GuShen Web v18 部署诊断和修复脚本
+# Lucrum Web v18 部署诊断和修复脚本
 # Diagnose and Fix v18 Deployment Issues
 
 set -e
 
 echo "=========================================="
-echo "GuShen Web v18 部署诊断和修复"
+echo "Lucrum Web v18 部署诊断和修复"
 echo "Diagnose and Fix v18 Deployment"
 echo "=========================================="
 echo ""
@@ -16,12 +16,12 @@ echo ""
 
 echo "[1/7] 检查所有namespace中的web相关deployment..."
 echo "Checking all web deployments across namespaces..."
-kubectl get deployments -A | grep -E "(NAME|web|gushen|qtrd)" || echo "No web deployments found"
+kubectl get deployments -A | grep -E "(NAME|web|lucrum|qtrd)" || echo "No web deployments found"
 echo ""
 
 echo "[2/7] 检查所有web相关的Pod..."
 echo "Checking all web pods..."
-kubectl get pods -A -o wide | grep -E "(NAME|web|gushen|qtrd)" || echo "No web pods found"
+kubectl get pods -A -o wide | grep -E "(NAME|web|lucrum|qtrd)" || echo "No web pods found"
 echo ""
 
 echo "[3/7] 检查ai-qtrd namespace中的详细Pod信息..."
@@ -36,7 +36,7 @@ echo ""
 
 echo "[4/7] 检查所有Service（包括NodePort/LoadBalancer）..."
 echo "Checking all services..."
-kubectl get svc -A | grep -E "(NAME|web|gushen|qtrd|3000)" || echo "No services found on port 3000"
+kubectl get svc -A | grep -E "(NAME|web|lucrum|qtrd|3000)" || echo "No services found on port 3000"
 echo ""
 
 echo "[5/7] 检查所有Ingress配置..."
@@ -47,12 +47,12 @@ echo ""
 
 echo "[6/7] 检查可用的Docker镜像..."
 echo "Checking available Docker images..."
-crictl images | grep gushen-web || echo "No gushen-web images found"
+crictl images | grep lucrum-web || echo "No lucrum-web images found"
 echo ""
 
 echo "[7/7] 检查当前运行的容器..."
 echo "Checking running containers on this node..."
-crictl ps | grep -E "(CONTAINER ID|gushen|web)" || echo "No gushen containers found"
+crictl ps | grep -E "(CONTAINER ID|lucrum|web)" || echo "No lucrum containers found"
 echo ""
 
 # Part 2: 详细分析 Detailed Analysis
@@ -94,7 +94,7 @@ if [ "$CONFIGURED_IMAGE" != "$RUNNING_IMAGE" ]; then
     echo "2. imagePullPolicy=Never导致未拉取新镜像"
     echo "3. K3s containerd中没有v18镜像"
     echo ""
-elif [ "$CONFIGURED_IMAGE" = "gushen-web:v18" ]; then
+elif [ "$CONFIGURED_IMAGE" = "lucrum-web:v18" ]; then
     echo "✓ 配置正确: Deployment使用v18镜像"
     echo ""
     echo "但网页显示旧版本，可能原因:"
@@ -106,7 +106,7 @@ elif [ "$CONFIGURED_IMAGE" = "gushen-web:v18" ]; then
 else
     echo "⚠️ 警告: Deployment配置的镜像版本不是v18"
     echo "   Current: $CONFIGURED_IMAGE"
-    echo "   Expected: gushen-web:v18"
+    echo "   Expected: lucrum-web:v18"
     echo ""
 fi
 
@@ -120,8 +120,8 @@ echo ""
 echo "根据K8s配置，有以下几种访问方式："
 echo ""
 echo "方式1: 通过Traefik Ingress (推荐)"
-echo "  URL: https://gushen.lurus.cn"
-echo "  路由: gushen.lurus.cn → Traefik → ai-qtrd-web Service → Pod"
+echo "  URL: https://lucrum.lurus.cn"
+echo "  路由: lucrum.lurus.cn → Traefik → ai-qtrd-web Service → Pod"
 echo ""
 echo "方式2: 直接NodePort访问 (如果配置了)"
 echo "  URL: http://43.226.46.164:<NodePort>"
@@ -134,7 +134,7 @@ echo ""
 
 # 检查是否有NodePort服务
 echo "检查是否存在NodePort类型的服务..."
-kubectl get svc -A -o wide | grep -E "(NodePort|LoadBalancer)" | grep -E "(web|gushen)" || echo "未发现NodePort/LoadBalancer类型的web服务"
+kubectl get svc -A -o wide | grep -E "(NodePort|LoadBalancer)" | grep -E "(web|lucrum)" || echo "未发现NodePort/LoadBalancer类型的web服务"
 echo ""
 
 # Part 5: 修复方案
@@ -146,17 +146,17 @@ echo "根据诊断结果，请执行以下修复步骤："
 echo ""
 echo "步骤1: 确保v18镜像已构建并导入K3s"
 echo "--------------------------------------"
-echo "cd /root/gushen/gushen-web"
+echo "cd /root/lucrum/lucrum-web"
 echo ""
 echo "# 检查v18镜像是否存在"
 echo "crictl images | grep v18"
 echo ""
 echo "# 如果不存在，需要构建和导入："
-echo "docker build --no-cache -t gushen-web:v18 \\"
+echo "docker build --no-cache -t lucrum-web:v18 \\"
 echo "  --build-arg API_URL=http://43.226.46.164:30800 \\"
 echo "  --build-arg WS_URL=ws://43.226.46.164:30800 ."
 echo ""
-echo "docker save gushen-web:v18 | k3s ctr images import -"
+echo "docker save lucrum-web:v18 | k3s ctr images import -"
 echo ""
 
 echo "步骤2: 强制更新Deployment并重启Pod"
@@ -174,7 +174,7 @@ echo ""
 echo "步骤3: 验证新Pod使用v18镜像"
 echo "--------------------------------------"
 echo "kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o jsonpath='{.items[0].spec.containers[0].image}'"
-echo "# 应该输出: gushen-web:v18"
+echo "# 应该输出: lucrum-web:v18"
 echo ""
 
 echo "步骤4: 检查Pod日志确认启动成功"
@@ -202,14 +202,14 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     echo ""
 
     echo "[1/5] 检查v18镜像..."
-    if crictl images | grep -q "gushen-web.*v18"; then
+    if crictl images | grep -q "lucrum-web.*v18"; then
         echo "✓ v18镜像已存在"
     else
         echo "✗ v18镜像不存在，需要先构建！"
         echo "请执行以下命令构建镜像："
-        echo "  cd /root/gushen/gushen-web"
-        echo "  docker build --no-cache -t gushen-web:v18 ."
-        echo "  docker save gushen-web:v18 | k3s ctr images import -"
+        echo "  cd /root/lucrum/lucrum-web"
+        echo "  docker build --no-cache -t lucrum-web:v18 ."
+        echo "  docker save lucrum-web:v18 | k3s ctr images import -"
         exit 1
     fi
     echo ""
@@ -229,7 +229,7 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
 
     echo "[4/5] 验证镜像版本..."
     CURRENT_IMAGE=$(kubectl get pods -n ai-qtrd -l app=ai-qtrd-web -o jsonpath='{.items[0].spec.containers[0].image}')
-    if [ "$CURRENT_IMAGE" = "gushen-web:v18" ]; then
+    if [ "$CURRENT_IMAGE" = "lucrum-web:v18" ]; then
         echo "✓ Pod使用v18镜像"
     else
         echo "✗ Pod使用的镜像是: $CURRENT_IMAGE"

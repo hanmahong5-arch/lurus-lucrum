@@ -14,50 +14,50 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 **Given** 现有设计系统 (DESIGN_SYSTEM.md + tailwind.config.ts)
 **When** 开发者扩展设计令牌
 **Then** tailwind.config.ts 中新增以下 CSS 变量并可通过 Tailwind class 使用:
-- `--gushen-color-score-s` (#fbbf24) - 金色，卓越策略
-- `--gushen-color-score-a` (#22d3ee) - 青色，优秀策略
-- `--gushen-color-score-b` (#3b82f6) - 蓝色，良好策略
-- `--gushen-color-score-c` (#6b7280) - 灰色，一般策略
-- `--gushen-color-score-d` (#fb923c) - 橙色，需改进策略
+- `--lucrum-color-score-s` (#fbbf24) - 金色，卓越策略
+- `--lucrum-color-score-a` (#22d3ee) - 青色，优秀策略
+- `--lucrum-color-score-b` (#3b82f6) - 蓝色，良好策略
+- `--lucrum-color-score-c` (#6b7280) - 灰色，一般策略
+- `--lucrum-color-score-d` (#fb923c) - 橙色，需改进策略
 
 ### AC-2: 数据源标识色 (Data Source Colors)
 **Given** 回测引擎使用多种数据源
 **When** 显示数据来源标识
 **Then** 以下令牌可用:
-- `--gushen-color-source-db` (#3b82f6) - 蓝色，真实数据库数据
-- `--gushen-color-source-api` (#eab308) - 黄色，实时 API 数据
-- `--gushen-color-source-sim` (#6b7280) - 灰色，模拟数据
+- `--lucrum-color-source-db` (#3b82f6) - 蓝色，真实数据库数据
+- `--lucrum-color-source-api` (#eab308) - 黄色，实时 API 数据
+- `--lucrum-color-source-sim` (#6b7280) - 灰色，模拟数据
 
 ### AC-3: AI 视觉语言令牌 (AI Visual Language)
 **Given** AI 功能需要视觉区分
 **When** AI 生成内容或建议出现
 **Then** 以下令牌可用:
-- `--gushen-color-ai` (#a78bfa) - 紫色，AI 标记色
-- `--gushen-bg-ai` (rgba(167,139,250,0.10)) - AI 背景色
-- `--gushen-border-ai` (rgba(167,139,250,0.20)) - AI 边框色
+- `--lucrum-color-ai` (#a78bfa) - 紫色，AI 标记色
+- `--lucrum-bg-ai` (rgba(167,139,250,0.10)) - AI 背景色
+- `--lucrum-border-ai` (rgba(167,139,250,0.20)) - AI 边框色
 
 ### AC-4: 工作流步骤色 (Workflow Step Colors)
 **Given** 4 步工作流需要状态指示
 **When** 工作流步骤显示
 **Then** 以下令牌可用:
-- `--gushen-color-step-active` (#3b82f6) - 蓝色，当前活跃步骤
-- `--gushen-color-step-done` (#22c55e) - 绿色，已完成步骤
-- `--gushen-color-step-pending` (#4b5563) - 深灰，待执行步骤
+- `--lucrum-color-step-active` (#3b82f6) - 蓝色，当前活跃步骤
+- `--lucrum-color-step-done` (#22c55e) - 绿色，已完成步骤
+- `--lucrum-color-step-pending` (#4b5563) - 深灰，待执行步骤
 
 ### AC-5: 状态灯色 (Status Light Colors)
 **Given** 前置条件检查需要三态灯
 **When** 显示系统/功能状态
 **Then** 以下令牌可用:
-- `--gushen-color-status-ready` (#22c55e) - 绿灯，就绪
-- `--gushen-color-status-warn` (#eab308) - 黄灯，警告
-- `--gushen-color-status-block` (#ef4444) - 红灯，阻断
+- `--lucrum-color-status-ready` (#22c55e) - 绿灯，就绪
+- `--lucrum-color-status-warn` (#eab308) - 黄灯，警告
+- `--lucrum-color-status-block` (#ef4444) - 红灯，阻断
 
 ### AC-6: 背景层级扩展 (Surface Level Extension)
 **Given** 多层卡片和弹窗需要层级区分
 **When** 构建复杂 UI 布局
 **Then** 以下令牌可用:
-- `--gushen-bg-surface-elevated` (#1f1f23) - Level 2，内嵌卡片
-- `--gushen-bg-surface-modal` (#2d2d33) - Level 4，Modal/Dialog
+- `--lucrum-bg-surface-elevated` (#1f1f23) - Level 2，内嵌卡片
+- `--lucrum-bg-surface-modal` (#2d2d33) - Level 4，Modal/Dialog
 
 ### AC-7: 图表扩展色 (Chart Extension Colors)
 **Given** 图表需要额外颜色标识
@@ -76,7 +76,7 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 ## Tasks / Subtasks
 
 - [x] Task 1: 扩展 Tailwind 颜色配置 (AC: #1, #2, #3, #4, #5, #6, #7)
-  - [x] 1.1 在 tailwind.config.ts 中添加 gushen 命名空间的颜色
+  - [x] 1.1 在 tailwind.config.ts 中添加 lucrum 命名空间的颜色
   - [x] 1.2 添加评分色 (score-s/a/b/c/d)
   - [x] 1.3 添加数据源色 (source-db/api/sim)
   - [x] 1.4 添加 AI 色 (ai, bg-ai, border-ai)
@@ -90,7 +90,7 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
   - [x] 2.2 调整 data-sm 字号为 13px
 
 - [x] Task 3: 添加 CSS 变量到 globals.css (AC: #1-#7)
-  - [x] 3.1 在 :root 中定义所有 --gushen-* CSS 变量
+  - [x] 3.1 在 :root 中定义所有 --lucrum-* CSS 变量
   - [x] 3.2 确保变量可被 Tailwind 正确引用
 
 - [x] Task 4: 创建 Tailwind 工具类 (AC: #3)
@@ -108,7 +108,7 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 ## Dev Notes
 
 ### 架构模式遵循
-- **设计令牌命名规范**: `--gushen-{category}-{name}-{variant}`
+- **设计令牌命名规范**: `--lucrum-{category}-{name}-{variant}`
 - **类别**: `bg` / `color` / `border` / `shadow` / `space` / `font` / `motion`
 - **Tailwind 集成**: 通过 `theme.extend.colors` 扩展，使用 CSS 变量实现运行时主题能力
 
@@ -122,7 +122,7 @@ So that 我能通过颜色和样式直觉地区分不同类型的信息。
 | 文件 | 职责 | 修改类型 |
 |------|------|---------|
 | `lucrum-web/tailwind.config.ts` | Tailwind 配置 | 扩展 colors, fontSize |
-| `lucrum-web/src/app/globals.css` | 全局 CSS 变量 | 添加 --gushen-* 变量 |
+| `lucrum-web/src/app/globals.css` | 全局 CSS 变量 | 添加 --lucrum-* 变量 |
 | `lucrum-web/docs/DESIGN_SYSTEM.md` | 设计文档 | 更新令牌列表 |
 
 ### 测试标准
@@ -167,7 +167,7 @@ None - implementation proceeded without blocking issues.
 
 ### File List
 
-- lucrum-web/src/app/globals.css (modified - added --gushen-* CSS variables)
+- lucrum-web/src/app/globals.css (modified - added --lucrum-* CSS variables)
 - lucrum-web/tailwind.config.ts (modified - added colors, backgroundColor, fontSize, animation, keyframes, utilities)
 - lucrum-web/docs/DESIGN_SYSTEM.md (modified - added Section 6 with token documentation)
 - lucrum-web/src/lib/design-system/__tests__/design-tokens.test.ts (new - 25 tests for AC validation)
@@ -175,7 +175,7 @@ None - implementation proceeded without blocking issues.
 ### Review Follow-ups
 
 - [ ] [MEDIUM-3] Add visual regression test for data-sm 12px→13px change to verify no layout breakage
-- [ ] [LOW-2] Clarify `--gushen-color-banner-warn` origin — not in any AC, document or remove
+- [ ] [LOW-2] Clarify `--lucrum-color-banner-warn` origin — not in any AC, document or remove
 
 ## Senior Developer Review (AI)
 

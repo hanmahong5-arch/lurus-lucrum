@@ -59,130 +59,148 @@ export interface IndicatorQuickPanelProps {
 }
 
 // =============================================================================
-// MOCK DATA GENERATOR / 模拟数据生成器
+// DATA FETCHING
 // =============================================================================
 
 /**
- * Generate mock indicator data for demonstration
- * 生成模拟指标数据用于演示
+ * Compute technical indicator signals from K-line data fetched via API.
+ * Returns null if data is unavailable.
  */
-function generateMockIndicators(symbol: string): IndicatorSet {
-  // Randomize for variation
-  const randomSignal = (): SignalType => {
-    const r = Math.random();
-    if (r < 0.35) return "bullish";
-    if (r < 0.65) return "neutral";
-    return "bearish";
-  };
+async function fetchIndicatorData(symbol: string): Promise<IndicatorSet | null> {
+  try {
+    const res = await fetch(`/api/market/kline?symbol=${encodeURIComponent(symbol)}&timeframe=1d&limit=60`);
+    if (!res.ok) return null;
+    const json = await res.json();
+    if (!json.success || !json.data || json.data.length < 20) return null;
 
-  const rsi = 30 + Math.random() * 40;
-  const rsiSignal: SignalType = rsi < 30 ? "bullish" : rsi > 70 ? "bearish" : "neutral";
+    const klines = json.data as Array<{
+      close: number;
+      high: number;
+      low: number;
+      open: number;
+      volume: number;
+    }>;
 
-  const macd = -2 + Math.random() * 4;
-  const macdSignal = macd > 0.5 ? "bullish" : macd < -0.5 ? "bearish" : "neutral";
+    // Compute simple indicators from real close prices
+    const closes = klines.map((k) => k.close);
+    const latest = closes[closes.length - 1] ?? 0;
 
-  const kdj = {
-    k: 30 + Math.random() * 40,
-    d: 30 + Math.random() * 40,
-    j: 20 + Math.random() * 60,
-  };
-  const kdjSignal: SignalType = kdj.k > kdj.d && kdj.j > 50 ? "bullish" :
-    kdj.k < kdj.d && kdj.j < 50 ? "bearish" : "neutral";
+    // Moving averages
+    const ma5 = closes.slice(-5).reduce((a, b) => a + b, 0) / 5;
+    const ma10 = closes.slice(-10).reduce((a, b) => a + b, 0) / 10;
+    const ma20 = closes.slice(-20).reduce((a, b) => a + b, 0) / 20;
 
-  const maStatus = Math.random() > 0.5 ? "bullish" : Math.random() > 0.5 ? "neutral" : "bearish";
-  const bollingerStatus = Math.random() > 0.6 ? "neutral" : randomSignal();
-  const atrPercent = 1.5 + Math.random() * 3;
+    const maStatus: SignalType = ma5 > ma10 && ma10 > ma20 ? "bullish"
+      : ma5 < ma10 && ma10 < ma20 ? "bearish" : "neutral";
 
-  const indicators: IndicatorSet["indicators"] = {
-    trend: [
-      {
-        name: "均线系统",
-        nameEn: "MA",
-        value: maStatus === "bullish" ? "多头排列" : maStatus === "bearish" ? "空头排列" : "交叉整理",
-        signal: maStatus,
-        description: maStatus === "bullish" ? "5日>10日>20日，上升趋势"
-          : maStatus === "bearish" ? "5日<10日<20日，下降趋势"
-          : "均线缠绕，方向不明",
-      },
-      {
-        name: "MACD",
-        nameEn: "MACD",
-        value: macd.toFixed(3),
-        signal: macdSignal,
-        description: macdSignal === "bullish" ? "DIFF上穿DEA，金叉"
-          : macdSignal === "bearish" ? "DIFF下穿DEA，死叉"
-          : "DIFF与DEA接近，观望",
-      },
-    ],
-    momentum: [
-      {
-        name: "RSI(14)",
-        nameEn: "RSI",
-        value: rsi.toFixed(1),
-        signal: rsiSignal,
-        description: rsiSignal === "bullish" ? "超卖区域，可能反弹"
-          : rsiSignal === "bearish" ? "超买区域，注意回调"
-          : "中性区域，震荡为主",
-      },
-      {
-        name: "KDJ",
-        nameEn: "KDJ",
-        value: `K:${kdj.k.toFixed(0)} D:${kdj.d.toFixed(0)}`,
-        signal: kdjSignal,
-        description: kdjSignal === "bullish" ? "K上穿D，金叉向上"
-          : kdjSignal === "bearish" ? "K下穿D，死叉向下"
-          : "K/D交织，方向待定",
-      },
-    ],
-    volatility: [
-      {
-        name: "布林带",
-        nameEn: "BOLL",
-        value: bollingerStatus === "bullish" ? "下轨支撑"
-          : bollingerStatus === "bearish" ? "上轨压力"
-          : "中轨运行",
-        signal: bollingerStatus,
-        description: bollingerStatus === "bullish" ? "价格触及下轨，反弹概率大"
-          : bollingerStatus === "bearish" ? "价格触及上轨，回落概率大"
-          : "价格在中轨附近，震荡运行",
-      },
-      {
-        name: "ATR波动",
-        nameEn: "ATR",
-        value: atrPercent.toFixed(2) + "%",
-        signal: atrPercent > 3 ? "bearish" : atrPercent < 2 ? "bullish" : "neutral",
-        description: atrPercent > 3 ? "波动率高，风险较大"
-          : atrPercent < 2 ? "波动率低，适合持仓"
-          : "波动率适中",
-      },
-    ],
-  };
+    // RSI(14)
+    let gains = 0, losses = 0;
+    for (let i = closes.length - 14; i < closes.length; i++) {
+      const diff = (closes[i] ?? 0) - (closes[i - 1] ?? 0);
+      if (diff > 0) gains += diff;
+      else losses -= diff;
+    }
+    const avgGain = gains / 14;
+    const avgLoss = losses / 14;
+    const rsi = avgLoss === 0 ? 100 : 100 - 100 / (1 + avgGain / avgLoss);
+    const rsiSignal: SignalType = rsi < 30 ? "bullish" : rsi > 70 ? "bearish" : "neutral";
 
-  // Count signals
-  const allIndicators = [...indicators.trend, ...indicators.momentum, ...indicators.volatility];
-  const bullishCount = allIndicators.filter((i) => i.signal === "bullish").length;
-  const bearishCount = allIndicators.filter((i) => i.signal === "bearish").length;
-  const neutralCount = allIndicators.filter((i) => i.signal === "neutral").length;
+    // Simple MACD approximation (EMA12 - EMA26)
+    const ema = (data: number[], period: number) => {
+      const k = 2 / (period + 1);
+      let e = data[0] ?? 0;
+      for (let i = 1; i < data.length; i++) e = (data[i] ?? 0) * k + e * (1 - k);
+      return e;
+    };
+    const ema12 = ema(closes, 12);
+    const ema26 = ema(closes, 26);
+    const macdVal = ema12 - ema26;
+    const macdSignal: SignalType = macdVal > 0.5 ? "bullish" : macdVal < -0.5 ? "bearish" : "neutral";
 
-  // Determine overall signal
-  let overallSignal: SignalType = "neutral";
-  if (bullishCount > bearishCount + 1) overallSignal = "bullish";
-  else if (bearishCount > bullishCount + 1) overallSignal = "bearish";
+    // ATR approximation (14-period)
+    const trs: number[] = [];
+    for (let i = klines.length - 14; i < klines.length; i++) {
+      const cur = klines[i];
+      const prev = klines[i - 1];
+      if (cur && prev) {
+        const tr = Math.max(cur.high - cur.low, Math.abs(cur.high - prev.close), Math.abs(cur.low - prev.close));
+        trs.push(tr);
+      }
+    }
+    const atr = trs.length > 0 ? trs.reduce((a, b) => a + b, 0) / trs.length : 0;
+    const atrPercent = latest > 0 ? (atr / latest) * 100 : 0;
 
-  return {
-    symbol,
-    price: 100 + Math.random() * 1000,
-    timestamp: new Date(),
-    indicators,
-    overallSignal,
-    bullishCount,
-    bearishCount,
-    neutralCount,
-  };
+    const indicators: IndicatorSet["indicators"] = {
+      trend: [
+        {
+          name: "均线系统",
+          nameEn: "MA",
+          value: maStatus === "bullish" ? "多头排列" : maStatus === "bearish" ? "空头排列" : "交叉整理",
+          signal: maStatus,
+          description: maStatus === "bullish" ? "5日>10日>20日，上升趋势"
+            : maStatus === "bearish" ? "5日<10日<20日，下降趋势"
+            : "均线缠绕，方向不明",
+        },
+        {
+          name: "MACD",
+          nameEn: "MACD",
+          value: macdVal.toFixed(3),
+          signal: macdSignal,
+          description: macdSignal === "bullish" ? "DIFF>0，多头占优"
+            : macdSignal === "bearish" ? "DIFF<0，空头占优"
+            : "DIFF接近零轴，观望",
+        },
+      ],
+      momentum: [
+        {
+          name: "RSI(14)",
+          nameEn: "RSI",
+          value: rsi.toFixed(1),
+          signal: rsiSignal,
+          description: rsiSignal === "bullish" ? "超卖区域，可能反弹"
+            : rsiSignal === "bearish" ? "超买区域，注意回调"
+            : "中性区域，震荡为主",
+        },
+      ],
+      volatility: [
+        {
+          name: "ATR波动",
+          nameEn: "ATR",
+          value: atrPercent.toFixed(2) + "%",
+          signal: atrPercent > 3 ? "bearish" : atrPercent < 2 ? "bullish" : "neutral",
+          description: atrPercent > 3 ? "波动率高，风险较大"
+            : atrPercent < 2 ? "波动率低，适合持仓"
+            : "波动率适中",
+        },
+      ],
+    };
+
+    const allIndicators = [...indicators.trend, ...indicators.momentum, ...indicators.volatility];
+    const bullishCount = allIndicators.filter((i) => i.signal === "bullish").length;
+    const bearishCount = allIndicators.filter((i) => i.signal === "bearish").length;
+    const neutralCount = allIndicators.filter((i) => i.signal === "neutral").length;
+
+    let overallSignal: SignalType = "neutral";
+    if (bullishCount > bearishCount + 1) overallSignal = "bullish";
+    else if (bearishCount > bullishCount + 1) overallSignal = "bearish";
+
+    return {
+      symbol,
+      price: latest,
+      timestamp: new Date(),
+      indicators,
+      overallSignal,
+      bullishCount,
+      bearishCount,
+      neutralCount,
+    };
+  } catch {
+    return null;
+  }
 }
 
 // =============================================================================
-// COMPONENT / 组件
+// COMPONENT
 // =============================================================================
 
 export function IndicatorQuickPanel({
@@ -194,27 +212,28 @@ export function IndicatorQuickPanel({
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"trend" | "momentum" | "volatility">("trend");
 
-  // Fetch indicator data
+  // Fetch real indicator data from K-line API
   useEffect(() => {
+    let cancelled = false;
     setIsLoading(true);
 
-    // Simulate API delay
-    const timer = setTimeout(() => {
-      const mockData = generateMockIndicators(symbol);
-      setIndicatorSet(mockData);
+    fetchIndicatorData(symbol).then((data) => {
+      if (cancelled) return;
+      setIndicatorSet(data);
       setIsLoading(false);
-    }, 400);
+    });
 
-    return () => clearTimeout(timer);
+    return () => { cancelled = true; };
   }, [symbol]);
 
-  // Update periodically
+  // Refresh periodically (every 60 seconds)
   useEffect(() => {
     if (!indicatorSet) return;
 
-    const interval = setInterval(() => {
-      setIndicatorSet(generateMockIndicators(symbol));
-    }, 30000); // Update every 30 seconds
+    const interval = setInterval(async () => {
+      const data = await fetchIndicatorData(symbol);
+      if (data) setIndicatorSet(data);
+    }, 60000);
 
     return () => clearInterval(interval);
   }, [symbol, indicatorSet !== null]);

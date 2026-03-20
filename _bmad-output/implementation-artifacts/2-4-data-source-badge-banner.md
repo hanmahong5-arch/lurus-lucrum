@@ -17,7 +17,7 @@ So that 我能判断结果的可信度，不会误信模拟数据。
 - DB: 蓝色 Badge "数据库" / "DB" + tooltip "真实历史数据，来自本地数据库"
 - API: 黄色 Badge "API" + tooltip "实时拉取，可能有延迟"
 - 模拟: 灰色 Badge "模拟" + tooltip "模拟生成数据，仅供参考"
-**And** Badge 使用对应 `--gushen-color-source-*` 颜色令牌
+**And** Badge 使用对应 `--lucrum-color-source-*` 颜色令牌
 **And** Badge 尺寸: Caption (11-13px) + 内边距 4px
 
 ### AC-2: SimulatedDataBanner 模拟数据全局警告
@@ -70,7 +70,7 @@ So that 我能判断结果的可信度，不会误信模拟数据。
   - [x] 2.1 验证黄色横幅样式 (sticky top-0, z-50)
   - [x] 2.2 验证文字内容 "当前使用模拟数据，回测结果仅供参考"
   - [x] 2.3 验证 [切换真实数据] 按钮和 onSwitchToReal 回调
-  - [x] 2.4 验证关闭按钮 + sessionStorage 记忆 (key: gushen:sim-banner-dismissed)
+  - [x] 2.4 验证关闭按钮 + sessionStorage 记忆 (key: lucrum:sim-banner-dismissed)
   - [x] 2.5 验证 `role="alert"` 和 `aria-label="关闭提示"`
 
 - [x] Task 3: 验证 backtest-panel.tsx 集成 (AC: #4)
@@ -89,7 +89,7 @@ So that 我能判断结果的可信度，不会误信模拟数据。
   - [x] 5.3 补充缺失测试 (如有 gap)
 
 - [x] Task 6: CSS 变量和 Tailwind 配置验证
-  - [x] 6.1 确认 globals.css 中 --gushen-color-source-db/api/sim 已定义
+  - [x] 6.1 确认 globals.css 中 --lucrum-color-source-db/api/sim 已定义
   - [x] 6.2 确认 tailwind.config.ts 中 source-db/api/sim 颜色已注册
 
 ## Dev Notes
@@ -122,7 +122,7 @@ DataSourceBadge 和 SimulatedDataBanner 已在之前的开发中实现:
 
 1. **Badge label 差异**: Epics 要求 "数据库"(中文)，实现用 "DB"(英文)。确认是否需要修改。
 2. **strategy-validation 集成**: 多股验证页面是否已显示 DataSourceBadge。
-3. **Banner 颜色**: Epics 要求 `--gushen-color-banner-warn` 背景，实现使用 `bg-source-api/15`。两者都是黄色系，确认是否需要调整。
+3. **Banner 颜色**: Epics 要求 `--lucrum-color-banner-warn` 背景，实现使用 `bg-source-api/15`。两者都是黄色系，确认是否需要调整。
 4. **aria-live 属性**: Epics 要求 Banner 有 `aria-live="polite"`，当前实现只有 `role="alert"`（alert 隐含 aria-live="assertive"）。
 
 ### DataSourceBadge 现有实现
@@ -157,7 +157,7 @@ interface SimulatedDataBannerProps {
 - Sticky top-0 z-50
 - bg-source-api/15 border-source-api/30 text-source-api
 - 文字: "当前使用模拟数据，回测结果仅供参考。"
-- 关闭: sessionStorage key "gushen:sim-banner-dismissed"
+- 关闭: sessionStorage key "lucrum:sim-banner-dismissed"
 - role="alert", aria-label="关闭提示"
 
 ### backtest-panel 集成方式
@@ -188,9 +188,9 @@ function mapDataSourceType(info: DataSourceInfo): DataSourceType {
 
 ```css
 /* globals.css 已定义 */
---gushen-color-source-db: 59 130 246;    /* #3b82f6 蓝色 */
---gushen-color-source-api: 234 179 8;    /* #eab308 黄色 */
---gushen-color-source-sim: 107 114 128;  /* #6b7280 灰色 */
+--lucrum-color-source-db: 59 130 246;    /* #3b82f6 蓝色 */
+--lucrum-color-source-api: 234 179 8;    /* #eab308 黄色 */
+--lucrum-color-source-sim: 107 114 128;  /* #6b7280 灰色 */
 ```
 
 ### 前序 Story 模式参考
@@ -268,7 +268,7 @@ claude-opus-4-6
 - `lucrum-web/src/components/ui/__tests__/simulated-data-banner.test.tsx` (modified) — aria-live test + disableSticky tests
 - `lucrum-web/src/app/dashboard/strategy-validation/page.tsx` (modified) — DataSourceBadge/SimulatedDataBanner integration, uses shared mapDataSourceString, removed console.log
 - `lucrum-web/src/components/strategy-editor/backtest-panel.tsx` (modified) — Uses shared mapDataSourceString from data-source-badge
-- `lucrum-web/src/app/globals.css` (modified) — Added --gushen-color-banner-warn design token
+- `lucrum-web/src/app/globals.css` (modified) — Added --lucrum-color-banner-warn design token
 - `lucrum-web/tailwind.config.ts` (modified) — Registered banner-warn color
 
 ### Review Follow-ups

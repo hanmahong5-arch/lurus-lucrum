@@ -74,7 +74,7 @@ So that 我知道出了什么问题、为什么出问题、以及如何修复。
 **When** 检查样式
 **Then** 背景使用 bg-surface-elevated
 **And** 左侧 2px border-status-block 红色标记
-**And** 使用 Gushen 设计令牌 (status-block 等颜色)
+**And** 使用 Lucrum 设计令牌 (status-block 等颜色)
 
 ### AC-9: Component Tests
 **Given** ErrorDiagnosisCard 组件

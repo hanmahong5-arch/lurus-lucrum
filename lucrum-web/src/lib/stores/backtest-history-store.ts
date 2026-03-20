@@ -12,6 +12,7 @@
 
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { immer } from "zustand/middleware/immer";
 import type { ScoreGrade } from "@/lib/backtest/score";
 
 // =============================================================================
@@ -87,7 +88,7 @@ interface BacktestHistoryState {
 
 export const useBacktestHistoryStore = create<BacktestHistoryState>()(
   persist(
-    (set, get) => ({
+    immer((set, get) => ({
       entries: [],
       selectedId: null,
 
@@ -103,26 +104,31 @@ export const useBacktestHistoryStore = create<BacktestHistoryState>()(
           updated.sort((a, b) => b.timestamp - a.timestamp);
 
           // Evict oldest entries beyond MAX_ENTRIES
-          const trimmed = updated.slice(0, MAX_ENTRIES);
-
-          return { entries: trimmed };
+          state.entries = updated.slice(0, MAX_ENTRIES);
         });
       },
 
       removeEntry: (id: string) => {
-        set((state) => ({
-          entries: state.entries.filter((e) => e.id !== id),
+        set((state) => {
+          state.entries = state.entries.filter((e) => e.id !== id);
           // Clear selection if the removed entry was selected
-          selectedId: state.selectedId === id ? null : state.selectedId,
-        }));
+          if (state.selectedId === id) {
+            state.selectedId = null;
+          }
+        });
       },
 
       clearHistory: () => {
-        set({ entries: [], selectedId: null });
+        set((state) => {
+          state.entries = [];
+          state.selectedId = null;
+        });
       },
 
       selectEntry: (id: string | null) => {
-        set({ selectedId: id });
+        set((state) => {
+          state.selectedId = id;
+        });
       },
 
       getSelectedEntry: () => {
@@ -130,7 +136,7 @@ export const useBacktestHistoryStore = create<BacktestHistoryState>()(
         if (!selectedId) return null;
         return entries.find((e) => e.id === selectedId) ?? null;
       },
-    }),
+    })),
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => {

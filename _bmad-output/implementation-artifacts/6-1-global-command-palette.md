@@ -63,7 +63,7 @@
 - Built on existing `cmdk` library (already in package.json) + Radix Dialog
 - Uses existing `CommandDialog`, `CommandInput`, `CommandList`, `CommandGroup`, `CommandItem` from `@/components/ui/command`
 - Pinyin matching via `pinyin-pro` library (already in dependencies)
-- Recent pages stored in localStorage with key `gushen:recent-commands`
+- Recent pages stored in localStorage with key `lucrum:recent-commands`
 - Maximum 5 recent items, FIFO eviction
 - Component location: `src/components/command-palette/global-command-palette.tsx`
 - Tests location: `src/components/command-palette/__tests__/global-command-palette.test.tsx`

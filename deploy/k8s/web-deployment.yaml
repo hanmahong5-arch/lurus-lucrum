@@ -99,7 +99,7 @@ spec:
 
             # NextAuth.js + Zitadel OIDC
             - name: NEXTAUTH_URL
-              value: "https://gushen.lurus.cn"
+              value: "https://lucrum.lurus.cn"
             - name: NEXTAUTH_SECRET
               valueFrom:
                 secretKeyRef:

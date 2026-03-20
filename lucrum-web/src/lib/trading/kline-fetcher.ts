@@ -3,8 +3,8 @@
  * 智能K线数据获取器
  *
  * Multi-source K-line data fetching with automatic fallback.
- * Supports EastMoney, Sina, Tencent, and intelligent mock data.
- * 多数据源K线获取，支持自动降级和智能模拟数据
+ * Supports EastMoney, Sina, and Tencent data sources.
+ * Returns error if all real data sources fail.
  *
  * @module lib/trading/kline-fetcher
  */
@@ -743,12 +743,6 @@ const DATA_SOURCES: DataSource[] = [
   },
   { name: "sina", priority: 3, fetcher: fetchFromSina, enabled: false }, // Disabled: CORS
   { name: "tencent", priority: 4, fetcher: fetchFromTencent, enabled: false }, // Disabled: CORS
-  {
-    name: "mock",
-    priority: 999,
-    fetcher: generateIntelligentMock,
-    enabled: true,
-  },
 ];
 
 /**
@@ -756,7 +750,7 @@ const DATA_SOURCES: DataSource[] = [
  * 获取K线数据，自动降级
  *
  * Tries multiple data sources in priority order.
- * Falls back to intelligent mock data if all sources fail.
+ * Returns an error if all real data sources fail.
  *
  * @param config - Fetch configuration
  * @returns K-line data with source info
@@ -799,7 +793,7 @@ export async function fetchKLineWithFallback(
     }
   }
 
-  // All sources failed (including mock, which shouldn't fail)
+  // All real data sources failed
   return {
     success: false,
     data: [],

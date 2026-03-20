@@ -1,4 +1,4 @@
-# GuShen K3s集群敏感信息与配置文档 | Secrets and Configuration
+# Lucrum K3s集群敏感信息与配置文档 | Secrets and Configuration
 
 > ⚠️ **警告 | WARNING**
 >
@@ -226,7 +226,7 @@ env:
       name: ai-qtrd-secrets
       key: NEXTAUTH_SECRET
 - name: NEXTAUTH_URL
-  value: "https://gushen.lurus.cn"
+  value: "https://lucrum.lurus.cn"
 ```
 
 ---
@@ -236,7 +236,7 @@ env:
 ### 3.1 PostgreSQL连接信息
 
 **数据库类型**: PostgreSQL
-**数据库名称**: `gushen`
+**数据库名称**: `lucrum`
 **用户名**: `postgres` (或其他管理员用户)
 **端口**: `5432`
 
@@ -255,7 +255,7 @@ kubectl get secret ai-qtrd-secrets -n ai-qtrd -o jsonpath='{.data.DATABASE_PASSW
 **完整连接字符串**:
 ```bash
 # 在Pod中使用
-DATABASE_URL="postgresql://postgres:${DATABASE_PASSWORD}@<db-host>:5432/gushen"
+DATABASE_URL="postgresql://postgres:${DATABASE_PASSWORD}@<db-host>:5432/lucrum"
 ```
 
 **配置方式**:
@@ -267,7 +267,7 @@ env:
       name: ai-qtrd-secrets
       key: DATABASE_PASSWORD
 - name: DATABASE_URL
-  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/gushen"
+  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/lucrum"
 ```
 
 **测试数据库连接**:
@@ -285,16 +285,16 @@ kubectl exec deployment/ai-qtrd-api -n ai-qtrd -- python3 -c \
 
 ```bash
 # 备份数据库
-pg_dump -h <db-host> -U postgres -d gushen -F c -f gushen-backup-$(date +%Y%m%d).dump
+pg_dump -h <db-host> -U postgres -d lucrum -F c -f lucrum-backup-$(date +%Y%m%d).dump
 
 # 备份单个表
-pg_dump -h <db-host> -U postgres -d gushen -t stocks -F c -f stocks-backup.dump
+pg_dump -h <db-host> -U postgres -d lucrum -t stocks -F c -f stocks-backup.dump
 
 # 恢复数据库
-pg_restore -h <db-host> -U postgres -d gushen gushen-backup-20260122.dump
+pg_restore -h <db-host> -U postgres -d lucrum lucrum-backup-20260122.dump
 
 # 恢复单个表
-pg_restore -h <db-host> -U postgres -d gushen -t stocks stocks-backup.dump
+pg_restore -h <db-host> -U postgres -d lucrum -t stocks stocks-backup.dump
 ```
 
 ### 3.3 数据库用户权限
@@ -306,15 +306,15 @@ WHERE grantee = 'postgres';
 
 -- 创建只读用户（用于监控）
 CREATE USER readonly WITH PASSWORD 'readonly-pass';
-GRANT CONNECT ON DATABASE gushen TO readonly;
+GRANT CONNECT ON DATABASE lucrum TO readonly;
 GRANT USAGE ON SCHEMA public TO readonly;
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO readonly;
 
 -- 创建应用用户（限制权限）
-CREATE USER gushen_app WITH PASSWORD 'app-pass';
-GRANT CONNECT ON DATABASE gushen TO gushen_app;
-GRANT USAGE ON SCHEMA public TO gushen_app;
-GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO gushen_app;
+CREATE USER lucrum_app WITH PASSWORD 'app-pass';
+GRANT CONNECT ON DATABASE lucrum TO lucrum_app;
+GRANT USAGE ON SCHEMA public TO lucrum_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO lucrum_app;
 ```
 
 ---
@@ -485,8 +485,8 @@ kubectl exec redis-0 -n ai-qtrd -- redis-cli -a $NEW_REDIS_PASSWORD ping
 
 ### 5.1 证书管理
 
-**证书名称**: `gushen-lurus-cn-tls`
-**域名**: `gushen.lurus.cn`
+**证书名称**: `lucrum-lurus-cn-tls`
+**域名**: `lucrum.lurus.cn`
 **颁发机构**: Let's Encrypt (via cert-manager)
 **有效期**: 90天
 **自动续期**: 30天前自动触发
@@ -497,7 +497,7 @@ kubectl exec redis-0 -n ai-qtrd -- redis-cli -a $NEW_REDIS_PASSWORD ping
 kubectl get certificate -n ai-qtrd
 
 # 查看证书详情
-kubectl describe certificate gushen-lurus-cn-tls -n ai-qtrd
+kubectl describe certificate lucrum-lurus-cn-tls -n ai-qtrd
 
 # 预期输出:
 # Status:
@@ -510,7 +510,7 @@ kubectl describe certificate gushen-lurus-cn-tls -n ai-qtrd
 **查看证书内容**:
 ```bash
 # 查看Secret中的证书
-kubectl get secret gushen-lurus-cn-tls -n ai-qtrd -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/tls.crt
+kubectl get secret lucrum-lurus-cn-tls -n ai-qtrd -o jsonpath='{.data.tls\.crt}' | base64 -d > /tmp/tls.crt
 
 # 查看证书信息
 openssl x509 -in /tmp/tls.crt -text -noout
@@ -526,7 +526,7 @@ openssl x509 -in /tmp/tls.crt -noout -dates
 
 ```bash
 # 删除证书Secret触发重新申请
-kubectl delete secret gushen-lurus-cn-tls -n ai-qtrd
+kubectl delete secret lucrum-lurus-cn-tls -n ai-qtrd
 
 # cert-manager会自动重新申请证书
 
@@ -541,7 +541,7 @@ kubectl get certificate -n ai-qtrd
 
 ```bash
 # 备份证书和私钥
-kubectl get secret gushen-lurus-cn-tls -n ai-qtrd -o yaml > tls-cert-backup-$(date +%Y%m%d).yaml
+kubectl get secret lucrum-lurus-cn-tls -n ai-qtrd -o yaml > tls-cert-backup-$(date +%Y%m%d).yaml
 
 # 加密备份（私钥敏感）
 gpg --symmetric --cipher-algo AES256 tls-cert-backup-$(date +%Y%m%d).yaml
@@ -561,7 +561,7 @@ gpg --decrypt tls-cert-backup-20260122.yaml.gpg | kubectl apply -f -
 # tls.key - 私钥文件
 
 # 2. 创建Secret
-kubectl create secret tls gushen-lurus-cn-tls \
+kubectl create secret tls lucrum-lurus-cn-tls \
   --cert=tls.crt \
   --key=tls.key \
   -n ai-qtrd
@@ -600,11 +600,11 @@ env:
       name: ai-qtrd-secrets
       key: DATABASE_PASSWORD
 - name: DATABASE_URL
-  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/gushen"
+  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/lucrum"
 
 # 身份认证
 - name: NEXTAUTH_URL
-  value: "https://gushen.lurus.cn"
+  value: "https://lucrum.lurus.cn"
 - name: NEXTAUTH_SECRET
   valueFrom:
     secretKeyRef:
@@ -655,7 +655,7 @@ env:
       name: ai-qtrd-secrets
       key: DATABASE_PASSWORD
 - name: DATABASE_URL
-  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/gushen"
+  value: "postgresql://postgres:$(DATABASE_PASSWORD)@<db-host>:5432/lucrum"
 
 # Redis配置
 - name: REDIS_HOST
@@ -670,13 +670,13 @@ env:
 
 # CORS配置
 - name: CORS_ORIGINS
-  value: '["https://gushen.lurus.cn"]'
+  value: '["https://lucrum.lurus.cn"]'
 
 # URL配置
 - name: WEB_URL
-  value: "https://gushen.lurus.cn"
+  value: "https://lucrum.lurus.cn"
 - name: API_URL
-  value: "https://gushen.lurus.cn/api"
+  value: "https://lucrum.lurus.cn/api"
 
 # Python环境
 - name: PYTHONUNBUFFERED
@@ -901,7 +901,7 @@ spec:
 EOF
 
 # 3. 更新IngressRoute应用限流
-kubectl edit ingressroute gushen-web-https -n ai-qtrd
+kubectl edit ingressroute lucrum-web-https -n ai-qtrd
 # 添加 middleware: rate-limit
 
 # 4. 如果攻击严重，临时关闭服务
@@ -927,7 +927,7 @@ psql -U postgres -c "SELECT * FROM pg_stat_activity WHERE usename='postgres';"
 psql -U postgres -c "SELECT * FROM pg_stat_statements ORDER BY calls DESC LIMIT 50;"
 
 # 4. 备份当前数据（取证）
-pg_dump -h <db-host> -U postgres -d gushen -F c -f gushen-incident-$(date +%Y%m%d-%H%M%S).dump
+pg_dump -h <db-host> -U postgres -d lucrum -F c -f lucrum-incident-$(date +%Y%m%d-%H%M%S).dump
 
 # 5. 审查RBAC权限
 kubectl get rolebindings -n ai-qtrd -o yaml
@@ -942,10 +942,10 @@ kubectl get rolebindings -n ai-qtrd -o yaml
 
 ```bash
 # 1. 检查证书状态
-kubectl describe certificate gushen-lurus-cn-tls -n ai-qtrd
+kubectl describe certificate lucrum-lurus-cn-tls -n ai-qtrd
 
 # 2. 手动触发续期
-kubectl delete secret gushen-lurus-cn-tls -n ai-qtrd
+kubectl delete secret lucrum-lurus-cn-tls -n ai-qtrd
 
 # 3. 检查cert-manager日志
 kubectl logs -n cert-manager deployment/cert-manager -f
@@ -954,8 +954,8 @@ kubectl logs -n cert-manager deployment/cert-manager -f
 kubectl apply -f /backup/tls-cert-backup.yaml
 
 # 5. 验证证书
-curl -I https://gushen.lurus.cn
-openssl s_client -connect gushen.lurus.cn:443 -showcerts
+curl -I https://lucrum.lurus.cn
+openssl s_client -connect lucrum.lurus.cn:443 -showcerts
 ```
 
 ---
@@ -1074,14 +1074,14 @@ roleRef:
 
 ### 技术支持
 - **技术邮箱**: support@lurus.cn
-- **企业微信**: GuShen运维群
+- **企业微信**: Lucrum运维群
 - **工作时间**: 9:00-18:00 (工作日)
 
 ---
 
 **文档版本**: v1.0
 **最后更新**: 2026-01-22
-**维护者**: GuShen Security Team
+**维护者**: Lucrum Security Team
 **下次审查**: 2026-04-22
 
 > ⚠️ **再次提醒 | Reminder**

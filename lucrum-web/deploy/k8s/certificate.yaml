@@ -17,4 +17,4 @@ spec:
     name: letsencrypt-prod
     kind: ClusterIssuer
   dnsNames:
-    - gushen.lurus.cn
+    - lucrum.lurus.cn

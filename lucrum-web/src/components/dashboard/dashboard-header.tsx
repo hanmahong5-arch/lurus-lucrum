@@ -1,10 +1,11 @@
 /**
  * Dashboard Header Component
  * Shared header for all dashboard pages with:
- * - Grouped navigation tabs (primary + "more" dropdown)
+ * - 7-module flat navigation (no "more" dropdown)
  * - Responsive hamburger menu for mobile
  * - User account status and role display
  * - Auto-save indicator
+ * - Settings gear icon on the right
  * - Login/logout functionality
  */
 
@@ -37,27 +38,36 @@ import { LocaleSwitcher } from '@/components/i18n/locale-switcher';
 import { TaskNotificationBell } from '@/components/task/task-notification-bell';
 import { useI18n } from '@/lib/i18n/context';
 import type { TranslationKey } from '@/lib/i18n/dictionaries/zh';
+import {
+  PenTool,
+  Store,
+  FlaskConical,
+  TrendingUp,
+  Radar,
+  Bot,
+  History,
+  Settings,
+} from 'lucide-react';
 
-// Navigation items reference i18n keys instead of hardcoded labels
-const PRIMARY_NAV: { href: string; key: TranslationKey }[] = [
-  { href: '/dashboard', key: 'nav.strategyEditor' },
-  { href: '/dashboard/marketplace', key: 'nav.marketplace' },
-  { href: '/dashboard/strategy-validation', key: 'nav.validation' },
-  { href: '/dashboard/trading', key: 'nav.trading' },
-  { href: '/dashboard/strategy-scanner', key: 'nav.scanner' },
-  { href: '/dashboard/agents', key: 'nav.agents' },
-  { href: '/dashboard/history', key: 'nav.history' },
+// ---------------------------------------------------------------------------
+// Navigation definition — 7 focused modules, always visible
+// ---------------------------------------------------------------------------
+
+interface NavItem {
+  href: string;
+  key: TranslationKey;
+  icon: React.ComponentType<{ className?: string }>;
+}
+
+const NAV_ITEMS: NavItem[] = [
+  { href: '/dashboard', key: 'nav.strategyEditor', icon: PenTool },
+  { href: '/dashboard/marketplace', key: 'nav.marketplace', icon: Store },
+  { href: '/dashboard/validation', key: 'nav.validation', icon: FlaskConical },
+  { href: '/dashboard/trading', key: 'nav.trading', icon: TrendingUp },
+  { href: '/dashboard/analysis', key: 'nav.analysis', icon: Radar },
+  { href: '/dashboard/advisor', key: 'nav.advisor', icon: Bot },
+  { href: '/dashboard/history', key: 'nav.history', icon: History },
 ];
-
-const MORE_NAV: { href: string; key: TranslationKey }[] = [
-  { href: '/dashboard/insights', key: 'nav.insights' },
-  { href: '/dashboard/advisor', key: 'nav.advisor' },
-  { href: '/dashboard/diagnostics', key: 'nav.diagnostics' },
-  { href: '/backtest-agent', key: 'nav.smartBacktest' },
-];
-
-// All items combined for mobile menu
-const ALL_NAV = [...PRIMARY_NAV, ...MORE_NAV];
 
 // Role display mapping — keys reference i18n translation keys
 const ROLE_COLORS: Record<string, string> = {
@@ -163,9 +173,6 @@ export function DashboardHeader() {
   const userInitials = getUserInitials(user?.name, user?.email);
   const { data: accountOverview } = useAccountOverview();
 
-  // Check if any "more" nav item is active
-  const moreNavActive = MORE_NAV.some((item) => isNavActive(pathname, item.href));
-
   return (
     <>
       <header className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border">
@@ -174,65 +181,37 @@ export function DashboardHeader() {
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 shrink-0">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent to-accent-400 flex items-center justify-center">
-                <span className="text-primary-600 font-bold">G</span>
+                <span className="text-primary-600 font-bold">L</span>
               </div>
-              <span className="text-lg font-bold text-white">
+              <span className="text-lg font-bold text-white hidden sm:inline">
                 Lucrum<span className="text-accent">.</span>
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <nav className="hidden md:flex items-center gap-1 overflow-x-auto scrollbar-hide">
-              {PRIMARY_NAV.map((item) => {
+            {/* Desktop Navigation — 7 modules, always visible */}
+            <nav className="hidden md:flex items-center gap-0.5 overflow-x-auto scrollbar-hide">
+              {NAV_ITEMS.map((item) => {
                 const isActive = isNavActive(pathname, item.href);
+                const Icon = item.icon;
                 return (
                   <Link
                     key={item.href}
                     href={item.href}
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium transition whitespace-nowrap ${
                       isActive
                         ? 'text-accent bg-accent/10'
                         : 'text-white/60 hover:text-white hover:bg-white/5'
                     }`}
                   >
-                    {t(item.key)}
+                    <Icon className="w-4 h-4 shrink-0" />
+                    <span className="hidden lg:inline">{t(item.key)}</span>
                   </Link>
                 );
               })}
-
-              {/* "More" dropdown */}
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    className={`px-3 py-1.5 rounded-md text-sm font-medium transition flex items-center gap-1 ${
-                      moreNavActive
-                        ? 'text-accent bg-accent/10'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    }`}
-                  >
-                    {t('nav.more')}
-                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" className="w-40">
-                  {MORE_NAV.map((item) => (
-                    <DropdownMenuItem key={item.href} asChild>
-                      <Link
-                        href={item.href}
-                        className={isNavActive(pathname, item.href) ? 'text-accent' : ''}
-                      >
-                        {t(item.key)}
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
             </nav>
 
-            {/* Right side - Hamburger (mobile) + Auto-save, Quota & Account */}
-            <div className="flex items-center gap-3">
+            {/* Right side — Settings, Notifications, Quota & Account */}
+            <div className="flex items-center gap-2">
               {/* Task notification bell */}
               <TaskNotificationBell />
 
@@ -256,6 +235,15 @@ export function DashboardHeader() {
                   }}
                 />
               )}
+
+              {/* Settings gear */}
+              <Link
+                href="/dashboard/settings"
+                className="p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/5 transition"
+                title={t('nav.settings')}
+              >
+                <Settings className="w-4.5 h-4.5" />
+              </Link>
 
               {/* Account Section */}
               {isLoading ? (
@@ -318,14 +306,14 @@ export function DashboardHeader() {
                     <DropdownMenuSeparator />
 
                     <DropdownMenuItem asChild>
-                      <Link href="/dashboard/account">
-                        {t('nav.account')}
+                      <Link href="/dashboard/settings">
+                        {t('nav.settings')}
                       </Link>
                     </DropdownMenuItem>
 
                     <DropdownMenuItem asChild>
-                      <Link href="/dashboard/settings">
-                        {t('nav.settings')}
+                      <Link href="/dashboard/settings?tab=account">
+                        {t('nav.account')}
                       </Link>
                     </DropdownMenuItem>
 
@@ -336,7 +324,7 @@ export function DashboardHeader() {
                     </DropdownMenuItem>
 
                     <DropdownMenuItem asChild>
-                      <Link href="/dashboard/referral">
+                      <Link href="/dashboard/settings?tab=referral">
                         {t('nav.referral')}
                       </Link>
                     </DropdownMenuItem>
@@ -393,23 +381,39 @@ export function DashboardHeader() {
           />
           {/* Menu panel */}
           <nav className="absolute top-14 left-0 right-0 bg-surface border-b border-border p-4 space-y-1">
-            {ALL_NAV.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const isActive = isNavActive(pathname, item.href);
+              const Icon = item.icon;
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={() => setMobileMenuOpen(false)}
-                  className={`block px-4 py-2.5 rounded-lg text-sm font-medium transition ${
+                  className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
                     isActive
                       ? 'text-accent bg-accent/10'
                       : 'text-white/60 hover:text-white hover:bg-white/5'
                   }`}
                 >
+                  <Icon className="w-4 h-4" />
                   {t(item.key)}
                 </Link>
               );
             })}
+
+            {/* Settings in mobile menu */}
+            <Link
+              href="/dashboard/settings"
+              onClick={() => setMobileMenuOpen(false)}
+              className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
+                isNavActive(pathname, '/dashboard/settings')
+                  ? 'text-accent bg-accent/10'
+                  : 'text-white/60 hover:text-white hover:bg-white/5'
+              }`}
+            >
+              <Settings className="w-4 h-4" />
+              {t('nav.settings')}
+            </Link>
           </nav>
         </div>
       )}

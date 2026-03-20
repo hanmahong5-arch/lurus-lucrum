@@ -7,11 +7,11 @@ stepsCompleted:
   - step-05-epic-quality-review
   - step-06-final-assessment
 documentsIncluded:
-  prd: prd-gushen.md
+  prd: prd-lucrum.md
   architecture: architecture.md
-  epics: epics-gushen.md
+  epics: epics-lucrum.md
   ux: ux-design-specification.md
-scope: gushen
+scope: lucrum
 ---
 
 # Implementation Readiness Assessment Report
@@ -25,14 +25,14 @@ scope: gushen
 
 | Type | File | Status |
 |------|------|--------|
-| PRD | `prd-gushen.md` | ✅ Found |
+| PRD | `prd-lucrum.md` | ✅ Found |
 | Architecture | `architecture.md` | ✅ Found |
-| Epics & Stories | `epics-gushen.md` | ✅ Found |
+| Epics & Stories | `epics-lucrum.md` | ✅ Found |
 | UX Design | `ux-design-specification.md` | ✅ Found |
 
 ### Notes
 - `architecture.md` (no service suffix) — referenced by Lucrum CLAUDE.md as its architecture doc
-- `epics.md` (no suffix) exists but `epics-gushen.md` is the service-specific version used
+- `epics.md` (no suffix) exists but `epics-lucrum.md` is the service-specific version used
 - Scope: Lucrum service only
 
 ## Step 2: PRD Analysis

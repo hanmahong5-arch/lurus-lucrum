@@ -187,7 +187,7 @@ function useRealtimeQuote(symbol: string) {
   const [quote, setQuote] = useState<QuoteData | null>(null);
   
   useEffect(() => {
-    const ws = new WebSocket('wss://gushen.lurus.cn/ws');
+    const ws = new WebSocket('wss://lucrum.lurus.cn/ws');
     ws.send(JSON.stringify({ type: 'subscribe', symbol }));
     ws.onmessage = (e) => {
       const msg = JSON.parse(e.data);

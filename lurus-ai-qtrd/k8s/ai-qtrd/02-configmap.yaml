@@ -19,11 +19,11 @@ data:
   DEEPSEEK_MODEL: "deepseek-chat"
 
   # CORS configuration
-  CORS_ORIGINS: '["https://gushen.lurus.cn"]'
+  CORS_ORIGINS: '["https://lucrum.lurus.cn"]'
 
   # Frontend URL for redirects
-  WEB_URL: "https://gushen.lurus.cn"
-  API_URL: "https://gushen.lurus.cn/api"
+  WEB_URL: "https://lucrum.lurus.cn"
+  API_URL: "https://lucrum.lurus.cn/api"
 
   # Data paths
   DATA_DIR: "/app/data"

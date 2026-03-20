@@ -298,7 +298,7 @@ Crawler Strategies:
 | Service | Domain | Port | Tech | DB Schema | Status |
 |---------|--------|------|------|-----------|--------|
 | lurus-api | api.lurus.cn | 8850 | Go+React | lurus_api | Production |
-| lurus-lucrum | gushen.lurus.cn | 8870 | Next.js+Python | lucrum | Production |
+| lurus-lucrum | lucrum.lurus.cn | 8870 | Next.js+Python | lucrum | Production |
 | lurus-newapi | newapi.lurus.cn | 3000 | Go+React | newapi | Production |
 | lurus-webmail | mail.lurus.cn | 3000/3001 | Next.js+Nitro | webmail | Beta |
 | lurus-switch | - (desktop) | - | Go+Wails | - | Development |
