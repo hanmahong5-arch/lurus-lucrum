@@ -62,6 +62,8 @@ export interface AdvisorState {
   activeTab: AdvisorTab;
   /** Current conversation topic/title */
   conversationTitle: string | null;
+  /** Last debate topic for persistence */
+  lastDebateTopic: string | null;
 
   // Transient state (not persisted)
   /** Whether the advisor is currently generating a response */
@@ -82,6 +84,7 @@ interface AdvisorActions {
   removeAgent: (agentId: string) => void;
   setActiveTab: (tab: AdvisorTab) => void;
   setConversationTitle: (title: string | null) => void;
+  setLastDebateTopic: (topic: string | null) => void;
   setGenerating: (generating: boolean) => void;
   setError: (error: string | null) => void;
   setTyping: (typing: boolean) => void;
@@ -107,6 +110,7 @@ const INITIAL_STATE: AdvisorState = {
   selectedAgents: [],
   activeTab: 'chat',
   conversationTitle: null,
+  lastDebateTopic: null,
   isGenerating: false,
   error: null,
   isTyping: false,
@@ -183,6 +187,11 @@ export const useAdvisorStore = createPersistedStore<AdvisorStore>(
         state.conversationTitle = title;
       }),
 
+    setLastDebateTopic: (topic) =>
+      set((state) => {
+        state.lastDebateTopic = topic;
+      }),
+
     setGenerating: (generating) =>
       set((state) => {
         state.isGenerating = generating;
@@ -215,6 +224,7 @@ export const useAdvisorStore = createPersistedStore<AdvisorStore>(
       selectedAgents: state.selectedAgents,
       activeTab: state.activeTab,
       conversationTitle: state.conversationTitle,
+      lastDebateTopic: state.lastDebateTopic,
     }) as typeof state,
   }
 );
@@ -233,3 +243,4 @@ export const selectMessageCount = (state: AdvisorStore) => state.messages.length
 export const selectConversationTitle = (state: AdvisorStore) => state.conversationTitle;
 export const selectLastMessage = (state: AdvisorStore) =>
   state.messages.length > 0 ? state.messages[state.messages.length - 1] : null;
+export const selectLastDebateTopic = (state: AdvisorStore) => state.lastDebateTopic;

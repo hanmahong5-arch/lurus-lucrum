@@ -66,7 +66,9 @@ export interface HydrationState {
 // =============================================================================
 
 /**
- * Returns localStorage when available, or a no-op fallback for SSR.
+ * Returns localStorage when available, or a no-op fallback for SSR
+ * and environments where localStorage is restricted (SecurityError,
+ * QuotaExceededError in Safari private mode, etc.).
  */
 function getSafeStorage() {
   if (typeof window === 'undefined') {
@@ -76,7 +78,17 @@ function getSafeStorage() {
       removeItem: () => {},
     };
   }
-  return localStorage;
+  try {
+    return localStorage;
+  } catch {
+    // localStorage may throw SecurityError in sandboxed iframes
+    // or be unavailable in certain privacy-focused browsers
+    return {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => {},
+    };
+  }
 }
 
 // =============================================================================
@@ -145,14 +157,14 @@ export function createPersistedStore<T extends object>(
         version: options?.version,
         storage: createJSONStorage(() => getSafeStorage()),
         partialize: options?.partialize
-          ? (state) => {
-              const partialized = options.partialize!(state);
-              return partialized as typeof state;
-            }
+          ? (state: T & HydrationState) => options.partialize!(state)
           : undefined,
         migrate: options?.migrate
           ? (persistedState, version) => options.migrate!(persistedState, version)
           : undefined,
+        // Defer hydration until StoreRehydrator triggers it client-side.
+        // Prevents SSR/client mismatch from reading localStorage during render.
+        skipHydration: true,
         onRehydrateStorage: () => (state) => {
           // Run custom rehydration callback first
           options?.onRehydrateStorage?.(state);

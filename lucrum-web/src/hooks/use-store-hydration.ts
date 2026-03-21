@@ -19,6 +19,7 @@ import { useAnalysisStore } from '@/lib/stores/analysis-store';
 import { useAdvisorStore } from '@/lib/stores/advisor-store';
 import { useMarketDataStore } from '@/lib/stores/market-data-store';
 import { useUserPreferencesStore } from '@/lib/stores/user-preferences-store';
+import { useWatchlistStore } from '@/lib/stores/watchlist-store';
 import { useBacktestHistoryStore } from '@/lib/stores/backtest-history-store';
 import { useTradingStore } from '@/lib/stores/trading-store';
 import { useWorkflowStore } from '@/lib/stores/workflow-store';
@@ -78,6 +79,7 @@ export function useStoreHydration(): { isHydrated: boolean } {
   const advisorHydrated = useAdvisorStore((s) => s._hasHydrated);
   const marketDataHydrated = useMarketDataStore((s) => s._hasHydrated);
   const preferencesHydrated = useUserPreferencesStore((s) => s._hasHydrated);
+  const watchlistHydrated = useWatchlistStore((s) => s._hasHydrated);
 
   useEffect(() => {
     // New stores (createPersistedStore) track hydration via _hasHydrated
@@ -86,7 +88,8 @@ export function useStoreHydration(): { isHydrated: boolean } {
       analysisHydrated &&
       advisorHydrated &&
       marketDataHydrated &&
-      preferencesHydrated;
+      preferencesHydrated &&
+      watchlistHydrated;
 
     // Legacy stores use the persist API
     const legacyStoresReady =
@@ -104,6 +107,7 @@ export function useStoreHydration(): { isHydrated: boolean } {
     advisorHydrated,
     marketDataHydrated,
     preferencesHydrated,
+    watchlistHydrated,
   ]);
 
   return { isHydrated };

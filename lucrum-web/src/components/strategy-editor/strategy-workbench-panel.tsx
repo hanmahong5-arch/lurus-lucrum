@@ -19,6 +19,7 @@ import {
   type BuiltinTemplateSelection,
 } from "@/components/strategy-editor/builtin-template-grid";
 import type { PlanTier } from "@/lib/config/plan-limits";
+import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/contextual-help";
 
 // =============================================================================
 // TYPES
@@ -110,12 +111,18 @@ export function StrategyWorkbenchPanel({
           </div>
         </div>
 
-        {/* Hint when no code */}
-        {!strategyCode && (
-          <span className="text-[10px] text-neutral-600 font-mono">
-            生成代码后解锁 AI 优化
-          </span>
-        )}
+        <div className="flex items-center gap-2">
+          {/* Hint when no code */}
+          {!strategyCode && (
+            <span className="text-[10px] text-neutral-600 font-mono">
+              生成代码后解锁 AI 优化
+            </span>
+          )}
+          <ContextualHelp
+            sections={CONTEXTUAL_HELP_CONTENT.strategyWorkbench ?? []}
+            title="策略工作台帮助"
+          />
+        </div>
       </div>
 
       {/* Templates Tab */}

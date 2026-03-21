@@ -82,11 +82,7 @@ function AnalysisPageContent() {
             {(activeTab) => {
               switch (activeTab) {
                 case "scanner":
-                  return (
-                    <div className="h-[calc(100vh-240px)] min-h-[500px]">
-                      <ScannerPanel />
-                    </div>
-                  );
+                  return <ScannerPanel />;
                 case "insights":
                   return <InsightsContent />;
                 case "diagnostics":

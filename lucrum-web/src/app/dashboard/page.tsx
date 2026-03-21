@@ -1,23 +1,25 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { useAsyncTask } from "@/hooks/use-async-task";
+import { useAbortController } from "@/hooks/use-abort-controller";
 import Link from "next/link";
-import { StrategyInput } from "@/components/strategy-editor/strategy-input";
-import { CodePreview } from "@/components/strategy-editor/code-preview";
-import { BacktestPanel } from "@/components/strategy-editor/backtest-panel";
-import { ParameterEditor } from "@/components/strategy-editor/parameter-editor";
-import { AutoSaveIndicator } from "@/components/strategy-editor/auto-save-indicator";
-import { DraftHistoryPanel } from "@/components/strategy-editor/draft-history-panel";
-import { StrategyGuideCard } from "@/components/strategy-editor/strategy-guide-card";
-import { StrategyWorkbenchPanel } from "@/components/strategy-editor/strategy-workbench-panel";
-import { StrategyLogicSummary } from "@/components/strategy-editor/strategy-logic-summary";
+import { useSearchParams, useRouter } from "next/navigation";
+import { ErrorCard } from "@/components/ui/error-card";
+import { PanelSkeleton, ChartSkeleton, FormSkeleton, TabContentSkeleton } from "@/components/ui/loading-skeleton";
+import type { BacktestResult } from "@/lib/backtest/types";
+import { toAppError, type AppError } from "@/lib/errors/error-types";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
-import { WorkspaceStatusBar } from "@/components/dashboard/workspace-status-bar";
-import { TieredDemoSelector } from "@/components/onboarding";
 import { useOnboardingImport } from "@/hooks/use-onboarding-import";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
 import { useUserWorkspace } from "@/hooks/use-user-workspace";
+import { useUserActions } from "@/hooks/use-user-actions";
+import type { CompactBacktestConfigData } from "@/components/strategy-editor/compact-backtest-config";
+import {
+  useUserPreferencesStore,
+  selectSplitPanelRatio,
+} from "@/lib/stores/user-preferences-store";
 import {
   useStrategyWorkspaceStore,
   selectWorkspace,
@@ -29,13 +31,108 @@ import {
   selectIsBacktesting,
 } from "@/lib/stores/strategy-workspace-store";
 
+// ---------------------------------------------------------------------------
+// Dynamic imports — heavy components loaded on demand to reduce initial bundle
+// ---------------------------------------------------------------------------
+
+const StrategyInput = dynamic(
+  () => import("@/components/strategy-editor/strategy-input").then((m) => ({ default: m.StrategyInput })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const CodePreview = dynamic(
+  () => import("@/components/strategy-editor/code-preview").then((m) => ({ default: m.CodePreview })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const BacktestPanel = dynamic(
+  () => import("@/components/strategy-editor/backtest-panel").then((m) => ({ default: m.BacktestPanel })),
+  { ssr: false, loading: () => <ChartSkeleton height={200} /> },
+);
+
+const ParameterEditor = dynamic(
+  () => import("@/components/strategy-editor/parameter-editor").then((m) => ({ default: m.ParameterEditor })),
+  { ssr: false, loading: () => <FormSkeleton /> },
+);
+
+const DraftHistoryPanel = dynamic(
+  () => import("@/components/strategy-editor/draft-history-panel").then((m) => ({ default: m.DraftHistoryPanel })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const StrategyGuideCard = dynamic(
+  () => import("@/components/strategy-editor/strategy-guide-card").then((m) => ({ default: m.StrategyGuideCard })),
+  { ssr: false },
+);
+
+const StrategyLogicSummary = dynamic(
+  () => import("@/components/strategy-editor/strategy-logic-summary").then((m) => ({ default: m.StrategyLogicSummary })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const WorkspaceStatusBar = dynamic(
+  () => import("@/components/dashboard/workspace-status-bar").then((m) => ({ default: m.WorkspaceStatusBar })),
+  { ssr: false },
+);
+
+const TieredDemoSelector = dynamic(
+  () => import("@/components/onboarding").then((m) => ({ default: m.TieredDemoSelector })),
+  { ssr: false, loading: () => <TabContentSkeleton /> },
+);
+
+const ResizableSplitPanel = dynamic(
+  () => import("@/components/strategy-editor/resizable-split-panel").then((m) => ({ default: m.ResizableSplitPanel })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const WorkbenchToolbar = dynamic(
+  () => import("@/components/strategy-editor/workbench-toolbar").then((m) => ({ default: m.WorkbenchToolbar })),
+  { ssr: false },
+);
+
+const TemplateQuickSelect = dynamic(
+  () => import("@/components/strategy-editor/template-quick-select").then((m) => ({ default: m.TemplateQuickSelect })),
+  { ssr: false, loading: () => <FormSkeleton /> },
+);
+
+const QuickPreviewPanel = dynamic(
+  () => import("@/components/strategy-editor/quick-preview-panel").then((m) => ({ default: m.QuickPreviewPanel })),
+  { ssr: false, loading: () => <ChartSkeleton height={160} /> },
+);
+
+const GenerationFeedback = dynamic(
+  () => import("@/components/strategy-editor/generation-feedback").then((m) => ({ default: m.GenerationFeedback })),
+  { ssr: false },
+);
+
+const CompactBacktestConfig = dynamic(
+  () => import("@/components/strategy-editor/compact-backtest-config").then((m) => ({ default: m.CompactBacktestConfig })),
+  { ssr: false, loading: () => <FormSkeleton /> },
+);
+
+const BacktestRunningView = dynamic(
+  () => import("@/components/backtest/backtest-running-view").then((m) => ({ default: m.BacktestRunningView })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const BacktestResultsView = dynamic(
+  () => import("@/components/backtest/backtest-results-view").then((m) => ({ default: m.BacktestResultsView })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const ContextPanel = dynamic(
+  () => import("@/components/dashboard/context-panel").then((m) => ({ default: m.ContextPanel })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
 export default function DashboardPage() {
-  // ✨ Initialize user workspace for data isolation
-  // 为数据隔离初始化用户工作空间
+  // Initialize user workspace for data isolation
   const { isReady, user } = useUserWorkspace();
 
-  // ✨ Use Zustand store instead of useState for persistent state
-  // 使用Zustand store替代useState以实现持久化状态
+  // User action tracking for smart suggestions
+  const { trackAction } = useUserActions();
+
+  // Zustand store state
   const workspace = useStrategyWorkspaceStore(selectWorkspace);
   const autoSaveStatus = useStrategyWorkspaceStore(selectAutoSaveStatus);
   const hasUnsavedChanges = useStrategyWorkspaceStore(selectHasUnsavedChanges);
@@ -54,12 +151,42 @@ export default function DashboardPage() {
     markAsUnsaved,
   } = useStrategyWorkspaceStore();
 
-  // Local error state (not persisted)
-  // 本地错误状态（不持久化）
-  const [error, setError] = useState<string | null>(null);
+  // User preferences
+  const savedSplitRatio = useUserPreferencesStore(selectSplitPanelRatio);
+  const setSplitPanelRatio = useUserPreferencesStore((s) => s.setSplitPanelRatio);
+
+  // Local state
+  const [error, setError] = useState<AppError | null>(null);
+  const [strategyName, setStrategyName] = useState("未命名策略");
+  const [showHistory, setShowHistory] = useState(false);
+  const [focusedLine, setFocusedLine] = useState<number | null>(null);
   const generateTask = useAsyncTask();
 
-  // Onboarding import hook for tiered demo flows (Story 3.4)
+  // View mode: URL-synced for browser back/forward navigation
+  // edit = /dashboard (clean URL), running = ?mode=running, results = ?mode=results
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const viewMode = (searchParams.get('mode') as 'edit' | 'running' | 'results') || 'edit';
+
+  const setViewMode = useCallback((mode: 'edit' | 'running' | 'results') => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (mode === 'edit') {
+      params.delete('mode');
+    } else {
+      params.set('mode', mode);
+    }
+    const qs = params.toString();
+    router.replace(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
+  }, [searchParams, router]);
+  // Latest backtest result for results view
+  const [latestBacktestResult, setLatestBacktestResult] = useState<BacktestResult | null>(null);
+
+  // Safety hooks: abort generation on unmount or re-trigger
+  const createSignal = useAbortController();
+  // Track whether strategy code changed while backtest is running
+  const [codeChangedDuringBacktest, setCodeChangedDuringBacktest] = useState(false);
+
+  // Onboarding import hook for tiered demo flows
   const {
     fillAndRunSimple,
     fillIntermediate,
@@ -68,23 +195,16 @@ export default function DashboardPage() {
     autoRunError,
   } = useOnboardingImport();
 
-  // Code-parameter linkage state / 代码-参数联动状态
-  const [focusedLine, setFocusedLine] = useState<number | null>(null);
-
-  // Calculate current workflow step (Phase 4 UX / 7-step model)
-  // Maps to StrategyGuideCard 4-step type while tracking finer granularity
-  // 7 steps: 构思→生成→调参→回测→验证→诊断→保存
+  // Calculate current workflow step
   const currentWorkflowStep = useMemo(() => {
-    if (!generatedCode && !isGenerating) return "strategy"; // Step 1: Ideation
-    if (isGenerating) return "strategy"; // Step 2: Generating (mapped to strategy phase)
-    if (!workspace.lastBacktestResult && !isBacktesting) return "parameters"; // Step 3: Tuning params
-    if (isBacktesting) return "backtest"; // Step 4: Running backtest
-    return "backtest"; // Step 5-7: Verification/diagnosis/save (mapped to backtest phase)
-    // "validation" step is on strategy-validation page
+    if (!generatedCode && !isGenerating) return "strategy";
+    if (isGenerating) return "strategy";
+    if (!workspace.lastBacktestResult && !isBacktesting) return "parameters";
+    if (isBacktesting) return "backtest";
+    return "backtest";
   }, [generatedCode, isGenerating, isBacktesting, workspace.lastBacktestResult]);
 
-  // Parse current parameters from generated code for AI assistant
-  // 从生成的代码中解析当前参数供AI助手使用
+  // Parse current parameters from generated code
   const currentParameters = useMemo(() => {
     if (!generatedCode) return [];
     const parseResult = parseStrategyParameters(generatedCode);
@@ -94,37 +214,27 @@ export default function DashboardPage() {
     }));
   }, [generatedCode]);
 
-  // Extract strategy logic summary from user input (MVP: frontend parsing)
+  // Extract strategy logic summary
   const logicSummary = useMemo(() => {
     if (!generatedCode || !strategyInput) return null;
     return extractLogicSummary(strategyInput, generatedCode, currentParameters);
   }, [generatedCode, strategyInput, currentParameters]);
 
-  // Ref to StrategyInput for focusing after template selection
+  // Refs
   const strategyInputRef = useRef<HTMLDivElement>(null);
-
-  // Ref for backtest panel to trigger rerun
   const backtestPanelRef = useRef<{ runBacktest: () => void } | null>(null);
-
-  // Auto-save timer ref
   const autoSaveTimerRef = useRef<NodeJS.Timeout>();
 
-  // ✨ Auto-save mechanism - debounced 3 seconds
-  // 自动保存机制 - 3秒防抖
+  // Auto-save mechanism - debounced 3 seconds
   useEffect(() => {
     if (workspace.autoSaveStatus === 'unsaved') {
-      // Clear existing timer
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
       }
-
-      // Set new timer
       autoSaveTimerRef.current = setTimeout(() => {
-        console.log('[Dashboard] Auto-saving draft...');
         saveDraft();
       }, 3000);
     }
-
     return () => {
       if (autoSaveTimerRef.current) {
         clearTimeout(autoSaveTimerRef.current);
@@ -132,8 +242,7 @@ export default function DashboardPage() {
     };
   }, [workspace.autoSaveStatus, saveDraft]);
 
-  // ✨ Warn before leaving page if there are unsaved changes
-  // 如果有未保存的更改，离开页面前警告
+  // Warn before leaving with unsaved changes
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (hasUnsavedChanges) {
@@ -142,28 +251,13 @@ export default function DashboardPage() {
         return e.returnValue;
       }
     };
-
     window.addEventListener('beforeunload', handleBeforeUnload);
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [hasUnsavedChanges]);
 
-  // ✨ Save draft before Next.js route change
-  // Next.js路由切换前保存草稿
+  // Save draft before unmount
   useEffect(() => {
-    const handleRouteChange = () => {
-      if (hasUnsavedChanges) {
-        console.log('[Dashboard] Saving before route change...');
-        saveDraft();
-      }
-    };
-
-    // Note: In Next.js App Router, route change detection is different
-    // This is a fallback mechanism, the main protection is beforeunload
-    // 注意：在Next.js App Router中，路由变化检测方式不同
-    // 这是一个后备机制，主要保护是beforeunload
-
     return () => {
-      // Cleanup - save before unmount
       if (hasUnsavedChanges) {
         saveDraft();
       }
@@ -171,18 +265,17 @@ export default function DashboardPage() {
   }, [hasUnsavedChanges, saveDraft]);
 
   /**
-   * Persist strategy to database so it appears in validation page
-   * 将策略保存到数据库，使其在验证页面可见
+   * Persist strategy to database
    */
   const saveStrategyToDatabase = useCallback(async (
-    strategyName: string,
-    strategyCode: string,
+    name: string,
+    code: string,
     description: string,
     strategyType: string = 'ai_generated',
   ) => {
+    const controller = new AbortController();
     try {
-      // Parse parameters from code for storage
-      const parseResult = parseStrategyParameters(strategyCode);
+      const parseResult = parseStrategyParameters(code);
       const parameters = parseResult.parameters.reduce((acc, p) => {
         acc[p.name] = p.value;
         return acc;
@@ -194,30 +287,31 @@ export default function DashboardPage() {
         body: JSON.stringify({
           type: 'strategy',
           data: {
-            strategyName,
-            strategyCode,
+            strategyName: name,
+            strategyCode: code,
             description,
             parameters,
             strategyType,
             isActive: true,
           },
         }),
+        signal: controller.signal,
       });
 
-      if (response.ok) {
-        console.log('[Dashboard] Strategy saved to database successfully');
-      } else {
-        // Non-critical: log but don't block user flow
-        // Save to DB is best-effort; localStorage draft is the primary backup
+      if (!response.ok) {
         console.warn('[Dashboard] Failed to save strategy to database:', response.status);
       }
     } catch (err) {
-      // Non-critical failure - strategy is still available in localStorage drafts
+      if (err instanceof Error && err.name === "AbortError") return;
       console.warn('[Dashboard] Error saving strategy to database:', err);
     }
   }, []);
 
+  // Handle AI strategy generation
   const handleGenerate = useCallback(async (prompt: string) => {
+    // If already generating, do nothing (prevent double-click)
+    if (isGenerating) return;
+
     setGenerating(true);
     updateGeneratedCode("");
     setError(null);
@@ -228,19 +322,17 @@ export default function DashboardPage() {
       title: `策略生成 — ${prompt.slice(0, 25)}${prompt.length > 25 ? '...' : ''}`,
     });
 
+    // Create abort signal — aborts previous generation if any
+    const signal = createSignal();
+
     try {
-      // Call real API endpoint
-      // 调用真实的 API 端点
       const response = await fetch("/api/strategy/generate", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
+        signal,
       });
 
-      // Handle non-JSON responses (e.g., 503 "no available server")
-      // 处理非JSON响应
       const contentType = response.headers.get("content-type");
       if (!contentType || !contentType.includes("application/json")) {
         const text = await response.text();
@@ -248,83 +340,128 @@ export default function DashboardPage() {
       }
 
       const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(
-          data.error || data.details || "Failed to generate strategy",
-        );
+        // Parse structured error from API
+        if (data.error && typeof data.error === 'object' && data.error.code) {
+          const appErr: AppError = {
+            code: data.error.code,
+            title: data.error.title ?? '策略生成失败',
+            description: data.error.description ?? '未知错误',
+            severity: data.error.severity ?? 'error',
+            recoveryActions: data.error.recoveryActions ?? [],
+          };
+          setError(appErr);
+          setGenerationError(appErr.description);
+          generateTask.fail(appErr.description);
+
+          // Still provide fallback code
+          const fallbackCode = generateFallbackCode(prompt);
+          updateGeneratedCode(fallbackCode);
+          const name = extractStrategyName(prompt, fallbackCode);
+          setStrategyName(name);
+          saveStrategyToDatabase(name, fallbackCode, prompt, 'ai_generated');
+          return;
+        }
+        throw new Error(data.error || data.details || "Failed to generate strategy");
       }
 
       if (data.success && data.code) {
         updateGeneratedCode(data.code);
         generateTask.complete({ codeLength: data.code.length });
-        // ✨ Immediately save draft after code generation
-        // 代码生成后立即保存草稿
+        trackAction('strategy-generated', { prompt: prompt.slice(0, 50) });
         setTimeout(() => saveDraft(), 0);
 
-        // ✨ Also persist to database for cross-page access (validation page)
-        // 同时保存到数据库以便跨页面访问（验证页面）
-        const strategyName = extractStrategyName(prompt, data.code);
-        saveStrategyToDatabase(strategyName, data.code, prompt, 'ai_generated');
+        const name = extractStrategyName(prompt, data.code);
+        setStrategyName(name);
+        saveStrategyToDatabase(name, data.code, prompt, 'ai_generated');
       } else {
         throw new Error("No code generated");
       }
     } catch (err) {
-      console.error("Generation error:", err);
-      const errorMsg = err instanceof Error ? err.message : "Unknown error occurred";
-      setError(errorMsg);
-      setGenerationError(errorMsg);
-      generateTask.fail(errorMsg);
+      // If aborted (user navigated away or triggered new generation), do nothing
+      if (err instanceof Error && err.name === "AbortError") return;
 
-      // Fallback to mock code if API fails
-      // 如果 API 失败，使用模拟代码作为后备
+      console.error("Generation error:", err);
+      const appErr = toAppError(err, 'STRATEGY_GEN_FAILED');
+      // Override with actionable Chinese message
+      appErr.title = 'AI 策略生成失败';
+      appErr.recoveryActions = [
+        { type: 'retry', label: '重试' },
+        { type: 'custom', label: '使用模板' },
+        { type: 'custom', label: '修改描述' },
+      ];
+      setError(appErr);
+      setGenerationError(appErr.description);
+      generateTask.fail(appErr.description);
+
+      // Fallback to mock code
       const fallbackCode = generateFallbackCode(prompt);
       updateGeneratedCode(fallbackCode);
 
-      // Also save fallback strategy to database
-      const strategyName = extractStrategyName(prompt, fallbackCode);
-      saveStrategyToDatabase(strategyName, fallbackCode, prompt, 'ai_generated');
+      const name = extractStrategyName(prompt, fallbackCode);
+      setStrategyName(name);
+      saveStrategyToDatabase(name, fallbackCode, prompt, 'ai_generated');
     } finally {
       setGenerating(false);
     }
-  }, [updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase]);
+  }, [isGenerating, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction]);
 
-  // Handle template selection - fill into input
-  // 处理模板选择 - 填充到输入框
+  // Handle template selection — abort generation if in progress
   const handleSelectTemplate = useCallback((prompt: string) => {
+    if (isGenerating) {
+      // Abort current generation before loading template
+      createSignal(); // This aborts the previous signal
+      setGenerating(false);
+    }
     updateStrategyInput(prompt);
-    // Scroll to input area
-    // 滚动到输入区域
-    strategyInputRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, [updateStrategyInput]);
+    strategyInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [isGenerating, createSignal, setGenerating, updateStrategyInput]);
 
   // Handle code update from parameter editor
-  // 处理参数编辑器的代码更新
   const handleCodeUpdate = useCallback((newCode: string) => {
     updateGeneratedCode(newCode);
-  }, [updateGeneratedCode]);
+    // Warn if backtest is running and code was modified
+    if (isBacktesting) {
+      setCodeChangedDuringBacktest(true);
+    }
+  }, [updateGeneratedCode, isBacktesting]);
 
-  // Handle rerun backtest request
-  // 处理重新回测请求
+  // Handle rerun backtest
   const handleRerunBacktest = useCallback(() => {
     backtestPanelRef.current?.runBacktest();
   }, []);
 
-  // Handle backtest state changes
-  // 处理回测状态变化
+  // Handle backtest state changes — transition to running/results views
   const handleBacktestStart = useCallback(() => {
     setBacktesting(true);
+    setCodeChangedDuringBacktest(false);
+    setViewMode("running");
   }, [setBacktesting]);
 
   const handleBacktestEnd = useCallback(() => {
     setBacktesting(false);
-  }, [setBacktesting]);
+    // If we received a result via onBacktestResult, transition happens there.
+    // If no result arrived (error case), fall back to edit view after brief delay.
+    setTimeout(() => {
+      const currentMode = new URLSearchParams(window.location.search).get('mode') || 'edit';
+      if (currentMode === "running") {
+        setViewMode("edit");
+      }
+    }, 200);
+  }, [setBacktesting, setViewMode]);
 
-  // Handle AI assistant single parameter application
-  // 处理AI助手单个参数应用
+  // Handle backtest result data — triggers transition to full results view
+  const handleBacktestResult = useCallback((result: BacktestResult) => {
+    setLatestBacktestResult(result);
+    setViewMode("results");
+    // Track for suggestion engine: positive return = good backtest
+    const totalReturn = typeof result.totalReturn === 'number'
+      ? result.totalReturn
+      : parseFloat(String(result.totalReturn ?? '0'));
+    trackAction('backtest-complete', { positive: totalReturn > 0 });
+  }, [trackAction]);
+
+  // Handle AI assistant parameter application
   const handleApplyAIParameter = useCallback(
     (name: string, value: number | string | boolean) => {
       if (!generatedCode) return;
@@ -337,47 +474,48 @@ export default function DashboardPage() {
     [generatedCode, updateGeneratedCode, markAsUnsaved]
   );
 
-  // Handle AI assistant all suggestions application
-  // 处理AI助手批量应用所有建议
+  // Handle AI assistant batch suggestions
   const handleApplyAllAISuggestions = useCallback(
     (suggestions: Array<{ name: string; value: number | string | boolean }>) => {
       if (!generatedCode || suggestions.length === 0) return;
-
       let updatedCode = generatedCode;
       for (const suggestion of suggestions) {
-        updatedCode = updateParameterInCode(
-          updatedCode,
-          suggestion.name,
-          suggestion.value
-        );
+        updatedCode = updateParameterInCode(updatedCode, suggestion.name, suggestion.value);
       }
-
       if (updatedCode !== generatedCode) {
         updateGeneratedCode(updatedCode);
         markAsUnsaved();
-        // Trigger backtest after applying all suggestions
-        // 应用所有建议后触发回测
-        setTimeout(() => {
-          handleRerunBacktest();
-        }, 100);
+        setTimeout(() => handleRerunBacktest(), 100);
       }
     },
     [generatedCode, updateGeneratedCode, markAsUnsaved, handleRerunBacktest]
   );
 
-  // Show loading skeleton while workspace is initializing
-  // 工作空间初始化时显示加载骨架
+  // Handle export
+  const handleExport = useCallback(() => {
+    if (!generatedCode) return;
+    const blob = new Blob([generatedCode], { type: "text/x-python" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${strategyName || "strategy"}.py`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }, [generatedCode, strategyName]);
+
+  // Loading skeleton
   if (!isReady) {
     return (
       <div className="min-h-screen bg-background">
         <div className="sticky top-0 z-50 bg-surface/80 backdrop-blur-xl border-b border-border h-14" />
-        <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-          <div className="space-y-6 animate-pulse">
-            <div className="w-64 h-8 bg-surface rounded" />
-            <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
-              <div className="h-64 bg-surface rounded-xl" />
-              <div className="h-64 bg-surface rounded-xl hidden lg:block" />
-              <div className="h-64 bg-surface rounded-xl hidden lg:block" />
+        <main className="max-w-[1920px] mx-auto px-4 sm:px-6 py-4">
+          <div className="space-y-4 animate-pulse">
+            <div className="w-full h-10 bg-surface rounded-lg" />
+            <div className="flex gap-4 h-[calc(100vh-160px)]">
+              <div className="flex-1 bg-surface rounded-xl" />
+              <div className="flex-1 bg-surface rounded-xl" />
             </div>
           </div>
         </main>
@@ -386,170 +524,425 @@ export default function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      {/* Shared Dashboard Header with account status */}
-      {/* 共享仪表板头部，显示账户状态 */}
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Dashboard Header */}
       <DashboardHeader />
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        {/* Page title */}
-        <div className="mb-4 sm:mb-8">
-          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">
-            AI 策略生成器
-            <span className="text-sm sm:text-base font-normal text-white/50 ml-2 hidden sm:inline">
-              / AI Strategy Generator
-            </span>
-          </h1>
-          <p className="text-sm sm:text-base text-white/60">
-            用自然语言描述你的交易策略，AI 将自动生成可执行的 VeighNa
-            策略代码，支持参数微调和回测验证
+      {/* Workbench Toolbar */}
+      <WorkbenchToolbar
+        strategyName={strategyName}
+        onNameChange={setStrategyName}
+        onSave={saveDraft}
+        onToggleHistory={() => setShowHistory((p) => !p)}
+        historyVisible={showHistory}
+        onExport={handleExport}
+        hasCode={!!generatedCode}
+      />
+
+      {/* Error message */}
+      {error && (
+        <div className="mx-4 mt-2">
+          <ErrorCard
+            error={error}
+            compact
+            onAction={(action) => {
+              if (action.label === '重试' && strategyInput) {
+                setError(null);
+                void handleGenerate(strategyInput);
+              } else if (action.label === '使用模板') {
+                setError(null);
+              } else if (action.label === '修改描述') {
+                setError(null);
+                strategyInputRef.current?.scrollIntoView({ behavior: 'smooth' });
+              }
+            }}
+          />
+        </div>
+      )}
+
+      {/* Warning: code changed during backtest */}
+      {codeChangedDuringBacktest && isBacktesting && (
+        <div className="mx-4 mt-2 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-lg">
+          <p className="text-yellow-400 text-xs">
+            策略已修改，当前回测结果可能不准确
           </p>
         </div>
+      )}
 
-        {/* Tiered onboarding demo selector - shown when no code exists (Story 3.4) */}
-        {!generatedCode && !isGenerating && (
-          <TieredDemoSelector
-            onSimple={fillAndRunSimple}
-            onIntermediate={fillIntermediate}
-            onAdvanced={fillAdvanced}
-            isAutoRunning={isAutoRunning}
-            autoRunError={autoRunError}
-            className="mb-6"
+      {/* Main content: mode-based rendering */}
+      <main className="flex-1 min-h-0">
+        {/* ===== RUNNING MODE: Full-width backtest progress ===== */}
+        {viewMode === "running" && (
+          <BacktestRunningView
+            strategyName={strategyName}
+            symbol=""
+            onCancel={() => setViewMode("edit")}
           />
         )}
 
-        {/* Error message */}
-        {error && (
-          <div className="mb-6 p-4 bg-loss/10 border border-loss/30 rounded-lg">
-            <p className="text-loss text-sm">
-              ⚠️ API 调用失败，使用本地模拟生成: {error}
-            </p>
-          </div>
+        {/* ===== RESULTS MODE: Full-width professional results view ===== */}
+        {viewMode === "results" && latestBacktestResult && (
+          <BacktestResultsView
+            result={latestBacktestResult}
+            strategyName={strategyName}
+            onBackToEdit={() => setViewMode("edit")}
+            onRerunWithEdit={() => setViewMode("edit")}
+            onExportReport={handleExport}
+          />
         )}
 
-        {/* Editor grid - 3 columns on large screens, single column mobile */}
-        <div className="grid lg:grid-cols-3 gap-4 sm:gap-6">
-          {/* Left column - Input */}
-          <div className="space-y-6" ref={strategyInputRef}>
-            <StrategyInput
-              onGenerate={handleGenerate}
-              isLoading={isGenerating}
-              value={strategyInput}
-              onChange={updateStrategyInput}
-            />
+        {/* ===== EDIT MODE: Split panel layout ===== */}
+        {viewMode === "edit" && (
+          <div className="px-2 sm:px-4 py-2 sm:py-3">
+            {/* Context panel: market overview and quick actions for returning users */}
+            {!generatedCode && !isGenerating && (
+              <ContextPanel className="mb-3 max-w-[1920px]" />
+            )}
 
-            {/* Parameter Editor - shows when code is generated */}
-            {generatedCode && (
-              <ParameterEditor
-                code={generatedCode}
+            {/* Onboarding: shown when no code */}
+            {!generatedCode && !isGenerating && (
+              <TieredDemoSelector
+                onSimple={fillAndRunSimple}
+                onIntermediate={fillIntermediate}
+                onAdvanced={fillAdvanced}
+                isAutoRunning={isAutoRunning}
+                autoRunError={autoRunError}
+                className="mb-3 max-w-[1920px] mx-auto"
+              />
+            )}
+
+            {/* Desktop: Resizable split panel */}
+            <div className="hidden lg:block h-[calc(100vh-180px)] max-w-[1920px] mx-auto">
+              <ResizableSplitPanel
+                initialRatio={savedSplitRatio}
+                onRatioChange={setSplitPanelRatio}
+                left={
+                  <LeftPanel
+                    strategyInputRef={strategyInputRef}
+                    strategyInput={strategyInput}
+                    generatedCode={generatedCode}
+                    isGenerating={isGenerating}
+                    isBacktesting={isBacktesting}
+                    hasUnsavedChanges={hasUnsavedChanges}
+                    onGenerate={handleGenerate}
+                    onUpdateInput={updateStrategyInput}
+                    onSelectTemplate={handleSelectTemplate}
+                    onCodeUpdate={handleCodeUpdate}
+                    onRerunBacktest={handleRerunBacktest}
+                    onParameterFocus={setFocusedLine}
+                    onBacktestStart={handleBacktestStart}
+                    onBacktestEnd={handleBacktestEnd}
+                    showHistory={showHistory}
+                  />
+                }
+                right={
+                  <RightPanel
+                    generatedCode={generatedCode}
+                    isGenerating={isGenerating}
+                    isBacktesting={isBacktesting}
+                    focusedLine={focusedLine}
+                    onHighlightClear={() => setFocusedLine(null)}
+                    logicSummary={logicSummary}
+                    onBacktestStart={handleBacktestStart}
+                    onBacktestEnd={handleBacktestEnd}
+                    onBacktestResult={handleBacktestResult}
+                    workspace={workspace}
+                    currentParameters={currentParameters}
+                    onSelectTemplate={handleSelectTemplate}
+                    onApplyParameter={handleApplyAIParameter}
+                    onApplyAllSuggestions={handleApplyAllAISuggestions}
+                  />
+                }
+              />
+            </div>
+
+            {/* Mobile: Stacked layout */}
+            <div className="lg:hidden max-w-2xl mx-auto space-y-4">
+              <LeftPanel
+                strategyInputRef={strategyInputRef}
+                strategyInput={strategyInput}
+                generatedCode={generatedCode}
+                isGenerating={isGenerating}
+                isBacktesting={isBacktesting}
+                hasUnsavedChanges={hasUnsavedChanges}
+                onGenerate={handleGenerate}
+                onUpdateInput={updateStrategyInput}
+                onSelectTemplate={handleSelectTemplate}
                 onCodeUpdate={handleCodeUpdate}
                 onRerunBacktest={handleRerunBacktest}
-                isBacktesting={isBacktesting}
                 onParameterFocus={setFocusedLine}
+                onBacktestStart={handleBacktestStart}
+                onBacktestEnd={handleBacktestEnd}
+                showHistory={showHistory}
               />
-            )}
-
-            {/* Draft History Panel / 草稿历史面板 */}
-            <DraftHistoryPanel />
-          </div>
-
-          {/* Middle column - Logic summary + Code preview */}
-          <div className="space-y-4">
-            {/* Strategy Logic Summary - shows after code generation */}
-            {(generatedCode || isGenerating) && (
-              <StrategyLogicSummary
-                conditions={logicSummary?.conditions ?? { buy: "", sell: "", position: "" }}
-                confidence={logicSummary?.confidence ?? "medium"}
-                params={logicSummary?.params ?? {}}
-                code={generatedCode}
-                state={isGenerating ? "loading" : "default"}
+              <RightPanel
+                generatedCode={generatedCode}
+                isGenerating={isGenerating}
+                isBacktesting={isBacktesting}
+                focusedLine={focusedLine}
+                onHighlightClear={() => setFocusedLine(null)}
+                logicSummary={logicSummary}
+                onBacktestStart={handleBacktestStart}
+                onBacktestEnd={handleBacktestEnd}
+                onBacktestResult={handleBacktestResult}
+                workspace={workspace}
+                currentParameters={currentParameters}
+                onSelectTemplate={handleSelectTemplate}
+                onApplyParameter={handleApplyAIParameter}
+                onApplyAllSuggestions={handleApplyAllAISuggestions}
               />
-            )}
-            <CodePreview
-              code={generatedCode}
-              isLoading={isGenerating}
-              collapsible={true}
-              highlightedLine={focusedLine}
-              onHighlightClear={() => setFocusedLine(null)}
-            />
+            </div>
+
+            {/* Risk Disclaimer */}
+            <div className="mx-4 mb-2 p-3 bg-loss/5 border border-loss/20 rounded-xl max-w-[1920px] lg:mx-auto lg:w-full lg:px-4">
+              <p className="text-xs text-white/50 leading-relaxed">
+                <span className="text-loss font-medium">风险提示</span>
+                {" "}本工具生成的策略代码仅供学习研究使用，不构成任何投资建议。量化交易存在市场风险，
+                历史回测结果不代表未来收益。
+              </p>
+            </div>
           </div>
-
-          {/* Right column - Backtest + Strategy Workbench */}
-          <div className="space-y-6">
-            <BacktestPanel
-              strategyCode={generatedCode}
-              onBacktestStart={handleBacktestStart}
-              onBacktestEnd={handleBacktestEnd}
-            />
-
-            {/* Strategy Workbench Panel - combines templates + AI assistant */}
-            <StrategyWorkbenchPanel
-              strategyCode={generatedCode}
-              backtestResult={workspace.lastBacktestResult ?? undefined}
-              currentParameters={currentParameters}
-              onSelectTemplate={handleSelectTemplate}
-              onApplyParameter={handleApplyAIParameter}
-              onApplyAllSuggestions={handleApplyAllAISuggestions}
-            />
-          </div>
-        </div>
-
-        {/* Risk Disclaimer / 风险提示 */}
-        <div className="mt-4 p-4 bg-loss/5 border border-loss/20 rounded-xl">
-          <h3 className="text-sm font-medium text-loss mb-2">
-            ⚠️ 风险提示 / Risk Disclaimer
-          </h3>
-          <p className="text-xs text-white/50 leading-relaxed">
-            本工具生成的策略代码仅供学习研究使用，不构成任何投资建议。量化交易存在市场风险，
-            历史回测结果不代表未来收益。请在充分了解相关风险的前提下，谨慎决策。
-            The strategies generated are for educational purposes only. Past
-            performance does not guarantee future results.
-          </p>
-        </div>
-
-        {/* Powered by */}
-        <div className="mt-6 text-center">
-          <p className="text-xs text-white/30">
-            Powered by <span className="text-accent/50">DeepSeek</span> +{" "}
-            <span className="text-white/40">VeighNa</span> via{" "}
-            <span className="text-white/40">Lurus API</span>
-          </p>
-        </div>
+        )}
       </main>
 
-      {/* Floating strategy workflow guide (sidecar) */}
+      {/* Floating strategy workflow guide */}
       <StrategyGuideCard currentStep={currentWorkflowStep} />
 
       {/* Bottom status bar */}
-      {user?.id && (
-        <WorkspaceStatusBar userId={user.id} />
+      {user?.id && <WorkspaceStatusBar userId={user.id} />}
+    </div>
+  );
+}
+
+// =============================================================================
+// LEFT PANEL (Input side)
+// =============================================================================
+
+interface LeftPanelProps {
+  strategyInputRef: React.RefObject<HTMLDivElement>;
+  strategyInput: string;
+  generatedCode: string;
+  isGenerating: boolean;
+  isBacktesting: boolean;
+  hasUnsavedChanges: boolean;
+  onGenerate: (prompt: string) => Promise<void>;
+  onUpdateInput: (input: string) => void;
+  onSelectTemplate: (prompt: string) => void;
+  onCodeUpdate: (newCode: string) => void;
+  onRerunBacktest: () => void;
+  onParameterFocus: (line: number | null) => void;
+  onBacktestStart: () => void;
+  onBacktestEnd: () => void;
+  showHistory: boolean;
+}
+
+function LeftPanel({
+  strategyInputRef,
+  strategyInput,
+  generatedCode,
+  isGenerating,
+  isBacktesting,
+  hasUnsavedChanges,
+  onGenerate,
+  onUpdateInput,
+  onSelectTemplate,
+  onCodeUpdate,
+  onRerunBacktest,
+  onParameterFocus,
+  onBacktestStart,
+  onBacktestEnd,
+  showHistory,
+}: LeftPanelProps) {
+  return (
+    <div className="space-y-4 p-3">
+      {/* Strategy input */}
+      <div ref={strategyInputRef}>
+        <StrategyInput
+          onGenerate={onGenerate}
+          isLoading={isGenerating}
+          value={strategyInput}
+          onChange={onUpdateInput}
+        />
+      </div>
+
+      {/* Generation feedback (token count, cost, cache badge) */}
+      <GenerationFeedback
+        isGenerating={isGenerating}
+        generatedCode={generatedCode}
+      />
+
+      {/* Template Quick Select (visual cards with category chips) */}
+      {!generatedCode && !isGenerating && (
+        <div className="glass-panel rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            <span className="text-sm font-medium text-neutral-200">模板快选</span>
+          </div>
+          <TemplateQuickSelect
+            onSelectTemplate={onSelectTemplate}
+            hasUnsavedChanges={hasUnsavedChanges}
+          />
+        </div>
+      )}
+
+      {/* Parameter Editor (when code is generated) */}
+      {generatedCode && (
+        <ParameterEditor
+          code={generatedCode}
+          onCodeUpdate={onCodeUpdate}
+          onRerunBacktest={onRerunBacktest}
+          isBacktesting={isBacktesting}
+          onParameterFocus={onParameterFocus}
+        />
+      )}
+
+      {/* Compact Backtest Config (when code is generated) */}
+      {generatedCode && (
+        <div className="glass-panel rounded-xl p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <svg className="w-4 h-4 text-primary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            <span className="text-sm font-medium text-neutral-200">回测配置</span>
+          </div>
+          <CompactBacktestConfig
+            onRunBacktest={() => {
+              onBacktestStart();
+              // The actual backtest is handled by BacktestPanel in right panel
+              // This is a simplified trigger
+              onRerunBacktest();
+            }}
+            isRunning={isBacktesting}
+            hasStrategyCode={!!generatedCode}
+          />
+        </div>
+      )}
+
+      {/* Draft History Panel (collapsible) */}
+      {showHistory && <DraftHistoryPanel />}
+    </div>
+  );
+}
+
+// =============================================================================
+// RIGHT PANEL (Preview / Results side)
+// =============================================================================
+
+interface RightPanelProps {
+  generatedCode: string;
+  isGenerating: boolean;
+  isBacktesting: boolean;
+  focusedLine: number | null;
+  onHighlightClear: () => void;
+  logicSummary: ReturnType<typeof extractLogicSummary> | null;
+  onBacktestStart: () => void;
+  onBacktestEnd: () => void;
+  onBacktestResult: (result: BacktestResult) => void;
+  workspace: ReturnType<typeof selectWorkspace>;
+  currentParameters: Array<{ name: string; value: unknown }>;
+  onSelectTemplate: (prompt: string) => void;
+  onApplyParameter: (name: string, value: number | string | boolean) => void;
+  onApplyAllSuggestions: (suggestions: Array<{ name: string; value: number | string | boolean }>) => void;
+}
+
+function RightPanel({
+  generatedCode,
+  isGenerating,
+  isBacktesting,
+  focusedLine,
+  onHighlightClear,
+  logicSummary,
+  onBacktestStart,
+  onBacktestEnd,
+  onBacktestResult,
+  workspace,
+  currentParameters,
+  onSelectTemplate,
+  onApplyParameter,
+  onApplyAllSuggestions,
+}: RightPanelProps) {
+  return (
+    <div className="space-y-4 p-3">
+      {/* Code Preview */}
+      <CodePreview
+        code={generatedCode}
+        isLoading={isGenerating}
+        collapsible={true}
+        highlightedLine={focusedLine}
+        onHighlightClear={onHighlightClear}
+      />
+
+      {/* Strategy Logic Summary (after code generation) */}
+      {(generatedCode || isGenerating) && logicSummary && (
+        <StrategyLogicSummary
+          conditions={logicSummary.conditions}
+          confidence={logicSummary.confidence}
+          params={logicSummary.params}
+          code={generatedCode}
+          state={isGenerating ? "loading" : "default"}
+        />
+      )}
+
+      {/* Quick Preview Panel (auto-runs after generation) */}
+      <QuickPreviewPanel
+        strategyCode={generatedCode}
+        isGenerating={isGenerating}
+      />
+
+      {/* Full Backtest Panel */}
+      <BacktestPanel
+        strategyCode={generatedCode}
+        onBacktestStart={onBacktestStart}
+        onBacktestEnd={onBacktestEnd}
+        onResult={onBacktestResult}
+      />
+
+      {/* Navigation to full validation */}
+      {generatedCode && !isGenerating && (
+        <div className="flex justify-center">
+          <Link
+            href="/dashboard/strategy-validation"
+            className={
+              "inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium rounded-lg " +
+              "bg-gradient-to-r from-primary/20 to-accent/20 border border-primary/30 " +
+              "text-primary hover:from-primary/30 hover:to-accent/30 transition-all btn-tactile"
+            }
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            进入完整验证
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </Link>
+        </div>
       )}
     </div>
   );
 }
 
+// =============================================================================
+// UTILITY FUNCTIONS
+// =============================================================================
+
 /**
  * Extract a readable strategy name from user prompt and generated code
- * 从用户提示词和生成代码中提取可读策略名称
  */
 function extractStrategyName(prompt: string, code: string): string {
-  // Try to extract class name from code
   const classMatch = code.match(/class\s+(\w+)\s*[\(:]/)
   if (classMatch?.[1] && classMatch[1] !== 'AIStrategy') {
-    // Convert CamelCase to readable: "DualMovingAverageStrategy" -> "DualMovingAverage"
     const name = classMatch[1].replace(/Strategy$/, '');
     return name;
   }
-
-  // Fall back to first 30 chars of prompt
   const trimmed = prompt.trim().substring(0, 30);
   return trimmed || 'AI策略';
 }
 
 /**
  * Fallback code generator when API is unavailable
- * API 不可用时的后备代码生成器
  */
 function generateFallbackCode(prompt: string): string {
   const hasMA = prompt.includes("均线") || prompt.toLowerCase().includes("ma");
@@ -558,12 +951,11 @@ function generateFallbackCode(prompt: string): string {
 
   let code = `"""
 AI Generated Trading Strategy (Fallback Mode)
-AI生成的交易策略 (离线模式)
 
-Strategy Description / 策略描述:
+Strategy Description:
 ${prompt}
 
-Generated by Lucrum AI / 由谷神AI生成
+Generated by Lucrum AI
 """
 
 from vnpy.trader.object import BarData
@@ -575,7 +967,7 @@ class AIStrategy(CtaTemplate):
 
     author = "Lucrum AI"
 
-    # Parameters / 参数
+    # Parameters
 `;
 
   if (hasMA) {
@@ -598,7 +990,7 @@ class AIStrategy(CtaTemplate):
 
   code += `    fixed_size = 1
 
-    # Variables / 变量
+    # Variables
     inited = False
     trading = False
 `;
@@ -618,19 +1010,19 @@ class AIStrategy(CtaTemplate):
         super().__init__(cta_engine, strategy_name, vt_symbol, setting)
 
     def on_bar(self, bar: BarData):
-        """Process new bar data / 处理新K线数据"""
+        """Process new bar data"""
         if not self.inited:
             return
 `;
 
   if (hasMA) {
     code += `
-        # Calculate moving averages / 计算均线
+        # Calculate moving averages
         am = self.cta_engine.get_am(self.vt_symbol)
         self.fast_ma = am.sma(self.fast_window)
         self.slow_ma = am.sma(self.slow_window)
 
-        # MA crossover signal / 均线交叉信号
+        # MA crossover signal
         if self.fast_ma > self.slow_ma and self.pos == 0:
             self.buy(bar.close_price, self.fixed_size)
         elif self.fast_ma < self.slow_ma and self.pos > 0:
@@ -640,11 +1032,11 @@ class AIStrategy(CtaTemplate):
 
   if (hasRSI) {
     code += `
-        # Calculate RSI / 计算RSI
+        # Calculate RSI
         am = self.cta_engine.get_am(self.vt_symbol)
         self.rsi_value = am.rsi(self.rsi_window)
 
-        # RSI signal / RSI信号
+        # RSI signal
         if self.rsi_value < self.rsi_buy and self.pos == 0:
             self.buy(bar.close_price, self.fixed_size)
         elif self.rsi_value > self.rsi_sell and self.pos > 0:
@@ -660,8 +1052,7 @@ class AIStrategy(CtaTemplate):
 }
 
 /**
- * Extract strategy logic summary from user prompt and generated code (MVP: frontend parsing)
- * Parses buy/sell conditions and parameters from user's natural language input.
+ * Extract strategy logic summary from user prompt and generated code
  */
 function extractLogicSummary(
   prompt: string,
@@ -672,7 +1063,6 @@ function extractLogicSummary(
   confidence: "high" | "medium" | "low";
   params: Record<string, string>;
 } {
-  // Extract buy/sell conditions from prompt using Chinese keyword patterns
   const lines = prompt.split(/[，,。.；;\n]+/).map((s) => s.trim()).filter(Boolean);
 
   let buy = "";
@@ -690,7 +1080,6 @@ function extractLogicSummary(
     }
   }
 
-  // Fallback: use the full prompt split into conditions
   if (!buy && !sell) {
     buy = prompt.length > 60 ? prompt.substring(0, 60) + "..." : prompt;
     sell = "\u672A\u660E\u786E\u6307\u5B9A";
@@ -699,7 +1088,6 @@ function extractLogicSummary(
   if (!sell) sell = "\u672A\u660E\u786E\u6307\u5B9A";
   if (!position) position = "\u9ED8\u8BA4\u4ED3\u4F4D\u7BA1\u7406";
 
-  // Build params map from parsed parameters
   const paramMap: Record<string, string> = {};
   for (const p of params) {
     paramMap[p.name] = String(p.value);

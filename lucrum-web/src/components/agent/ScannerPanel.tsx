@@ -7,7 +7,7 @@
 
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { SW_SECTORS, CONCEPT_SECTORS } from "@/lib/data-service/sources/eastmoney-sector";
 import type { ScanTarget, RankedResult, ScannerEvent } from "@/lib/agent/scanner-agent";
 import { useAsyncTask } from "@/hooks/use-async-task";
@@ -519,6 +519,13 @@ export function ScannerPanel() {
 
   const abortRef = useRef<AbortController | null>(null);
   const task = useAsyncTask();
+
+  // Abort SSE stream on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      abortRef.current?.abort();
+    };
+  }, []);
 
   // Toggle a scan target
   const handleToggle = useCallback(

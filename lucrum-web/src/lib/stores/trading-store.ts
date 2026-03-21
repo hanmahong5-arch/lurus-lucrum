@@ -824,6 +824,7 @@ export const useTradingStore = create<TradingStore>()(
     {
       name: 'lucrum-trading-store',
       storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
       partialize: (state) => ({
         balance: state.balance,
         equity: state.equity,

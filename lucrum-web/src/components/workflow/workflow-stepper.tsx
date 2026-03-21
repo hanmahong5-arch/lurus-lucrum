@@ -178,7 +178,7 @@ function SingleStep({
       <div
         role="listitem"
         aria-current={isCurrent ? "step" : undefined}
-        aria-disabled={!isClickable}
+        data-disabled={!isClickable || undefined}
         tabIndex={isClickable ? 0 : -1}
         onClick={handleClick}
         onKeyDown={handleKeyDown}

@@ -230,13 +230,18 @@ export function IndicatorQuickPanel({
   useEffect(() => {
     if (!indicatorSet) return;
 
+    let active = true;
+
     const interval = setInterval(async () => {
       const data = await fetchIndicatorData(symbol);
-      if (data) setIndicatorSet(data);
+      if (active && data) setIndicatorSet(data);
     }, 60000);
 
-    return () => clearInterval(interval);
-  }, [symbol, indicatorSet !== null]);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [symbol, indicatorSet !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (isLoading) {
     return (

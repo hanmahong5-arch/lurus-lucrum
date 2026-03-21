@@ -450,3 +450,148 @@ export async function getDataStatistics(
     return null;
   }
 }
+
+// =============================================================================
+// Batch Fetching
+// =============================================================================
+
+/** Maximum number of symbols in a single SQL IN clause */
+const BATCH_CHUNK_SIZE = 100;
+
+/**
+ * Batch K-line result for multiple symbols
+ * 批量K线数据结果
+ */
+export interface BatchKLineResult {
+  /** Map of symbol -> K-line data */
+  data: Map<string, KLineData[]>;
+  /** Symbols that failed or had no data */
+  missing: string[];
+  /** Number of total K-line bars fetched */
+  totalBars: number;
+}
+
+/**
+ * Fetch K-lines for multiple symbols in a single query per chunk.
+ * Much faster than N individual queries for sector backtesting.
+ *
+ * @param symbols - Array of stock symbols
+ * @param startDate - Start date (YYYY-MM-DD)
+ * @param endDate - End date (YYYY-MM-DD)
+ * @param limit - Maximum bars per symbol (default 500)
+ * @returns Map of symbol -> KLineData[], plus list of missing symbols
+ */
+export async function batchFetchKlines(
+  symbols: string[],
+  startDate: string,
+  endDate: string,
+  limit: number = 500,
+): Promise<BatchKLineResult> {
+  if (symbols.length === 0) {
+    return { data: new Map(), missing: [], totalBars: 0 };
+  }
+
+  const normalizedSymbols = symbols.map(normalizeSymbol).filter(Boolean);
+  const resultMap = new Map<string, KLineData[]>();
+  const missing: string[] = [];
+  let totalBars = 0;
+
+  // Process in chunks to avoid SQL parameter limits
+  for (let offset = 0; offset < normalizedSymbols.length; offset += BATCH_CHUNK_SIZE) {
+    const chunk = normalizedSymbols.slice(offset, offset + BATCH_CHUNK_SIZE);
+
+    try {
+      // Resolve symbol -> stock ID mapping for this chunk
+      const stockRows = await db
+        .select({
+          id: stocks.id,
+          symbol: stocks.symbol,
+          name: stocks.name,
+        })
+        .from(stocks)
+        .where(sql`${stocks.symbol} IN (${sql.join(chunk.map(s => sql`${s}`), sql`, `)})`);
+
+      if (stockRows.length === 0) {
+        missing.push(...chunk);
+        continue;
+      }
+
+      // Build stock ID -> symbol lookup
+      const idToSymbol = new Map<number, string>();
+      const foundSymbols = new Set<string>();
+      const stockIds: number[] = [];
+      for (const row of stockRows) {
+        idToSymbol.set(row.id, row.symbol);
+        foundSymbols.add(row.symbol);
+        stockIds.push(row.id);
+      }
+
+      // Track symbols not found in DB
+      for (const s of chunk) {
+        if (!foundSymbols.has(s)) {
+          missing.push(s);
+        }
+      }
+
+      // Single query for all K-line data in this chunk
+      const klineRows = await db
+        .select({
+          stockId: klineDaily.stockId,
+          date: klineDaily.date,
+          open: klineDaily.open,
+          high: klineDaily.high,
+          low: klineDaily.low,
+          close: klineDaily.close,
+          volume: klineDaily.volume,
+          amount: klineDaily.amount,
+        })
+        .from(klineDaily)
+        .where(
+          and(
+            sql`${klineDaily.stockId} IN (${sql.join(stockIds.map(id => sql`${id}`), sql`, `)})`,
+            gte(klineDaily.date, startDate),
+            lte(klineDaily.date, endDate),
+          )
+        )
+        .orderBy(klineDaily.stockId, klineDaily.date);
+
+      // Group results by symbol in application layer
+      for (const row of klineRows) {
+        const sym = idToSymbol.get(row.stockId);
+        if (!sym) continue;
+
+        let arr = resultMap.get(sym);
+        if (!arr) {
+          arr = [];
+          resultMap.set(sym, arr);
+        }
+
+        // Respect per-symbol limit
+        if (arr.length < limit) {
+          arr.push({
+            time: Math.floor(new Date(row.date).getTime() / 1000),
+            open: row.open,
+            high: row.high,
+            low: row.low,
+            close: row.close,
+            volume: row.volume,
+            amount: row.amount ?? undefined,
+          });
+          totalBars++;
+        }
+      }
+
+      // Mark symbols that had stock records but no K-line data
+      foundSymbols.forEach((sym) => {
+        if (!resultMap.has(sym)) {
+          missing.push(sym);
+        }
+      });
+    } catch (error) {
+      console.error('[DbKLineProvider] batchFetchKlines chunk error:', error);
+      missing.push(...chunk);
+    }
+  }
+
+  return { data: resultMap, missing, totalBars };
+}

@@ -51,6 +51,7 @@ import {
   getMetricTooltip,
   RATING_DOT_CLASSES,
 } from "@/lib/backtest/metric-rating";
+import { SmartTooltip } from "@/components/ui/smart-tooltip";
 import type {
   UnifiedBacktestResult,
   ReturnMetrics,
@@ -118,16 +119,24 @@ function MetricCard({
             aria-label={`Rating: ${rating}`}
           />
         )}
-        <span className="truncate">{label}</span>
-        {tooltipText && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <HelpCircle className="h-3 w-3 text-muted-foreground/50 cursor-help flex-shrink-0" />
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">{tooltipText}</p>
-            </TooltipContent>
-          </Tooltip>
+        {metricKey ? (
+          <SmartTooltip term={metricKey}>
+            <span className="truncate">{label}</span>
+          </SmartTooltip>
+        ) : tooltipText ? (
+          <>
+            <span className="truncate">{label}</span>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <HelpCircle className="h-3 w-3 text-muted-foreground/50 cursor-help flex-shrink-0" />
+              </TooltipTrigger>
+              <TooltipContent>
+                <p className="text-xs">{tooltipText}</p>
+              </TooltipContent>
+            </Tooltip>
+          </>
+        ) : (
+          <span className="truncate">{label}</span>
         )}
       </div>
       <div className="flex items-center gap-1">

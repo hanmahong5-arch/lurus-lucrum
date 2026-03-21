@@ -1,137 +1,60 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+/**
+ * Strategy Marketplace Page
+ *
+ * Features:
+ * - Redesigned strategy cards with sparklines and key metrics
+ * - Sort/filter toolbar with advanced filters
+ * - Strategy comparison mode (multi-select + side-by-side table)
+ * - One-click preview via slide-over detail panel
+ */
+
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
+import { useAbortController } from "@/hooks/use-abort-controller";
+import { useStaleGuard } from "@/hooks/use-stale-guard";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ErrorCard } from "@/components/ui/error-card";
+import { ErrorCatalog } from "@/lib/errors/error-catalog";
+import type { AppError } from "@/lib/errors/error-types";
 import { useAccountOverview } from "@/hooks/useAccountOverview";
 import { useUpgradeGate } from "@/hooks/use-upgrade-gate";
-import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 import Link from "next/link";
-import { Search, TrendingUp, Clock, Tag, Star } from "lucide-react";
+import { GitCompare, Search } from "lucide-react";
+import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/contextual-help";
+import type { MarketplaceStrategy } from "@/components/marketplace/strategy-card";
 import {
-  LikeButton,
-  ShareButton,
-  CommentSection,
-} from "@/components/marketplace/strategy-social";
+  FilterToolbar,
+  EMPTY_FILTER,
+  type SortOption,
+  type FilterState,
+} from "@/components/marketplace/filter-toolbar";
+import { CardGridSkeleton, PanelSkeleton } from "@/components/ui/loading-skeleton";
 
-// =============================================================================
-// TYPES
-// =============================================================================
+// ---------------------------------------------------------------------------
+// Dynamic imports — split heavy marketplace components into separate chunks
+// ---------------------------------------------------------------------------
 
-interface MarketplaceStrategy {
-  id: number;
-  title: string;
-  description: string | null;
-  priceType: string;
-  pricePerRun: number | null;
-  priceMonthly: number | null;
-  gradeScore: string | null;
-  totalRuns: number | null;
-  totalSubscribers: number | null;
-  publishedAt: string | null;
-  authorName: string | null;
-}
+const StrategyCard = dynamic(
+  () => import("@/components/marketplace/strategy-card").then((m) => ({ default: m.StrategyCard })),
+  { ssr: false },
+);
 
-type SortOption = "popular" | "newest" | "cheapest";
-type PriceFilter = "all" | "free" | "subscription" | "per_run";
+const StrategyComparison = dynamic(
+  () => import("@/components/marketplace/strategy-comparison").then((m) => ({ default: m.StrategyComparison })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
 
-// =============================================================================
-// GRADE BADGE
-// =============================================================================
+const StrategyDetailPanel = dynamic(
+  () => import("@/components/marketplace/strategy-detail-panel").then((m) => ({ default: m.StrategyDetailPanel })),
+  { ssr: false },
+);
 
-const GRADE_COLORS: Record<string, string> = {
-  A: "bg-profit/20 text-profit border-profit/30",
-  B: "bg-accent/20 text-accent border-accent/30",
-  C: "bg-amber-400/20 text-amber-400 border-amber-400/30",
-  D: "bg-loss/20 text-loss border-loss/30",
-};
-
-function GradeBadge({ grade }: { grade: string | null }) {
-  if (!grade) return null;
-  const letter = grade.charAt(0).toUpperCase();
-  const colorClass = GRADE_COLORS[letter] ?? "bg-white/10 text-white/50 border-white/20";
-  return (
-    <span className={`inline-flex items-center px-1.5 py-0.5 text-[10px] font-bold rounded border ${colorClass}`}>
-      {letter}
-    </span>
-  );
-}
-
-// =============================================================================
-// STRATEGY CARD
-// =============================================================================
-
-function StrategyCard({
-  strategy,
-  onSubscribe,
-}: {
-  strategy: MarketplaceStrategy;
-  onSubscribe: (id: number) => void;
-}) {
-  const priceLabel =
-    strategy.priceType === "free"
-      ? "免费"
-      : strategy.priceType === "subscription"
-      ? `${strategy.priceMonthly ?? 0} LB/月`
-      : `${strategy.pricePerRun ?? 0} LB/次`;
-
-  return (
-    <div className="p-4 bg-surface rounded-xl border border-border hover:border-accent/30 transition group">
-      {/* Header */}
-      <div className="flex items-start justify-between mb-2">
-        <div className="flex items-center gap-2">
-          <GradeBadge grade={strategy.gradeScore} />
-          <h3 className="text-sm font-semibold text-white group-hover:text-accent transition line-clamp-1">
-            {strategy.title}
-          </h3>
-        </div>
-        <span className="text-xs font-mono tabular-nums text-amber-400 whitespace-nowrap ml-2">
-          {priceLabel}
-        </span>
-      </div>
-
-      {/* Description */}
-      <p className="text-xs text-white/50 line-clamp-2 mb-3 min-h-[2rem]">
-        {strategy.description ?? "暂无描述"}
-      </p>
-
-      {/* Stats */}
-      <div className="flex items-center gap-3 text-[11px] text-white/40 mb-3">
-        <span className="flex items-center gap-1">
-          <TrendingUp className="w-3 h-3" />
-          {strategy.totalRuns ?? 0} 次运行
-        </span>
-        <span className="flex items-center gap-1">
-          <Star className="w-3 h-3" />
-          {strategy.totalSubscribers ?? 0} 订阅
-        </span>
-        {strategy.authorName && (
-          <span className="ml-auto text-white/30">
-            by {strategy.authorName}
-          </span>
-        )}
-      </div>
-
-      {/* Social row */}
-      <div className="flex items-center gap-4 mb-3">
-        <LikeButton strategyId={strategy.id} />
-        <CommentSection strategyId={strategy.id} />
-        <ShareButton strategyId={strategy.id} title={strategy.title} />
-      </div>
-
-      {/* Action */}
-      <button
-        onClick={() => onSubscribe(strategy.id)}
-        className={`w-full py-1.5 text-xs rounded-lg font-medium transition ${
-          strategy.priceType === "free"
-            ? "bg-profit/10 text-profit hover:bg-profit/20 border border-profit/20"
-            : "bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20"
-        }`}
-      >
-        {strategy.priceType === "free" ? "免费使用" : "订阅策略"}
-      </button>
-    </div>
-  );
-}
+const UpgradeDialog = dynamic(
+  () => import("@/components/paywall/upgrade-dialog").then((m) => ({ default: m.UpgradeDialog })),
+  { ssr: false },
+);
 
 // =============================================================================
 // EMPTY STATE
@@ -143,9 +66,7 @@ function EmptyState() {
       <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center mb-4">
         <Search className="w-7 h-7 text-white/20" />
       </div>
-      <h3 className="text-base font-medium text-white/60 mb-2">
-        暂无策略
-      </h3>
+      <h3 className="text-base font-medium text-white/60 mb-2">暂无策略</h3>
       <p className="text-sm text-white/30 max-w-xs">
         策略市场刚刚开放，成为 Pro 用户即可上架你的策略赚取鹿贝收入
       </p>
@@ -161,157 +82,284 @@ export default function MarketplacePage() {
   const { data: overview } = useAccountOverview();
   const upgradeGate = useUpgradeGate(overview?.subscription?.plan_code);
 
+  // Data
   const [strategies, setStrategies] = useState<MarketplaceStrategy[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [sort, setSort] = useState<SortOption>("popular");
-  const [priceFilter, setPriceFilter] = useState<PriceFilter>("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [loadError, setLoadError] = useState<AppError | null>(null);
 
+  // Toolbar state
+  const [sort, setSort] = useState<SortOption>("recommended");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
+
+  // Comparison mode
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showComparison, setShowComparison] = useState(false);
+
+  // Detail panel
+  const [detailStrategy, setDetailStrategy] = useState<MarketplaceStrategy | null>(null);
+
+  // Safety hooks
+  const createSignal = useAbortController();
+  const { createVersion, isStale } = useStaleGuard();
+
+  // Debounce search input (300ms trailing edge)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
+  // Per-card loading state for detail panel
+  const [loadingDetailId, setLoadingDetailId] = useState<number | null>(null);
+
+  // ─── Data fetch ──────────────────────────────────────────────────────
   const fetchStrategies = useCallback(async () => {
     setLoading(true);
+    setLoadError(null);
+    // Abort previous fetch and track request version for stale guard
+    const signal = createSignal();
+    const version = createVersion();
+
     try {
+      // Map our sort options to API params
+      const apiSort =
+        sort === "recommended" || sort === "popular"
+          ? "popular"
+          : sort === "newest"
+            ? "newest"
+            : sort === "free"
+              ? "cheapest"
+              : "popular";
+
       const params = new URLSearchParams({
-        sort,
+        sort: apiSort,
         limit: "20",
         offset: "0",
       });
-      if (priceFilter !== "all") {
-        params.set("price_type", priceFilter);
+
+      if (sort === "free") {
+        params.set("price_type", "free");
       }
-      const res = await fetch(`/api/lurus/marketplace/list?${params}`);
+
+      const res = await fetch(`/api/lurus/marketplace/list?${params}`, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json() as {
+      const data = (await res.json()) as {
         strategies: MarketplaceStrategy[];
         total: number;
       };
-      setStrategies(data.strategies ?? []);
-      setTotal(data.total ?? 0);
+
+      // Only apply results if this is still the latest request
+      if (!isStale(version)) {
+        setStrategies(data.strategies ?? []);
+        setTotal(data.total ?? 0);
+      }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       console.error("[marketplace] fetch error:", err);
-      setStrategies([]);
+      if (!isStale(version)) {
+        setStrategies([]);
+        setLoadError(ErrorCatalog.marketplaceLoadFailed());
+      }
     } finally {
-      setLoading(false);
+      if (!isStale(version)) {
+        setLoading(false);
+      }
     }
-  }, [sort, priceFilter]);
+  }, [sort, createSignal, createVersion, isStale]);
 
   useEffect(() => {
     void fetchStrategies();
   }, [fetchStrategies]);
 
+  // ─── Client-side filtering ───────────────────────────────────────────
+  const filtered = useMemo(() => {
+    let result = strategies;
+
+    // Text search (debounced — uses debouncedSearch, not raw searchQuery)
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(
+        (s) =>
+          s.title.toLowerCase().includes(q) ||
+          (s.description ?? "").toLowerCase().includes(q) ||
+          (s.authorName ?? "").toLowerCase().includes(q),
+      );
+    }
+
+    // Grade filter
+    if (filter.grades.length > 0) {
+      result = result.filter((s) => {
+        const g = s.gradeScore?.charAt(0).toUpperCase();
+        return g && filter.grades.includes(g);
+      });
+    }
+
+    // Win rate filter
+    if (filter.minWinRate != null) {
+      result = result.filter(
+        (s) => s.winRate != null && s.winRate >= (filter.minWinRate ?? 0),
+      );
+    }
+
+    // Sharpe filter
+    if (filter.minSharpe != null) {
+      result = result.filter(
+        (s) => s.sharpeRatio != null && s.sharpeRatio >= (filter.minSharpe ?? 0),
+      );
+    }
+
+    // Price range filter
+    if (filter.minPrice != null) {
+      result = result.filter((s) => {
+        const price = s.priceMonthly ?? s.pricePerRun ?? 0;
+        return price >= (filter.minPrice ?? 0);
+      });
+    }
+    if (filter.maxPrice != null) {
+      result = result.filter((s) => {
+        const price = s.priceMonthly ?? s.pricePerRun ?? 0;
+        return s.priceType === "free" || price <= (filter.maxPrice ?? Infinity);
+      });
+    }
+
+    return result;
+  }, [strategies, debouncedSearch, filter]);
+
+  // ─── Handlers ────────────────────────────────────────────────────────
   const handleSubscribe = useCallback(
     (strategyId: number) => {
-      // Free users can only browse — gate the subscribe action
       if (!upgradeGate.gate("marketplace_subscribe")) return;
-
-      // For now, show a placeholder — real subscribe flow via POST /api/lurus/marketplace/subscribe
       const strategy = strategies.find((s) => s.id === strategyId);
       alert(`订阅 "${strategy?.title}" 功能即将推出`);
     },
     [upgradeGate, strategies],
   );
 
-  // Client-side search filter
-  const filtered = searchQuery
-    ? strategies.filter(
-        (s) =>
-          s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.description ?? "").toLowerCase().includes(searchQuery.toLowerCase()),
-      )
-    : strategies;
+  const handleViewDetail = useCallback((strategy: MarketplaceStrategy) => {
+    // Only the LAST clicked strategy card opens — rapid clicks won't stack
+    setLoadingDetailId(strategy.id);
+    setDetailStrategy(strategy);
+    // Clear loading after a tick so UI updates
+    setTimeout(() => setLoadingDetailId(null), 100);
+  }, []);
+
+  const handleTryStrategy = useCallback(
+    (strategy: MarketplaceStrategy) => {
+      if (!upgradeGate.gate("marketplace_subscribe")) return;
+      // Load strategy into workspace
+      alert(`正在加载 "${strategy.title}" 到工作区...`);
+      setDetailStrategy(null);
+    },
+    [upgradeGate],
+  );
+
+  const toggleSelect = useCallback((id: number) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectedStrategies = useMemo(
+    () => strategies.filter((s) => selectedIds.has(s.id)),
+    [strategies, selectedIds],
+  );
 
   return (
     <div className="min-h-screen bg-background">
       <DashboardHeader />
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        {/* Title */}
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        {/* Title row */}
         <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-6">
           <div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">
-              策略市场
-            </h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-xl sm:text-2xl font-bold text-white">
+                策略市场
+              </h1>
+              <ContextualHelp
+                sections={CONTEXTUAL_HELP_CONTENT.marketplace ?? []}
+                title="策略市场帮助"
+              />
+            </div>
             <p className="text-xs sm:text-sm text-white/50">
-              浏览社区策略，一键订阅使用 · 作者分润 70%
+              浏览社区策略，一键订阅使用 | 作者分润 70%
             </p>
           </div>
           <Link
             href="/dashboard/marketplace/publish"
-            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-accent/10 text-accent hover:bg-accent/20 transition rounded-lg text-sm font-medium border border-accent/20 shrink-0 w-full sm:w-auto"
+            className="inline-flex items-center justify-center gap-1.5 px-4 py-2 bg-accent/10 text-accent hover:bg-accent/20 transition rounded-lg text-sm font-medium border border-accent/20 shrink-0 w-full sm:w-auto btn-tactile"
           >
-            🏪 发布策略
+            发布策略
           </Link>
         </div>
 
-        {/* Filters bar */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-          {/* Search */}
-          <div className="relative flex-1 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-            <input
-              type="text"
-              placeholder="搜索策略..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-accent/50"
-            />
-          </div>
-
-          {/* Sort */}
-          <div className="flex items-center gap-1 p-1 bg-white/5 rounded-lg overflow-x-auto scrollbar-hide">
-            {[
-              { value: "popular" as const, label: "热门", icon: TrendingUp },
-              { value: "newest" as const, label: "最新", icon: Clock },
-              { value: "cheapest" as const, label: "低价", icon: Tag },
-            ].map(({ value, label, icon: Icon }) => (
-              <button
-                key={value}
-                onClick={() => setSort(value)}
-                className={`flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-md transition ${
-                  sort === value
-                    ? "bg-accent text-primary-600 font-medium"
-                    : "text-white/50 hover:text-white"
-                }`}
-              >
-                <Icon className="w-3 h-3" />
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Price filter */}
-          <div className="flex items-center gap-1 p-1 bg-white/5 rounded-lg overflow-x-auto scrollbar-hide">
-            {[
-              { value: "all" as const, label: "全部" },
-              { value: "free" as const, label: "免费" },
-              { value: "subscription" as const, label: "订阅" },
-              { value: "per_run" as const, label: "按次" },
-            ].map(({ value, label }) => (
-              <button
-                key={value}
-                onClick={() => setPriceFilter(value)}
-                className={`px-2.5 py-1.5 text-xs rounded-md transition ${
-                  priceFilter === value
-                    ? "bg-white/15 text-white font-medium"
-                    : "text-white/50 hover:text-white"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        {/* Filter Toolbar */}
+        <div className="mb-4">
+          <FilterToolbar
+            sort={sort}
+            onSortChange={setSort}
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            filter={filter}
+            onFilterChange={setFilter}
+          />
         </div>
 
         {/* Results count */}
-        <div className="text-xs text-white/30 mb-4">
-          共 {total} 个策略
+        <div className="flex items-center justify-between text-xs text-white/30 mb-4">
+          <span>
+            共 {total} 个策略
+            {filtered.length !== strategies.length &&
+              ` (筛选后 ${filtered.length} 个)`}
+          </span>
+          {selectedIds.size > 0 && (
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="text-white/40 hover:text-white transition"
+            >
+              清除选择 ({selectedIds.size})
+            </button>
+          )}
         </div>
+
+        {/* Load error */}
+        {loadError && !loading && (
+          <div className="max-w-md mx-auto mb-6">
+            <ErrorCard
+              error={loadError}
+              onAction={(action) => {
+                if (action.type === 'retry') {
+                  setLoadError(null);
+                  void fetchStrategies();
+                }
+              }}
+            />
+          </div>
+        )}
 
         {/* Grid */}
         {loading ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="h-40 bg-white/5 rounded-xl animate-pulse" />
+              <div
+                key={i}
+                className="h-72 bg-white/5 rounded-lg animate-pulse"
+              />
             ))}
           </div>
         ) : filtered.length === 0 ? (
@@ -322,12 +370,43 @@ export default function MarketplacePage() {
               <StrategyCard
                 key={strategy.id}
                 strategy={strategy}
+                selected={selectedIds.has(strategy.id)}
+                onToggleSelect={toggleSelect}
                 onSubscribe={handleSubscribe}
+                onViewDetail={handleViewDetail}
               />
             ))}
           </div>
         )}
       </main>
+
+      {/* Floating comparison button */}
+      {selectedIds.size >= 2 && !showComparison && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
+          <button
+            onClick={() => setShowComparison(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-accent text-void font-medium text-sm rounded-lg shadow-glow-accent btn-tactile transition"
+          >
+            <GitCompare className="w-4 h-4" />
+            对比 ({selectedIds.size})
+          </button>
+        </div>
+      )}
+
+      {/* Comparison overlay */}
+      {showComparison && selectedStrategies.length >= 2 && (
+        <StrategyComparison
+          strategies={selectedStrategies}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
+
+      {/* Detail slide-over panel */}
+      <StrategyDetailPanel
+        strategy={detailStrategy}
+        onClose={() => setDetailStrategy(null)}
+        onTryStrategy={handleTryStrategy}
+      />
 
       {/* Upgrade dialog */}
       <UpgradeDialog

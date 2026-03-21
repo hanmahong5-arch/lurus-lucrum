@@ -1,9 +1,7 @@
 /**
  * Strategy Validation Components
- * 策略验证组件
  *
- * Export all strategy validation related components
- * 导出所有策略验证相关组件
+ * Export all strategy validation related components.
  */
 
 export { ConfigPanel } from "./config-panel";
@@ -33,3 +31,9 @@ export type { BatchProgressBarProps, BatchStatus } from "./batch-progress-bar";
 
 export { FailureAnalysisPanel } from "./failure-analysis-panel";
 export type { FailureAnalysisPanelProps } from "./failure-analysis-panel";
+
+// --- New components (deep UX improvement) ---
+export { ModeSelector } from "./mode-selector";
+export { SectorPanel } from "./sector-panel";
+export { ConfigBar } from "./config-bar";
+export { SummaryBanner } from "./summary-banner";

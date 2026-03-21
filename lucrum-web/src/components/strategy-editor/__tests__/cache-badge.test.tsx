@@ -41,7 +41,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={now} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
     });
 
     it('renders nothing when cached is undefined', () => {
@@ -57,13 +57,13 @@ describe('CacheBadge', () => {
   // 2. Badge Text and Relative Time
   // ===========================================================================
   describe('Badge Text and Relative Time', () => {
-    it('displays "来自缓存" label', () => {
+    it('displays "缓存策略" label', () => {
       const now = new Date();
       render(
         <CacheBadge cached={true} cachedAt={now} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
     });
 
     it('shows relative time for recent cache (seconds ago)', () => {
@@ -142,7 +142,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={null} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
       expect(screen.getByText('缓存时间未知')).toBeInTheDocument();
     });
 
@@ -151,7 +151,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={undefined as unknown as Date} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
       expect(screen.getByText('缓存时间未知')).toBeInTheDocument();
     });
 
@@ -160,7 +160,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={new Date('invalid')} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
       expect(screen.getByText('缓存时间未知')).toBeInTheDocument();
     });
 
@@ -170,7 +170,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={isoString as unknown as Date} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
       // Should parse and show relative time
       expect(screen.getByTestId('cache-badge-time')).toBeInTheDocument();
     });
@@ -181,7 +181,7 @@ describe('CacheBadge', () => {
         <CacheBadge cached={true} cachedAt={timestamp as unknown as Date} onRefresh={vi.fn()} />
       );
 
-      expect(screen.getByText('来自缓存')).toBeInTheDocument();
+      expect(screen.getByText('缓存策略')).toBeInTheDocument();
       expect(screen.getByTestId('cache-badge-time')).toBeInTheDocument();
     });
   });

@@ -656,3 +656,194 @@ export function calculateCompoundReturn(returns: number[]): number {
 
   return compound.subtract(1).multiply(100).toPercent();
 }
+
+// =============================================================================
+// INCREMENTAL INDICATOR CALCULATORS / 增量指标计算器
+// =============================================================================
+
+/**
+ * Incremental SMA calculator - O(1) per bar instead of O(window) per bar.
+ * Maintains a running sum and circular buffer.
+ *
+ * Usage:
+ *   const sma = new IncrementalSMA(20);
+ *   for (const price of prices) {
+ *     const value = sma.update(price); // null until window is full
+ *   }
+ */
+export class IncrementalSMA {
+  private buffer: number[] = [];
+  private sum = 0;
+  private index = 0;
+  private full = false;
+
+  constructor(private readonly period: number) {}
+
+  /**
+   * Feed the next value and return the current SMA, or null if
+   * fewer than `period` values have been supplied.
+   */
+  update(value: number): number | null {
+    if (this.full) {
+      this.sum -= this.buffer[this.index]!;
+    }
+    this.buffer[this.index] = value;
+    this.sum += value;
+    this.index = (this.index + 1) % this.period;
+    if (!this.full && this.index === 0) this.full = true;
+    return this.full ? this.sum / this.period : null;
+  }
+
+  /** Reset internal state for reuse. */
+  reset(): void {
+    this.buffer = [];
+    this.sum = 0;
+    this.index = 0;
+    this.full = false;
+  }
+}
+
+/**
+ * Incremental EMA calculator - O(1) per bar.
+ * Seeded with the first value; subsequent values use the EMA formula.
+ *
+ * Usage:
+ *   const ema = new IncrementalEMA(12);
+ *   for (const price of prices) {
+ *     const value = ema.update(price); // always returns a number
+ *   }
+ */
+export class IncrementalEMA {
+  private value: number | null = null;
+  private readonly multiplier: number;
+
+  constructor(private readonly period: number) {
+    this.multiplier = 2 / (period + 1);
+  }
+
+  /**
+   * Feed the next price and return the current EMA.
+   * The first call seeds the EMA with the price itself.
+   */
+  update(price: number): number {
+    if (this.value === null) {
+      this.value = price;
+      return this.value;
+    }
+    this.value = (price - this.value) * this.multiplier + this.value;
+    return this.value;
+  }
+
+  /** Return the current EMA value without feeding a new price. */
+  current(): number | null {
+    return this.value;
+  }
+
+  /** Reset internal state for reuse. */
+  reset(): void {
+    this.value = null;
+  }
+}
+
+// =============================================================================
+// O(n) MAX DRAWDOWN / O(n) 最大回撤
+// =============================================================================
+
+/**
+ * Result of the single-pass max drawdown calculation.
+ */
+export interface MaxDrawdownResult {
+  /** Max drawdown as a positive ratio (e.g., 0.15 = 15%) */
+  maxDrawdown: number;
+  /** Absolute amount of the max drawdown */
+  maxDrawdownAmount: number;
+  /** Index in the equity curve where the peak before max drawdown occurred */
+  peakIndex: number;
+  /** Index in the equity curve where the trough of max drawdown occurred */
+  troughIndex: number;
+  /** Index where equity recovered to peak level, or null if not recovered */
+  recoveryIndex: number | null;
+}
+
+/**
+ * Single-pass max drawdown - O(n) time, O(1) space.
+ * Tracks running peak and computes drawdown at each point.
+ *
+ * @param equityCurve - Array of equity values (must have at least 1 element)
+ * @returns MaxDrawdownResult with indices, ratio, and amount
+ */
+export function calculateMaxDrawdownOptimized(equityCurve: number[]): MaxDrawdownResult {
+  if (equityCurve.length === 0) {
+    return {
+      maxDrawdown: 0,
+      maxDrawdownAmount: 0,
+      peakIndex: 0,
+      troughIndex: 0,
+      recoveryIndex: null,
+    };
+  }
+
+  let peak = equityCurve[0]!;
+  let peakIdx = 0;
+  let maxDD = 0;
+  let maxDDAmount = 0;
+  let ddPeakIdx = 0;
+  let ddTroughIdx = 0;
+
+  for (let i = 1; i < equityCurve.length; i++) {
+    const value = equityCurve[i]!;
+    if (value > peak) {
+      peak = value;
+      peakIdx = i;
+    }
+    // Avoid division by zero when peak is 0
+    const dd = peak > 0 ? (peak - value) / peak : 0;
+    if (dd > maxDD) {
+      maxDD = dd;
+      maxDDAmount = peak - value;
+      ddPeakIdx = peakIdx;
+      ddTroughIdx = i;
+    }
+  }
+
+  // Find recovery point: first index after trough where equity >= peak at ddPeakIdx
+  let recoveryIdx: number | null = null;
+  const peakValue = equityCurve[ddPeakIdx]!;
+  for (let i = ddTroughIdx + 1; i < equityCurve.length; i++) {
+    if (equityCurve[i]! >= peakValue) {
+      recoveryIdx = i;
+      break;
+    }
+  }
+
+  return {
+    maxDrawdown: maxDD,
+    maxDrawdownAmount: maxDDAmount,
+    peakIndex: ddPeakIdx,
+    troughIndex: ddTroughIdx,
+    recoveryIndex: recoveryIdx,
+  };
+}
+
+/**
+ * Batch SMA calculation using the sliding-window technique.
+ * Returns the same output format as the naive version (NaN for warmup bars)
+ * but runs in O(n) total instead of O(n * period).
+ */
+export function calculateSMAOptimized(data: number[], period: number): number[] {
+  const result: number[] = new Array(data.length);
+  let sum = 0;
+
+  for (let i = 0; i < data.length; i++) {
+    sum += data[i]!;
+    if (i >= period) {
+      sum -= data[i - period]!;
+    }
+    if (i < period - 1) {
+      result[i] = NaN;
+    } else {
+      result[i] = sum / period;
+    }
+  }
+  return result;
+}

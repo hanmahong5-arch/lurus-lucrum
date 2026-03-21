@@ -131,17 +131,17 @@ export function CacheBadge({
   savedTokens,
   className,
 }: CacheBadgeProps) {
-  // Don't render if not cached
-  if (!cached) {
-    return null;
-  }
-
   const epochMs = parseTimestamp(cachedAt);
   const isTimeKnown = !Number.isNaN(epochMs);
 
   const relativeTimeText = useMemo(() => {
     return formatRelativeTime(epochMs);
   }, [epochMs]);
+
+  // Don't render if not cached
+  if (!cached) {
+    return null;
+  }
 
   const ariaLabel = isTimeKnown
     ? `结果来自缓存，${relativeTimeText}`

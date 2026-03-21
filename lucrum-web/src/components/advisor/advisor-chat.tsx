@@ -14,6 +14,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useAbortController } from "@/hooks/use-abort-controller";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
@@ -246,6 +247,9 @@ export function AdvisorChat({
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Abort controller for chat requests — cleans up on unmount
+  const createChatSignal = useAbortController();
+
   // Get master agent summaries for display
   const masterAgents = getMasterAgentSummaries();
 
@@ -465,7 +469,8 @@ export function AdvisorChat({
       if (mode === "debate") {
         await handleDebateRequest(userMessage.content, history);
       } else {
-        // Standard chat request
+        // Standard chat request — uses abort controller for unmount cleanup
+        const chatSignal = createChatSignal();
         const response = await fetch("/api/advisor/chat", {
           method: "POST",
           headers: {
@@ -479,6 +484,7 @@ export function AdvisorChat({
             institutionRole: panelMode === "institution" ? selectedRole : undefined,
             context: stockContext ? { symbol: stockContext.symbol, symbolName: stockContext.name } : undefined,
           }),
+          signal: chatSignal,
         });
 
         if (!response.ok) {
@@ -526,12 +532,21 @@ export function AdvisorChat({
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to get response");
+      if (err instanceof Error && err.name === "AbortError") return;
+      const msg = err instanceof Error ? err.message : "Failed to get response";
+      const isTimeout = msg.includes('timeout') || msg.includes('TIMEOUT');
+      setError(
+        isTimeout
+          ? 'AI 响应超时，建议简化问题后重试'
+          : msg.includes('fetch') || msg.includes('network')
+            ? '网络连接失败，请检查网络后重试'
+            : `AI 顾问服务出错: ${msg}`
+      );
       console.error("Advisor chat error:", err);
     } finally {
       setIsLoading(false);
     }
-  }, [input, isLoading, messages, mode, advisorContext, sessionId, conversationStore]);
+  }, [input, isLoading, messages, mode, advisorContext, sessionId, conversationStore, createChatSignal]);
 
   // Handle debate mode requests
   const handleDebateRequest = async (
@@ -784,6 +799,7 @@ export function AdvisorChat({
           content: m.content,
         }));
 
+        const questionSignal = createChatSignal();
         fetch("/api/advisor/chat", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -793,6 +809,7 @@ export function AdvisorChat({
             mode,
             advisorContext,
           }),
+          signal: questionSignal,
         })
           .then(async (response) => {
             if (!response.ok) {
@@ -823,6 +840,7 @@ export function AdvisorChat({
             setMessages((prev) => [...prev, assistantMessage]);
           })
           .catch((err) => {
+            if (err instanceof Error && err.name === "AbortError") return;
             setError(
               err instanceof Error ? err.message : "Failed to get response"
             );
@@ -834,7 +852,7 @@ export function AdvisorChat({
           });
       }, 0);
     },
-    [isLoading, messages, mode, advisorContext]
+    [isLoading, messages, mode, advisorContext, createChatSignal]
   );
 
   // Get context summary for display

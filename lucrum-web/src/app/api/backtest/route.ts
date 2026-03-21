@@ -82,7 +82,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Strategy code is required",
+          error: {
+            code: 'BACKTEST_NO_STRATEGY',
+            title: '缺少策略代码',
+            description: '请先生成或输入策略代码再运行回测',
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '生成策略' },
+              { type: 'custom', label: '使用模板' },
+            ],
+          },
         },
         { status: 400 }
       );
@@ -109,7 +118,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "End date must be after start date",
+          error: {
+            code: 'BACKTEST_INVALID_DATE',
+            title: '日期范围无效',
+            description: '结束日期必须晚于开始日期，请调整日期范围',
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '调整日期范围' },
+            ],
+          },
         },
         { status: 400 }
       );
@@ -119,7 +136,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Date range cannot exceed 10 years",
+          error: {
+            code: 'BACKTEST_RANGE_TOO_LONG',
+            title: '回测周期过长',
+            description: '回测时间范围不能超过10年，请缩短日期范围',
+            severity: 'warning',
+            recoveryActions: [
+              { type: 'custom', label: '调整日期范围' },
+            ],
+          },
         },
         { status: 400 }
       );
@@ -252,10 +277,21 @@ export async function POST(request: NextRequest) {
         ? dataFetchAttempts.join('; ')
         : "No data source available";
       console.warn(`[Backtest] All data sources failed for ${config.symbol}: ${reasons}`);
+      const stockName = dataSourceInfo.stockName ?? config.symbol;
       return NextResponse.json(
         {
           success: false,
-          error: `Unable to fetch market data for symbol "${config.symbol}". Please check the symbol or try again later.`,
+          error: {
+            code: 'BACKTEST_NO_DATA',
+            title: '无法获取行情数据',
+            description: `${stockName}(${config.symbol})在${config.startDate}~${config.endDate}期间没有K线数据`,
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '更换股票' },
+              { type: 'custom', label: '调整日期范围' },
+              { type: 'navigate', href: '/dashboard/settings', label: '导入数据' },
+            ],
+          },
           details: reasons,
         },
         { status: 422 }
@@ -277,7 +313,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Insufficient data for backtesting (minimum 20 bars required)",
+          error: {
+            code: 'BACKTEST_INSUFFICIENT',
+            title: '数据量不足',
+            description: `${config.symbol}仅有${filteredKlines.length}根K线，至少需要20根才能进行回测`,
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '扩大日期范围' },
+              { type: 'custom', label: '更换股票' },
+            ],
+          },
         },
         { status: 400 }
       );
@@ -325,10 +370,22 @@ export async function POST(request: NextRequest) {
       });
     } catch (err) {
       console.error("Backtest API error:", err);
+      const msg = err instanceof Error ? err.message : "Internal server error";
       return NextResponse.json(
         {
           success: false,
-          error: err instanceof Error ? err.message : "Internal server error",
+          error: {
+            code: 'BACKTEST_ENGINE',
+            title: '回测引擎错误',
+            description: msg.includes('timeout') || msg.includes('TIMEOUT')
+              ? '回测运行超时，请缩短日期范围或简化策略后重试'
+              : `回测执行失败: ${msg}`,
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '修改策略参数' },
+              { type: 'retry', label: '重试' },
+            ],
+          },
         },
         { status: 500 }
       );

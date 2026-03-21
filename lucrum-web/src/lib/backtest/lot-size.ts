@@ -192,9 +192,14 @@ export function detectAssetType(symbol: string): AssetType {
   }
 
   // Index patterns (指数)
+  // NOTE: 000xxx are Shenzhen A-share STOCKS (not indices)!
+  // 000001=平安银行, 000858=五粮液 etc. — these are stocks.
+  // Shenzhen indices use 399xxx. Shanghai indices (000001=上证综指) are
+  // distinguished by market context, not code prefix alone.
   if (
-    cleanSymbol.startsWith("000") || // 上证指数
     cleanSymbol.startsWith("399") || // 深证指数
+    cleanSymbol.startsWith("880") || // 行业板块指数
+    cleanSymbol.startsWith("899") || // 概念板块指数
     cleanSymbol.includes("指数") ||
     cleanSymbol.includes("INDEX")
   ) {

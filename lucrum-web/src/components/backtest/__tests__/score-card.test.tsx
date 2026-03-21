@@ -33,9 +33,9 @@ function createMockScore(overrides?: Partial<StrategyScore>): StrategyScore {
     score: 78,
     description: "优秀",
     coreMetrics: {
-      totalReturn: new Decimal(0.235),
-      annualizedReturn: new Decimal(0.18),
-      maxDrawdown: new Decimal(0.083),
+      totalReturn: new Decimal(23.5),
+      annualizedReturn: new Decimal(18),
+      maxDrawdown: new Decimal(8.3),
       sharpeRatio: new Decimal(1.45),
     },
     breakdown: {
@@ -298,9 +298,9 @@ describe("ScoreCard", () => {
       const score = createMockScore({
         grade: "D",
         coreMetrics: {
-          totalReturn: new Decimal(-0.15),
-          annualizedReturn: new Decimal(-0.12),
-          maxDrawdown: new Decimal(0.35),
+          totalReturn: new Decimal(-15),
+          annualizedReturn: new Decimal(-12),
+          maxDrawdown: new Decimal(35),
           sharpeRatio: new Decimal(-0.5),
         },
       });

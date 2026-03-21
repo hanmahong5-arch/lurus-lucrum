@@ -3,7 +3,7 @@ import type { Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
-import { ErrorBoundary } from "@/components/error-boundary";
+import { EnhancedErrorBoundary } from "@/components/providers/enhanced-error-boundary";
 import { ToastSystem } from "@/components/feedback/toast-system";
 import { StatusBar } from "@/components/layout/status-bar";
 import { GlobalCommandPalette } from "@/components/command-palette";
@@ -79,11 +79,10 @@ export default function RootLayout({
         <LiveRegionProvider />
         <AuthSessionProvider>
           <I18nProvider>
-          {/* ErrorBoundary component handles logging internally */}
-          {/* ErrorBoundary 组件内部处理日志记录 */}
-          <ErrorBoundary componentName="App">
+          {/* Enhanced error boundary with recovery UI and workspace preservation */}
+          <EnhancedErrorBoundary componentName="App">
             {children}
-          </ErrorBoundary>
+          </EnhancedErrorBoundary>
           {/* Global command palette (Story 6.1) */}
           <GlobalCommandPalette />
           {/* Toast notification system (Story 1.2) */}

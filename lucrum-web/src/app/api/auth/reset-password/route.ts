@@ -1,304 +1,63 @@
 /**
  * Password Reset API Routes
- * 密码重置 API 路由
  *
- * POST /api/auth/reset-password - Request password reset
- * PUT /api/auth/reset-password - Reset password with token
+ * Local password reset is disabled. Users authenticate via Zitadel SSO
+ * and must reset passwords through the unified identity provider.
+ *
+ * All methods (POST/PUT/GET) return 501 with a redirect to Zitadel.
  */
 
-import { NextRequest, NextResponse } from "next/server";
-import { hash } from "bcryptjs";
-import {
-  createResetToken,
-  validateResetToken,
-  consumeResetToken,
-} from "@/lib/auth/reset-token";
+import { NextResponse } from "next/server";
 
 // =============================================================================
-// TYPES / 类型定义
+// Zitadel SSO password reset redirect URL
 // =============================================================================
 
-interface RequestResetBody {
-  email: string;
-}
+const ZITADEL_RESET_URL = `${process.env.ZITADEL_ISSUER || "https://auth.lurus.cn"}/ui/login/password/reset`;
 
-interface ResetPasswordBody {
-  token: string;
-  password: string;
-}
-
-// =============================================================================
-// TODO: Replace with real database integration (Drizzle ORM / PostgreSQL)
-// This in-memory store is a temporary placeholder.
-// =============================================================================
-// TODO: Replace with database queries via Drizzle ORM
-const USERS = new Map<string, { id: string; email: string; name: string; password: string; role: string }>();
-
-// =============================================================================
-// HELPER FUNCTIONS / 辅助函数
-// =============================================================================
-
-/**
- * Validate email format
- * 验证邮箱格式
- */
-function isValidEmail(email: string): boolean {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-}
-
-/**
- * Validate password strength
- * 验证密码强度
- */
-function isValidPassword(password: string): {
-  valid: boolean;
-  message: string;
-  messageEn: string;
-} {
-  if (password.length < 6) {
-    return {
-      valid: false,
-      message: "密码至少需要6个字符",
-      messageEn: "Password must be at least 6 characters",
-    };
-  }
-
-  if (password.length > 128) {
-    return {
-      valid: false,
-      message: "密码不能超过128个字符",
-      messageEn: "Password cannot exceed 128 characters",
-    };
-  }
-
-  // Optional: Add more password rules here
-  // if (!/[A-Z]/.test(password)) { ... }
-  // if (!/[0-9]/.test(password)) { ... }
-
-  return {
-    valid: true,
-    message: "密码有效",
-    messageEn: "Password is valid",
-  };
-}
-
-/**
- * Send reset email
- * TODO: Integrate with real email service (Stalwart SMTP / notification service)
- */
-async function sendResetEmail(email: string, token: string): Promise<boolean> {
-  // TODO: Replace console logging with actual email delivery
-  const resetUrl = `${process.env.NEXT_PUBLIC_APP_URL || "https://lucrum.lurus.cn"}/auth/reset-password?token=${token}`;
-
-  console.log("=".repeat(60));
-  console.log("PASSWORD RESET EMAIL (Development)");
-  console.log("=".repeat(60));
-  console.log(`To: ${email}`);
-  console.log(`Subject: 重置您的 Lucrum 密码 / Reset Your Lucrum Password`);
-  console.log(`Reset URL: ${resetUrl}`);
-  console.log(`Token: ${token}`);
-  console.log("=".repeat(60));
-
-  // Simulate email sending delay
-  await new Promise((resolve) => setTimeout(resolve, 100));
-
-  return true;
-}
-
-// =============================================================================
-// POST - Request Password Reset
-// POST - 请求密码重置
-// =============================================================================
-
-export async function POST(request: NextRequest) {
-  try {
-    const body = (await request.json()) as RequestResetBody;
-    const { email } = body;
-
-    // Validate email format
-    if (!email || !isValidEmail(email)) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "请输入有效的邮箱地址",
-          messageEn: "Please enter a valid email address",
-        },
-        { status: 400 }
-      );
-    }
-
-    const normalizedEmail = email.toLowerCase();
-
-    // Check if user exists (for security, we don't reveal this)
-    const userExists = USERS.has(normalizedEmail);
-
-    // Create reset token (even if user doesn't exist, for security)
-    const result = createResetToken(normalizedEmail);
-
-    if (!result.success) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: result.message,
-          messageEn: result.messageEn,
-        },
-        { status: 429 } // Too Many Requests
-      );
-    }
-
-    // Send email only if user exists
-    if (userExists && result.token) {
-      await sendResetEmail(normalizedEmail, result.token);
-    }
-
-    // Always return success to prevent email enumeration
-    return NextResponse.json({
-      success: true,
-      message: "如果该邮箱已注册，您将收到重置链接",
-      messageEn: "If this email is registered, you will receive a reset link",
-    });
-  } catch (error) {
-    console.error("Password reset request error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: "请求失败，请稍后再试",
-        messageEn: "Request failed, please try again later",
+function localResetDisabledResponse() {
+  // Local password reset is not available in production.
+  // Users authenticate via Zitadel SSO — password reset goes through auth.lurus.cn
+  return NextResponse.json(
+    {
+      error: {
+        code: "AUTH_LOCAL_DISABLED",
+        title: "本地密码重置不可用",
+        description: "请通过 Lurus 统一账户系统重置密码",
+        severity: "info",
+        recoveryActions: [
+          {
+            type: "navigate",
+            href: ZITADEL_RESET_URL,
+            label: "去重置密码",
+          },
+        ],
       },
-      { status: 500 }
-    );
-  }
+    },
+    { status: 501 }
+  );
 }
 
 // =============================================================================
-// PUT - Reset Password with Token
-// PUT - 使用令牌重置密码
+// POST - Request Password Reset (disabled, redirects to Zitadel)
 // =============================================================================
 
-export async function PUT(request: NextRequest) {
-  try {
-    const body = (await request.json()) as ResetPasswordBody;
-    const { token, password } = body;
-
-    // Validate inputs
-    if (!token) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "缺少重置令牌",
-          messageEn: "Missing reset token",
-        },
-        { status: 400 }
-      );
-    }
-
-    // Validate password
-    const passwordCheck = isValidPassword(password);
-    if (!passwordCheck.valid) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: passwordCheck.message,
-          messageEn: passwordCheck.messageEn,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Validate token
-    const tokenResult = validateResetToken(token);
-    if (!tokenResult.valid || !tokenResult.email) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: tokenResult.message,
-          messageEn: tokenResult.messageEn,
-        },
-        { status: 400 }
-      );
-    }
-
-    // Find user
-    const user = USERS.get(tokenResult.email);
-    if (!user) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "用户不存在",
-          messageEn: "User not found",
-        },
-        { status: 404 }
-      );
-    }
-
-    // Hash new password
-    const hashedPassword = await hash(password, 10);
-
-    // Update user password (TODO: persist to database)
-    user.password = hashedPassword;
-    USERS.set(tokenResult.email, user);
-
-    // Consume the token
-    consumeResetToken(token);
-
-    console.log(`Password reset successful for: ${tokenResult.email}`);
-
-    return NextResponse.json({
-      success: true,
-      message: "密码重置成功，请使用新密码登录",
-      messageEn: "Password reset successful, please login with your new password",
-    });
-  } catch (error) {
-    console.error("Password reset error:", error);
-    return NextResponse.json(
-      {
-        success: false,
-        message: "重置失败，请稍后再试",
-        messageEn: "Reset failed, please try again later",
-      },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  return localResetDisabledResponse();
 }
 
 // =============================================================================
-// GET - Validate Token (for UI)
-// GET - 验证令牌（用于 UI）
+// PUT - Reset Password with Token (disabled, redirects to Zitadel)
 // =============================================================================
 
-export async function GET(request: NextRequest) {
-  try {
-    const { searchParams } = new URL(request.url);
-    const token = searchParams.get("token");
+export async function PUT() {
+  return localResetDisabledResponse();
+}
 
-    if (!token) {
-      return NextResponse.json(
-        {
-          valid: false,
-          message: "缺少令牌参数",
-          messageEn: "Missing token parameter",
-        },
-        { status: 400 }
-      );
-    }
+// =============================================================================
+// GET - Validate Token (disabled, redirects to Zitadel)
+// =============================================================================
 
-    const result = validateResetToken(token);
-
-    return NextResponse.json({
-      valid: result.valid,
-      message: result.message,
-      messageEn: result.messageEn,
-    });
-  } catch (error) {
-    console.error("Token validation error:", error);
-    return NextResponse.json(
-      {
-        valid: false,
-        message: "验证失败",
-        messageEn: "Validation failed",
-      },
-      { status: 500 }
-    );
-  }
+export async function GET() {
+  return localResetDisabledResponse();
 }

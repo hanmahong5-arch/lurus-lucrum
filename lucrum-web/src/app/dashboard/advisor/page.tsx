@@ -4,9 +4,9 @@
  * AI Advisor Hub
  *
  * Merges the former advisor + agents pages into a single tabbed view:
- *   - Intelligent chat      (original advisor)
- *   - Bull/Bear debate      (debate mode)
- *   - Agent configuration   (from /dashboard/agents)
+ *   - Intelligent chat      (original advisor + context sidebar)
+ *   - Bull/Bear debate      (visual split debate mode)
+ *   - Agent configuration   (visual agent card grid)
  *
  * Tab state is persisted in the URL via `?tab=` for deep-linking.
  *
@@ -24,21 +24,33 @@ import { useAccountOverview } from "@/hooks/useAccountOverview";
 import { useUpgradeGate } from "@/hooks/use-upgrade-gate";
 
 // Dynamic imports to avoid SSR issues
-const AdvisorChat = dynamic(
-  () => import("@/components/advisor/advisor-chat"),
+const AdvisorChatWithSidebar = dynamic(
+  () =>
+    import("@/components/advisor/advisor-chat-with-sidebar").then(
+      (m) => m.AdvisorChatWithSidebar
+    ),
   {
     ssr: false,
     loading: () => <TabSkeleton />,
-  },
+  }
 );
 
-const AgentsContent = dynamic(
+const DebatePanel = dynamic(
   () =>
-    import("@/components/pages/agents-content").then((m) => m.AgentsContent),
+    import("@/components/advisor/debate-panel").then((m) => m.DebatePanel),
   {
     ssr: false,
     loading: () => <TabSkeleton />,
-  },
+  }
+);
+
+const AgentGrid = dynamic(
+  () =>
+    import("@/components/advisor/agent-grid").then((m) => m.AgentGrid),
+  {
+    ssr: false,
+    loading: () => <TabSkeleton />,
+  }
 );
 
 function TabSkeleton() {
@@ -58,32 +70,6 @@ const TABS = [
   { value: "agents", label: "代理配置" },
 ];
 
-/**
- * Framework Overview Component
- * Compact philosophy hint bar
- */
-function FrameworkOverview() {
-  return (
-    <div className="px-4 py-2 bg-surface/30 border-b border-border">
-      <div className="flex items-center justify-between text-xs gap-2">
-        <div className="flex items-center gap-2 sm:gap-4 text-white/50 min-w-0">
-          <span className="text-accent shrink-0">*</span>
-          <span className="truncate sm:whitespace-normal">
-            <span className="text-white/70">决策质量</span> &gt; 执行速度 ·{" "}
-            <span className="text-white/70 hidden sm:inline">深度理解</span>
-            <span className="hidden sm:inline"> &gt; 快速反应 · </span>
-            <span className="text-white/70 hidden sm:inline">系统思考</span>
-            <span className="hidden sm:inline"> &gt; 碎片信息</span>
-          </span>
-        </div>
-        <div className="text-white/30 hidden sm:block shrink-0">
-          Powered by DeepSeek + Multi-Agent
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function AdvisorPageContent() {
   const searchParams = useSearchParams();
   const symbol = searchParams.get("symbol") ?? undefined;
@@ -97,14 +83,15 @@ function AdvisorPageContent() {
     <div className="min-h-screen bg-background text-white">
       <DashboardHeader />
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 py-4 sm:py-6">
+      <main className="max-w-[1920px] mx-auto px-3 sm:px-6 py-4 sm:py-6">
         {!canAccess ? (
           /* Upgrade gate for free users */
           <div className="flex flex-col items-center justify-center h-[calc(100vh-120px)] px-4">
             <div className="max-w-md text-center space-y-4">
               <h2 className="text-xl font-bold text-white">AI 投资顾问</h2>
               <p className="text-sm text-white/50">
-                11 位专业 AI 分析师，涵盖 7 大投资流派，多空辩论模式帮你全面分析投资决策
+                11 位专业 AI 分析师，涵盖 7
+                大投资流派，多空辩论模式帮你全面分析投资决策
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-[11px] text-white/40">
                 <div className="p-2 bg-white/5 rounded-lg">巴菲特价值派</div>
@@ -121,7 +108,8 @@ function AdvisorPageContent() {
                 升级到进阶版解锁
               </Link>
               <p className="text-xs text-white/30">
-                进阶版 ¥49/月 · 基础单 Agent 模式 | 专业版 ¥149/月 · 完整 11 Agent + 辩论
+                进阶版 ¥49/月 · 基础单 Agent 模式 | 专业版 ¥149/月 · 完整 11
+                Agent + 辩论
               </p>
             </div>
           </div>
@@ -142,32 +130,20 @@ function AdvisorPageContent() {
                   switch (activeTab) {
                     case "chat":
                       return (
-                        <div className="flex flex-col">
-                          <FrameworkOverview />
-                          <div className="h-[calc(100vh-320px)] min-h-[400px]">
-                            <AdvisorChat
-                              className="h-full"
-                              initialSymbol={symbol}
-                              initialSymbolName={name}
-                            />
-                          </div>
-                        </div>
+                        <AdvisorChatWithSidebar
+                          initialSymbol={symbol}
+                          initialSymbolName={name}
+                        />
                       );
                     case "debate":
                       return (
-                        <div className="flex flex-col">
-                          <FrameworkOverview />
-                          <div className="h-[calc(100vh-320px)] min-h-[400px]">
-                            <AdvisorChat
-                              className="h-full"
-                              initialSymbol={symbol}
-                              initialSymbolName={name}
-                            />
-                          </div>
-                        </div>
+                        <DebatePanel
+                          initialSymbol={symbol}
+                          initialSymbolName={name}
+                        />
                       );
                     case "agents":
-                      return <AgentsContent />;
+                      return <AgentGrid />;
                     default:
                       return null;
                   }

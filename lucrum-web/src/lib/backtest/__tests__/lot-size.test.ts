@@ -19,9 +19,9 @@ describe('detectAssetType', () => {
     expect(detectAssetType('002594')).toBe('stock');
   });
 
-  it('should detect index for symbols starting with 000', () => {
-    // IMPORTANT: 000001 is an index (上证指数), not a stock
-    expect(detectAssetType('000001')).toBe('index');
+  it('should detect stock for Shenzhen main board (000xxx)', () => {
+    // 000001 is 平安银行 (a stock), not an index — only 399xxx are Shenzhen indices
+    expect(detectAssetType('000001')).toBe('stock');
   });
 
   it('should detect ETF starting with 51', () => {
@@ -133,7 +133,7 @@ describe('getLotSizeConfig', () => {
   });
 
   it('should return index config', () => {
-    const config = getLotSizeConfig('000001');
+    const config = getLotSizeConfig('399001');
     expect(config.lotSize).toBe(1);
     expect(config.allowFractional).toBe(true);
   });
@@ -318,22 +318,22 @@ describe('validateQuantity', () => {
 describe('formatQuantityWithUnit', () => {
   it('should format stock quantity with lots', () => {
     const formatted = formatQuantityWithUnit(1000, '600519');
-    expect(formatted).toBe('1000股 (10手)');
+    expect(formatted).toBe('10手 (1,000股)');
   });
 
   it('should format single lot of stock', () => {
     const formatted = formatQuantityWithUnit(100, '600519');
-    expect(formatted).toBe('100股 (1手)');
+    expect(formatted).toBe('1手 (100股)');
   });
 
   it('should format ETF quantity with lots', () => {
     const formatted = formatQuantityWithUnit(100, '510050');
-    expect(formatted).toBe('100份 (1手)');
+    expect(formatted).toBe('1手 (100份)');
   });
 
   it('should format multiple lots of ETF', () => {
     const formatted = formatQuantityWithUnit(500, '510050');
-    expect(formatted).toBe('500份 (5手)');
+    expect(formatted).toBe('5手 (500份)');
   });
 
   it('should format crypto with fractional display', () => {
@@ -362,7 +362,7 @@ describe('formatQuantityWithUnit', () => {
 
   it('should handle zero quantity', () => {
     const formatted = formatQuantityWithUnit(0, '600519');
-    expect(formatted).toBe('0股 (0手)');
+    expect(formatted).toBe('0股');
   });
 });
 

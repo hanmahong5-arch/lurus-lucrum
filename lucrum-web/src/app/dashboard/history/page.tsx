@@ -1,70 +1,85 @@
 "use client";
 
 /**
- * History Page - Trading and Strategy History
+ * History Hub Page
  *
- * Fetches real data from the history API endpoints:
- * - GET /api/history?type=strategy  for strategy generation history
- * - GET /api/history?type=backtest  for backtest history
- * - GET /api/history?type=trading   for trading history
+ * Tab-based organization:
+ * - Backtest History: Timeline view with comparison + re-run
+ * - Trade Records: Buy/sell history with P&L
+ * - Strategy Versions: Version diff with rollback
+ * - AI Conversations: Advisor chat history
  *
- * Shows an empty state when no data exists.
+ * Each tab fetches its own data from the appropriate API.
+ * Empty states with context-specific links.
  */
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import dynamic from "next/dynamic";
+import { useAbortController } from "@/hooks/use-abort-controller";
+import { useStaleGuard } from "@/hooks/use-stale-guard";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ErrorCard } from "@/components/ui/error-card";
+import { ErrorCatalog } from "@/lib/errors/error-catalog";
+import type { AppError } from "@/lib/errors/error-types";
+import { PageTabs } from "@/components/ui/page-tabs";
+import { Search, GitCompare } from "lucide-react";
+import type { BacktestTimelineEntry } from "@/components/history/backtest-timeline";
+import type { TradeHistoryItem } from "@/components/history/trade-history-list";
+import type { StrategyVersion } from "@/components/history/strategy-version-list";
+import type { ConversationItem } from "@/components/history/conversation-list";
+import { HistoryEmptyState } from "@/components/history/empty-state";
+import { TableSkeleton, PanelSkeleton } from "@/components/ui/loading-skeleton";
+
+// ---------------------------------------------------------------------------
+// Dynamic imports — split heavy history list components into separate chunks
+// ---------------------------------------------------------------------------
+
+const BacktestTimeline = dynamic(
+  () => import("@/components/history/backtest-timeline").then((m) => ({ default: m.BacktestTimeline })),
+  { ssr: false, loading: () => <TableSkeleton rows={5} /> },
+);
+
+const TradeHistoryList = dynamic(
+  () => import("@/components/history/trade-history-list").then((m) => ({ default: m.TradeHistoryList })),
+  { ssr: false, loading: () => <TableSkeleton rows={5} /> },
+);
+
+const StrategyVersionList = dynamic(
+  () => import("@/components/history/strategy-version-list").then((m) => ({ default: m.StrategyVersionList })),
+  { ssr: false, loading: () => <TableSkeleton rows={3} /> },
+);
+
+const ConversationList = dynamic(
+  () => import("@/components/history/conversation-list").then((m) => ({ default: m.ConversationList })),
+  { ssr: false, loading: () => <TableSkeleton rows={3} /> },
+);
+
+const HistoryComparison = dynamic(
+  () => import("@/components/history/history-comparison").then((m) => ({ default: m.HistoryComparison })),
+  { ssr: false, loading: () => <PanelSkeleton /> },
+);
 
 // =============================================================================
-// Types
+// CONSTANTS
 // =============================================================================
 
-interface TradeHistory {
-  id: string;
-  type: "trade";
-  symbol: string;
-  side: "buy" | "sell";
-  price: number;
-  size: number;
-  total: number;
-  pnl?: number;
-  timestamp: string;
-  status: "completed" | "cancelled";
-}
-
-interface StrategyHistory {
-  id: string;
-  type: "strategy";
-  name: string;
-  prompt: string;
-  backtestReturn?: number;
-  backtestWinRate?: number;
-  timestamp: string;
-  status: "success" | "failed" | "pending";
-}
-
-interface AdvisorHistory {
-  id: string;
-  type: "advisor";
-  query: string;
-  responsePreview: string;
-  category: string;
-  timestamp: string;
-}
-
-type HistoryEntry = TradeHistory | StrategyHistory | AdvisorHistory;
+const TABS = [
+  { value: "backtest", label: "回测历史" },
+  { value: "trades", label: "交易记录" },
+  { value: "versions", label: "策略版本" },
+  { value: "conversations", label: "AI 对话" },
+] as const;
 
 // =============================================================================
-// Data Fetching
+// DATA FETCHING
 // =============================================================================
 
-async function fetchHistoryData(): Promise<HistoryEntry[]> {
-  const entries: HistoryEntry[] = [];
+async function fetchBacktestHistory(): Promise<BacktestTimelineEntry[]> {
+  const entries: BacktestTimelineEntry[] = [];
 
-  // Fetch all three history types in parallel
-  const [strategyRes, backtestRes, tradingRes] = await Promise.allSettled([
+  const [strategyRes, backtestRes] = await Promise.allSettled([
     fetch("/api/history?type=strategy&limit=50"),
     fetch("/api/history?type=backtest&limit=50"),
-    fetch("/api/history?type=trading&limit=50"),
   ]);
 
   // Parse strategy history
@@ -75,22 +90,24 @@ async function fetchHistoryData(): Promise<HistoryEntry[]> {
         for (const s of data.data) {
           entries.push({
             id: `S${s.id}`,
-            type: "strategy",
-            name: s.strategyName || s.strategy_name || "Unnamed Strategy",
-            prompt: s.description || s.strategyCode?.slice(0, 80) || "",
-            backtestReturn: s.totalReturn ?? s.total_return ?? undefined,
-            backtestWinRate: s.winRate ?? s.win_rate ?? undefined,
             timestamp: s.createdAt || s.created_at || new Date().toISOString(),
-            status: s.isActive === false ? "failed" : "success",
+            strategyName: s.strategyName || s.strategy_name || "Unnamed Strategy",
+            symbol: s.symbol || "",
+            symbolName: s.stockName || "",
+            grade: s.grade || s.gradeScore || null,
+            annualizedReturn: s.annualizedReturn ?? s.annualized_return ?? null,
+            winRate: s.winRate ?? s.win_rate ?? null,
+            maxDrawdown: s.maxDrawdown ?? s.max_drawdown ?? null,
+            sharpeRatio: s.sharpeRatio ?? s.sharpe_ratio ?? null,
           });
         }
       }
     } catch {
-      // Strategy history fetch failed silently
+      // Strategy fetch failed silently
     }
   }
 
-  // Parse backtest history (map to strategy-like entries for display)
+  // Parse backtest history
   if (backtestRes.status === "fulfilled" && backtestRes.value.ok) {
     try {
       const data = await backtestRes.value.json();
@@ -98,437 +115,408 @@ async function fetchHistoryData(): Promise<HistoryEntry[]> {
         for (const b of data.data) {
           entries.push({
             id: `B${b.id}`,
-            type: "strategy",
-            name: b.stockName ? `${b.symbol} ${b.stockName}` : b.symbol || "Backtest",
-            prompt: `${b.startDate} ~ ${b.endDate} | ${b.timeframe || "1d"}`,
-            backtestReturn: b.totalReturn ?? b.total_return ?? undefined,
-            backtestWinRate: b.winRate ?? b.win_rate ?? undefined,
             timestamp: b.createdAt || b.created_at || new Date().toISOString(),
-            status: "success",
+            strategyName: b.strategyName || b.strategy_name || "Backtest",
+            symbol: b.symbol || "",
+            symbolName: b.stockName || b.stock_name || "",
+            grade: b.grade || b.gradeScore || null,
+            annualizedReturn: b.annualizedReturn ?? b.annualized_return ?? b.totalReturn ?? b.total_return ?? null,
+            winRate: b.winRate ?? b.win_rate ?? null,
+            maxDrawdown: b.maxDrawdown ?? b.max_drawdown ?? null,
+            sharpeRatio: b.sharpeRatio ?? b.sharpe_ratio ?? null,
+            stockCount: b.stockCount ?? b.stock_count,
+            averageReturn: b.averageReturn ?? b.average_return ?? null,
           });
         }
       }
     } catch {
-      // Backtest history fetch failed silently
+      // Backtest fetch failed silently
     }
   }
 
-  // Parse trading history
-  if (tradingRes.status === "fulfilled" && tradingRes.value.ok) {
-    try {
-      const data = await tradingRes.value.json();
-      if (data.success && Array.isArray(data.data)) {
-        for (const t of data.data) {
-          entries.push({
-            id: `T${t.id}`,
-            type: "trade",
-            symbol: t.symbol || "",
-            side: t.side === "sell" ? "sell" : "buy",
-            price: t.price ?? 0,
-            size: t.size ?? 0,
-            total: t.amount ?? (t.price ?? 0) * (t.size ?? 0),
-            pnl: t.realizedPnl ?? t.realized_pnl ?? undefined,
-            timestamp: t.executedAt || t.executed_at || t.createdAt || new Date().toISOString(),
-            status: t.status === "cancelled" ? "cancelled" : "completed",
-          });
-        }
-      }
-    } catch {
-      // Trading history fetch failed silently
-    }
-  }
-
-  // Sort by timestamp descending
-  entries.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  // Sort descending
+  entries.sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime(),
+  );
 
   return entries;
 }
 
-// =============================================================================
-// Helpers
-// =============================================================================
+async function fetchTradeHistory(): Promise<TradeHistoryItem[]> {
+  try {
+    const res = await fetch("/api/history?type=trading&limit=50");
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.data)) return [];
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return dateStr;
-
-  const now = new Date();
-  const diff = now.getTime() - date.getTime();
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-
-  if (days === 0) {
-    return date.toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" });
+    return data.data.map((t: Record<string, unknown>) => ({
+      id: `T${t.id}`,
+      symbol: (t.symbol as string) || "",
+      side: t.side === "sell" ? "sell" : "buy",
+      price: (t.price as number) ?? 0,
+      size: (t.size as number) ?? 0,
+      total: (t.amount as number) ?? ((t.price as number) ?? 0) * ((t.size as number) ?? 0),
+      pnl: (t.realizedPnl as number) ?? (t.realized_pnl as number) ?? undefined,
+      timestamp:
+        (t.executedAt as string) ||
+        (t.executed_at as string) ||
+        (t.createdAt as string) ||
+        new Date().toISOString(),
+      status: t.status === "cancelled" ? "cancelled" : "completed",
+    }));
+  } catch {
+    return [];
   }
-  if (days === 1) return "昨天";
-  if (days < 7) return `${days}天前`;
-  return date.toLocaleDateString("zh-CN");
+}
+
+async function fetchStrategyVersions(): Promise<StrategyVersion[]> {
+  // Placeholder: strategy versions are not yet served by an API
+  // Return empty to trigger empty state
+  return [];
+}
+
+async function fetchConversations(): Promise<ConversationItem[]> {
+  // Placeholder: conversation history is not yet served by an API
+  // Return empty to trigger empty state
+  return [];
 }
 
 // =============================================================================
-// Page Component
+// STATS BAR
 // =============================================================================
 
-export default function HistoryPage() {
-  const [activeTab, setActiveTab] = useState<
-    "all" | "trade" | "strategy" | "advisor"
-  >("all");
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  const loadHistory = useCallback(async () => {
-    setIsLoading(true);
-    setFetchError(null);
-    try {
-      const data = await fetchHistoryData();
-      setHistory(data);
-    } catch (err) {
-      setFetchError(
-        err instanceof Error ? err.message : "Failed to load history"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadHistory();
-  }, [loadHistory]);
-
-  // Filter history based on active tab and search
-  const filteredHistory = history.filter((entry) => {
-    const matchesTab = activeTab === "all" || entry.type === activeTab;
-    const matchesSearch =
-      searchQuery === "" ||
-      (entry.type === "trade" &&
-        entry.symbol.toLowerCase().includes(searchQuery.toLowerCase())) ||
-      (entry.type === "strategy" &&
-        (entry.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.prompt.toLowerCase().includes(searchQuery.toLowerCase()))) ||
-      (entry.type === "advisor" &&
-        (entry.query.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          entry.responsePreview
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase())));
-    return matchesTab && matchesSearch;
-  });
-
-  // Statistics calculation
-  const stats = {
-    totalTrades: history.filter((h) => h.type === "trade").length,
-    completedTrades: history.filter(
-      (h) => h.type === "trade" && h.status === "completed",
-    ).length,
-    totalStrategies: history.filter((h) => h.type === "strategy").length,
-    successStrategies: history.filter(
-      (h) => h.type === "strategy" && h.status === "success",
-    ).length,
-    totalAdvisorQueries: history.filter((h) => h.type === "advisor").length,
-  };
+function StatsBar({
+  backtestCount,
+  tradeCount,
+  versionCount,
+  conversationCount,
+}: {
+  backtestCount: number;
+  tradeCount: number;
+  versionCount: number;
+  conversationCount: number;
+}) {
+  const stats = [
+    { label: "回测记录", value: backtestCount, color: "text-accent" },
+    { label: "交易记录", value: tradeCount, color: "text-profit" },
+    { label: "策略版本", value: versionCount, color: "text-primary" },
+    { label: "对话记录", value: conversationCount, color: "text-chart-purple" },
+  ];
 
   return (
-    <div className="min-h-screen bg-background">
-      <DashboardHeader />
-
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
-        {/* Page title and stats */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold text-white mb-2">
-            历史记录
-            <span className="text-base font-normal text-white/50 ml-2">
-              / History
-            </span>
-          </h1>
-          <p className="text-white/60 mb-6">
-            查看您的交易、策略生成和投资顾问对话历史
-          </p>
-
-          {/* Stats cards */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
-              <div className="text-white/50 text-xs mb-1">总交易次数</div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {stats.totalTrades}
-              </div>
-              <div className="text-xs text-[#10b981]">
-                {stats.completedTrades} 已完成
-              </div>
-            </div>
-            <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
-              <div className="text-white/50 text-xs mb-1">生成策略数</div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {stats.totalStrategies}
-              </div>
-              <div className="text-xs text-[#10b981]">
-                {stats.successStrategies} 成功
-              </div>
-            </div>
-            <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
-              <div className="text-white/50 text-xs mb-1">顾问咨询</div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {stats.totalAdvisorQueries}
-              </div>
-              <div className="text-xs text-[#f5a623]">三道六术分析</div>
-            </div>
-            <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46]">
-              <div className="text-white/50 text-xs mb-1">记录总数</div>
-              <div className="text-2xl font-bold text-white font-mono tabular-nums">
-                {history.length}
-              </div>
-              <div className="text-xs text-white/50">全部类型</div>
-            </div>
+    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          className="bg-surface rounded-lg p-3 border border-border"
+        >
+          <div className="text-[11px] text-white/40 mb-1">{s.label}</div>
+          <div className={`text-xl font-bold font-mono tabular-nums ${s.color}`}>
+            {s.value}
           </div>
         </div>
-
-        {/* Filters and search */}
-        <div className="flex items-center justify-between mb-6">
-          {/* Tabs */}
-          <div className="flex gap-2">
-            {[
-              { key: "all", label: "全部 / All" },
-              { key: "trade", label: "交易 / Trades" },
-              { key: "strategy", label: "策略 / Strategies" },
-              { key: "advisor", label: "顾问 / Advisor" },
-            ].map((tab) => (
-              <button
-                key={tab.key}
-                onClick={() => setActiveTab(tab.key as typeof activeTab)}
-                className={`px-4 py-2 text-sm rounded-lg transition ${
-                  activeTab === tab.key
-                    ? "bg-[#f5a623]/10 text-[#f5a623] border border-[#f5a623]/30"
-                    : "text-white/60 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
-
-          {/* Search */}
-          <div className="relative">
-            <input
-              type="text"
-              placeholder="搜索历史记录..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-64 bg-[#1a1f36] border border-[#2a2f46] rounded-lg px-4 py-2 text-sm text-white placeholder-white/30 focus:outline-none focus:border-[#f5a623]/50"
-            />
-            <svg
-              className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
-          </div>
-        </div>
-
-        {/* History list */}
-        <div className="space-y-3">
-          {isLoading ? (
-            <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
-              <div className="text-white/50 text-lg mb-2">加载中...</div>
-              <div className="text-white/30 text-sm">
-                正在获取历史记录
-              </div>
-            </div>
-          ) : fetchError ? (
-            <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
-              <div className="text-white/50 text-lg mb-2">加载失败</div>
-              <div className="text-white/30 text-sm mb-4">
-                {fetchError}
-              </div>
-              <button
-                onClick={loadHistory}
-                className="px-4 py-2 text-sm bg-[#f5a623]/10 text-[#f5a623] rounded-lg hover:bg-[#f5a623]/20 transition"
-              >
-                重试
-              </button>
-            </div>
-          ) : filteredHistory.length === 0 ? (
-            <div className="bg-[#1a1f36] rounded-xl p-12 text-center border border-[#2a2f46]">
-              <div className="text-white/30 text-lg mb-2">
-                {history.length === 0 ? "暂无历史记录" : "暂无记录"}
-              </div>
-              <div className="text-white/20 text-sm">
-                {history.length === 0
-                  ? "No history yet. Run your first backtest to see results here."
-                  : searchQuery
-                    ? "尝试其他搜索关键词"
-                    : "当前筛选条件下无记录"}
-              </div>
-            </div>
-          ) : (
-            filteredHistory.map((entry) => (
-              <HistoryCard key={entry.id} entry={entry} />
-            ))
-          )}
-        </div>
-
-        {/* Pagination hint */}
-        {filteredHistory.length > 0 && (
-          <div className="mt-6 text-center text-white/30 text-sm">
-            显示 {filteredHistory.length} 条记录
-          </div>
-        )}
-      </main>
+      ))}
     </div>
   );
 }
 
 // =============================================================================
-// Card Component
+// INNER PAGE (Suspense boundary for useSearchParams)
 // =============================================================================
 
-function HistoryCard({ entry }: { entry: HistoryEntry }) {
-  if (entry.type === "trade") {
-    return (
-      <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46] hover:border-[#3a3f56] transition">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div
-              className={`w-10 h-10 rounded-lg flex items-center justify-center ${
-                entry.side === "buy" ? "bg-[#10b981]/10" : "bg-[#ef4444]/10"
-              }`}
-            >
-              <span
-                className={
-                  entry.side === "buy" ? "text-[#10b981]" : "text-[#ef4444]"
+function HistoryPageInner() {
+  // Data states
+  const [backtestEntries, setBacktestEntries] = useState<BacktestTimelineEntry[]>([]);
+  const [tradeEntries, setTradeEntries] = useState<TradeHistoryItem[]>([]);
+  const [versionEntries, setVersionEntries] = useState<StrategyVersion[]>([]);
+  const [conversationEntries, setConversationEntries] = useState<ConversationItem[]>([]);
+
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<AppError | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Comparison state
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showComparison, setShowComparison] = useState(false);
+
+  // Safety: abort data loading on unmount
+  const createSignal = useAbortController();
+
+  // Debounce search input (300ms trailing)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    searchTimerRef.current = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 300);
+    return () => {
+      if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+    };
+  }, [searchQuery]);
+
+  // Rerun guard: only run the last clicked rerun (debounce rapid clicks)
+  const [rerunningId, setRerunningId] = useState<string | null>(null);
+
+  // ─── Data Loading ──────────────────────────────────────────────────
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const [bt, tr, ver, conv] = await Promise.all([
+        fetchBacktestHistory(),
+        fetchTradeHistory(),
+        fetchStrategyVersions(),
+        fetchConversations(),
+      ]);
+      setBacktestEntries(bt);
+      setTradeEntries(tr);
+      setVersionEntries(ver);
+      setConversationEntries(conv);
+    } catch (err) {
+      const loadErr = ErrorCatalog.dataLoadFailed('历史记录');
+      loadErr.raw = err instanceof Error ? err.message : String(err);
+      setFetchError(loadErr);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadAll();
+  }, [loadAll]);
+
+  // ─── Filtered entries ──────────────────────────────────────────────
+  const filteredBacktest = useMemo(() => {
+    if (!debouncedSearch) return backtestEntries;
+    const q = debouncedSearch.toLowerCase();
+    return backtestEntries.filter(
+      (e) =>
+        e.strategyName.toLowerCase().includes(q) ||
+        e.symbol.toLowerCase().includes(q) ||
+        e.symbolName.toLowerCase().includes(q),
+    );
+  }, [backtestEntries, debouncedSearch]);
+
+  const filteredTrades = useMemo(() => {
+    if (!debouncedSearch) return tradeEntries;
+    const q = debouncedSearch.toLowerCase();
+    return tradeEntries.filter((e) => e.symbol.toLowerCase().includes(q));
+  }, [tradeEntries, debouncedSearch]);
+
+  // ─── Comparison helpers ────────────────────────────────────────────
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
+
+  const selectedBacktestEntries = useMemo(
+    () => backtestEntries.filter((e) => selectedIds.has(e.id)),
+    [backtestEntries, selectedIds],
+  );
+
+  // ─── Handlers ──────────────────────────────────────────────────────
+  const handleRerun = useCallback((entry: BacktestTimelineEntry) => {
+    // If already rerunning, do nothing (prevent rapid clicks)
+    if (rerunningId !== null) return;
+    setRerunningId(entry.id);
+    // Simulate rerun (actual implementation would call backtest API)
+    alert(`重新运行: ${entry.strategyName} x ${entry.symbolName || entry.symbol}`);
+    setRerunningId(null);
+  }, [rerunningId]);
+
+  const handleViewBacktestDetail = useCallback((_entry: BacktestTimelineEntry) => {
+    // Navigate to backtest detail or show panel
+    // For now, no-op
+  }, []);
+
+  const handleRollback = useCallback((version: StrategyVersion) => {
+    alert(`回滚到版本 v${version.version}: ${version.strategyName}`);
+  }, []);
+
+  // ─── Tab content renderer ─────────────────────────────────────────
+  const renderTab = useCallback(
+    (tab: string) => {
+      if (loading) {
+        return (
+          <div className="flex flex-col items-center justify-center py-16">
+            <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin mb-3" />
+            <span className="text-sm text-white/40">正在加载...</span>
+          </div>
+        );
+      }
+
+      if (fetchError) {
+        return (
+          <div className="flex flex-col items-center justify-center py-16 max-w-md mx-auto">
+            <ErrorCard
+              error={fetchError}
+              onAction={(action) => {
+                if (action.type === 'retry') {
+                  setFetchError(null);
+                  void loadAll();
                 }
-              >
-                {entry.side === "buy" ? "买" : "卖"}
-              </span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-medium">{entry.symbol}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded ${
-                    entry.status === "completed"
-                      ? "bg-[#10b981]/10 text-[#10b981]"
-                      : "bg-white/10 text-white/50"
-                  }`}
-                >
-                  {entry.status === "completed" ? "已完成" : "已取消"}
-                </span>
-              </div>
-              <div className="text-sm text-white/50 font-mono tabular-nums">
-                {entry.size} @ {entry.price.toLocaleString()}
-              </div>
-            </div>
+              }}
+            />
           </div>
-          <div className="text-right">
-            <div className="text-white font-medium font-mono tabular-nums">
-              {entry.total.toLocaleString()}
-            </div>
-            {entry.pnl !== undefined && (
-              <div
-                className={`text-sm font-mono tabular-nums ${entry.pnl >= 0 ? "text-[#10b981]" : "text-[#ef4444]"}`}
-              >
-                {entry.pnl >= 0 ? "+" : ""}{entry.pnl.toFixed(2)}
-              </div>
-            )}
-            <div className="text-xs text-white/30">
-              {formatDate(entry.timestamp)}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+        );
+      }
 
-  if (entry.type === "strategy") {
-    return (
-      <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46] hover:border-[#3a3f56] transition">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-[#f5a623]/10 flex items-center justify-center">
-              <span className="text-[#f5a623]">策</span>
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="text-white font-medium">{entry.name}</span>
-                <span
-                  className={`text-xs px-2 py-0.5 rounded ${
-                    entry.status === "success"
-                      ? "bg-[#10b981]/10 text-[#10b981]"
-                      : entry.status === "failed"
-                        ? "bg-[#ef4444]/10 text-[#ef4444]"
-                        : "bg-white/10 text-white/50"
-                  }`}
-                >
-                  {entry.status === "success"
-                    ? "成功"
-                    : entry.status === "failed"
-                      ? "失败"
-                      : "处理中"}
-                </span>
-              </div>
-              <div className="text-sm text-white/50 max-w-md truncate">
-                {entry.prompt}
-              </div>
-            </div>
-          </div>
-          <div className="text-right">
-            {entry.backtestReturn !== undefined && (
-              <div
-                className={`text-lg font-medium font-mono tabular-nums ${
-                  entry.backtestReturn >= 0
-                    ? "text-[#10b981]"
-                    : "text-[#ef4444]"
-                }`}
-              >
-                {entry.backtestReturn >= 0 ? "+" : ""}
-                {entry.backtestReturn.toFixed(1)}%
-              </div>
-            )}
-            {entry.backtestWinRate !== undefined && (
-              <div className="text-sm text-white/50 font-mono tabular-nums">
-                胜率 {entry.backtestWinRate.toFixed(1)}%
-              </div>
-            )}
-            <div className="text-xs text-white/30">
-              {formatDate(entry.timestamp)}
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      switch (tab) {
+        case "backtest":
+          return filteredBacktest.length === 0 ? (
+            <HistoryEmptyState tab="backtest" />
+          ) : (
+            <BacktestTimeline
+              entries={filteredBacktest}
+              selectedIds={selectedIds}
+              onToggleSelect={toggleSelect}
+              onRerun={handleRerun}
+              onViewDetail={handleViewBacktestDetail}
+            />
+          );
 
-  // Advisor type
+        case "trades":
+          return filteredTrades.length === 0 ? (
+            <HistoryEmptyState tab="trades" />
+          ) : (
+            <TradeHistoryList entries={filteredTrades} />
+          );
+
+        case "versions":
+          return versionEntries.length === 0 ? (
+            <HistoryEmptyState tab="versions" />
+          ) : (
+            <StrategyVersionList
+              versions={versionEntries}
+              onRollback={handleRollback}
+            />
+          );
+
+        case "conversations":
+          return conversationEntries.length === 0 ? (
+            <HistoryEmptyState tab="conversations" />
+          ) : (
+            <ConversationList entries={conversationEntries} />
+          );
+
+        default:
+          return null;
+      }
+    },
+    [
+      loading,
+      fetchError,
+      loadAll,
+      filteredBacktest,
+      filteredTrades,
+      versionEntries,
+      conversationEntries,
+      selectedIds,
+      toggleSelect,
+      handleRerun,
+      handleViewBacktestDetail,
+      handleRollback,
+    ],
+  );
+
   return (
-    <div className="bg-[#1a1f36] rounded-xl p-4 border border-[#2a2f46] hover:border-[#3a3f56] transition">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-lg bg-[#8b5cf6]/10 flex items-center justify-center">
-            <span className="text-[#8b5cf6]">问</span>
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-white font-medium">{entry.query}</span>
-              <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 text-purple-400">
-                {entry.category}
-              </span>
-            </div>
-            <div className="text-sm text-white/50 max-w-lg truncate">
-              {entry.responsePreview}
-            </div>
-          </div>
+    <>
+      {/* Stats */}
+      <StatsBar
+        backtestCount={backtestEntries.length}
+        tradeCount={tradeEntries.length}
+        versionCount={versionEntries.length}
+        conversationCount={conversationEntries.length}
+      />
+
+      {/* Search */}
+      <div className="flex items-center justify-between gap-3 mb-4">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
+          <input
+            type="text"
+            placeholder="搜索历史记录..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-accent/50 transition"
+          />
         </div>
-        <div className="text-right">
-          <div className="text-xs text-white/30">
-            {formatDate(entry.timestamp)}
-          </div>
-        </div>
+        {selectedIds.size > 0 && (
+          <button
+            onClick={() => setSelectedIds(new Set())}
+            className="text-xs text-white/40 hover:text-white transition"
+          >
+            清除选择 ({selectedIds.size})
+          </button>
+        )}
       </div>
+
+      {/* Tabs */}
+      <PageTabs tabs={[...TABS]}>{renderTab}</PageTabs>
+
+      {/* Floating comparison button */}
+      {selectedIds.size >= 2 && !showComparison && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-slide-up">
+          <button
+            onClick={() => setShowComparison(true)}
+            className="flex items-center gap-2 px-6 py-3 bg-accent text-void font-medium text-sm rounded-lg shadow-glow-accent btn-tactile transition"
+          >
+            <GitCompare className="w-4 h-4" />
+            对比选中 ({selectedIds.size})
+          </button>
+        </div>
+      )}
+
+      {/* Comparison overlay */}
+      {showComparison && selectedBacktestEntries.length >= 2 && (
+        <HistoryComparison
+          entries={selectedBacktestEntries}
+          onClose={() => setShowComparison(false)}
+        />
+      )}
+    </>
+  );
+}
+
+// =============================================================================
+// PAGE
+// =============================================================================
+
+export default function HistoryPage() {
+  return (
+    <div className="min-h-screen bg-background">
+      <DashboardHeader />
+
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 py-4 sm:py-8">
+        {/* Page title */}
+        <div className="mb-6">
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-1">
+            历史中心
+          </h1>
+          <p className="text-xs sm:text-sm text-white/50">
+            查看回测记录、交易历史、策略版本和对话记录
+          </p>
+        </div>
+
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center py-20">
+              <div className="w-8 h-8 border-2 border-accent/30 border-t-accent rounded-full animate-spin" />
+            </div>
+          }
+        >
+          <HistoryPageInner />
+        </Suspense>
+      </main>
     </div>
   );
 }

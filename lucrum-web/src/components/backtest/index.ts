@@ -14,3 +14,5 @@ export { ProgressiveDisclosure } from "./progressive-disclosure";
 export { NextStepGuide } from "./next-step-guide";
 export { AiInsightPlaceholder } from "./ai-insight-placeholder";
 export { ExportButton } from "./export-button";
+export { BacktestRunningView } from "./backtest-running-view";
+export { BacktestResultsView } from "./backtest-results-view";

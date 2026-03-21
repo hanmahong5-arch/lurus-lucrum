@@ -150,6 +150,7 @@ export const useBacktestHistoryStore = create<BacktestHistoryState>()(
         }
         return localStorage;
       }),
+      skipHydration: true,
       // Only persist entries and selectedId, not functions
       partialize: (state) => ({
         entries: state.entries,

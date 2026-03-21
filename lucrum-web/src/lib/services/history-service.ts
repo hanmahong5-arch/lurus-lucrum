@@ -328,12 +328,14 @@ export async function updateStrategy(
 }
 
 /**
- * Delete strategy by ID
- * 删除策略
+ * Delete strategy by ID with ownership check
+ * 删除策略（含所有权校验）
  */
-export async function deleteStrategy(id: number): Promise<boolean> {
+export async function deleteStrategy(id: number, userId?: string): Promise<boolean> {
   try {
-    await db.delete(strategyHistory).where(eq(strategyHistory.id, id));
+    const conditions = [eq(strategyHistory.id, id)];
+    if (userId) conditions.push(eq(strategyHistory.userId, userId));
+    await db.delete(strategyHistory).where(and(...conditions));
     return true;
   } catch (error) {
     console.error('[HistoryService] deleteStrategy error:', error);
@@ -426,12 +428,14 @@ export async function getBacktestById(id: number): Promise<BacktestHistory | nul
 }
 
 /**
- * Delete backtest by ID
- * 删除回测
+ * Delete backtest by ID with ownership check
+ * 删除回测（含所有权校验）
  */
-export async function deleteBacktest(id: number): Promise<boolean> {
+export async function deleteBacktest(id: number, userId?: string): Promise<boolean> {
   try {
-    await db.delete(backtestHistory).where(eq(backtestHistory.id, id));
+    const conditions = [eq(backtestHistory.id, id)];
+    if (userId) conditions.push(eq(backtestHistory.userId, userId));
+    await db.delete(backtestHistory).where(and(...conditions));
     return true;
   } catch (error) {
     console.error('[HistoryService] deleteBacktest error:', error);
@@ -558,12 +562,14 @@ export async function getTradingStats(
 }
 
 /**
- * Delete trade by ID
- * 删除交易记录
+ * Delete trade by ID with ownership check
+ * 删除交易记录（含所有权校验）
  */
-export async function deleteTrade(id: number): Promise<boolean> {
+export async function deleteTrade(id: number, userId?: string): Promise<boolean> {
   try {
-    await db.delete(tradingHistory).where(eq(tradingHistory.id, id));
+    const conditions = [eq(tradingHistory.id, id)];
+    if (userId) conditions.push(eq(tradingHistory.userId, userId));
+    await db.delete(tradingHistory).where(and(...conditions));
     return true;
   } catch (error) {
     console.error('[HistoryService] deleteTrade error:', error);

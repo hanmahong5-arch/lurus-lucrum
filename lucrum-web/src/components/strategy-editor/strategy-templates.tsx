@@ -486,7 +486,7 @@ export function StrategyTemplateList({
       <div className="text-xs text-gray-500 bg-gray-900/50 rounded p-3 space-y-1">
         <p>
           💡 <strong>提示</strong>
-          ：点击卡片展开查看详细信息，点击"使用"将策略描述填入输入框
+          ：点击卡片展开查看详细信息，点击&quot;使用&quot;将策略描述填入输入框
         </p>
         <p>
           ⚠️ <strong>风险提示</strong>

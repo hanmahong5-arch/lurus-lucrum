@@ -232,14 +232,12 @@ describe('BacktestPanel', () => {
 
   /**
    * Helper: select a stock via the mocked TargetSelector.
-   * Opens the config panel first (TargetSelector is only visible when config panel is open),
-   * then clicks the mock stock selection button.
+   * Config panel starts open (showConfig defaults to true), so TargetSelector
+   * is already visible — just click the mock stock selection button directly.
    * This sets effectiveSymbol to '600519' so the run button becomes enabled.
    */
   async function selectStock() {
-    // Open config panel to reveal TargetSelector
-    await userEvent.click(screen.getByText('设置'));
-    // Click the mock stock selection button
+    // Config panel is open by default, so TargetSelector is already visible
     const selectBtn = screen.getByTestId('select-stock-btn');
     await userEvent.click(selectBtn);
     // Wait for the date-range fetch to complete
@@ -331,12 +329,13 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      expect(screen.getByText('+15.50%')).toBeInTheDocument();
-      expect(screen.getByText('+12.3%')).toBeInTheDocument();
-      expect(screen.getByText('-8.2%')).toBeInTheDocument();
-      expect(screen.getByText('1.45')).toBeInTheDocument();
-      expect(screen.getByText('58.5%')).toBeInTheDocument();
-      expect(screen.getByText('25')).toBeInTheDocument();
+      // totalReturn may appear in both MetricCard and ScoreCard
+      expect(screen.getAllByText('+15.50%').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('+12.3%').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('-8.2%').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('1.45').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('58.5%').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('25').length).toBeGreaterThanOrEqual(1);
     });
 
     it('handles negative total return', () => {
@@ -346,7 +345,8 @@ describe('BacktestPanel', () => {
         <BacktestPanel strategyCode="const strategy = {};" result={result} />
       );
 
-      expect(screen.getByText('-10.50%')).toBeInTheDocument();
+      // totalReturn may appear in both MetricCard and ScoreCard
+      expect(screen.getAllByText('-10.50%').length).toBeGreaterThanOrEqual(1);
     });
 
     it('displays strategy info', () => {
@@ -393,7 +393,7 @@ describe('BacktestPanel', () => {
       await userEvent.click(screen.getByText('交易记录'));
 
       expect(screen.getByText('Trade History')).toBeInTheDocument();
-      expect(screen.getByText('共 2 笔（最近20笔）')).toBeInTheDocument();
+      expect(screen.getByText('共 2 笔')).toBeInTheDocument();
     });
 
     it('handles empty trades array', async () => {
@@ -440,7 +440,7 @@ describe('BacktestPanel', () => {
       await userEvent.click(screen.getByText('交易记录'));
 
       // Should show limited trades (last 20)
-      expect(screen.getByText('共 150 笔（最近20笔）')).toBeInTheDocument();
+      expect(screen.getByText('共 150 笔')).toBeInTheDocument();
     });
 
     it('renders detailed trades with EnhancedTradeCard', async () => {
@@ -615,6 +615,9 @@ describe('BacktestPanel', () => {
     it('shows config panel when settings clicked', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
+      // Config panel is open by default — close it first, then reopen
+      await userEvent.click(screen.getByText('设置'));
+      // Now it's closed, click again to open
       await userEvent.click(screen.getByText('设置'));
 
       expect(screen.getByText('时间颗粒度')).toBeInTheDocument();
@@ -626,8 +629,7 @@ describe('BacktestPanel', () => {
     it('changes timeframe using button group', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('设置'));
-
+      // Config panel is open by default
       // New UI: 3-segment button group (日K/周K/时K)
       const weeklyBtn = screen.getByText('周K');
       await userEvent.click(weeklyBtn);
@@ -639,8 +641,7 @@ describe('BacktestPanel', () => {
     it('updates initial capital using preset buttons', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('设置'));
-
+      // Config panel is open by default
       // New UI: preset capital buttons
       const preset50Btn = screen.getByText('50万');
       await userEvent.click(preset50Btn);
@@ -652,7 +653,7 @@ describe('BacktestPanel', () => {
     it('sets preset period', async () => {
       render(<BacktestPanel strategyCode="const strategy = {};" />);
 
-      await userEvent.click(screen.getByText('设置'));
+      // Config panel is open by default
       await userEvent.click(screen.getByText('3个月'));
 
       // Component should handle preset period without crashing

@@ -22,6 +22,74 @@ import { createPersistedStore, type HydrationState } from './create-persisted-st
 
 export type ValidationMode = 'single' | 'multi' | 'sector';
 
+// =============================================================================
+// Portfolio Types
+// =============================================================================
+
+export type PositionSizingMethod = 'equal' | 'market_cap' | 'risk_parity' | 'custom';
+export type RebalanceFrequency = 'none' | 'monthly' | 'quarterly';
+
+export interface PortfolioStock {
+  /** Stock symbol code (e.g., "600519") */
+  symbol: string;
+  /** Stock display name */
+  name: string;
+  /** Sector / industry classification */
+  sector?: string;
+  /** Custom weight (0-1), used when sizing method is "custom" */
+  customWeight?: number;
+}
+
+export interface PortfolioBacktestResult {
+  /** Overall portfolio metrics */
+  totalReturn: number;
+  annualizedReturn: number;
+  sharpeRatio: number;
+  maxDrawdown: number;
+  /** Effective stocks that generated trades vs total selected */
+  effectiveStocks: number;
+  totalStocks: number;
+  /** Total number of trades across all stocks */
+  totalTrades: number;
+  /** Herfindahl-Hirschman Index for diversification (lower = better, <0.1 ideal) */
+  hhi: number;
+  /** Average pairwise correlation */
+  avgCorrelation: number;
+  /** Per-sector contribution breakdown */
+  sectorContributions: SectorContribution[];
+  /** Per-stock detail rows */
+  stockDetails: PortfolioStockDetail[];
+  /** Combined equity curve data points (timestamp, value) */
+  equityCurve: Array<{ date: string; value: number; benchmark: number }>;
+}
+
+export interface SectorContribution {
+  /** Sector name */
+  sector: string;
+  /** Return percentage for this sector slice */
+  returnPct: number;
+  /** Contribution to total portfolio return (0-1) */
+  contributionPct: number;
+  /** Number of stocks in this sector */
+  stockCount: number;
+}
+
+export interface PortfolioStockDetail {
+  /** Rank by contribution (1-based) */
+  rank: number;
+  symbol: string;
+  name: string;
+  sector: string;
+  /** Capital allocated to this stock (CNY) */
+  allocation: number;
+  /** Return percentage for this stock */
+  returnPct: number;
+  /** Absolute P&L for this stock (CNY) */
+  pnl: number;
+  /** Status: traded / no_signal / insufficient_data */
+  status: 'traded' | 'no_signal' | 'insufficient_data';
+}
+
 export interface ValidationTarget {
   /** Stock symbol code (e.g., "600519") */
   symbol: string;
@@ -102,6 +170,20 @@ export interface ValidationState {
   /** Timestamp of last validation run (ms) */
   lastRunAt: number | null;
 
+  // Portfolio mode state
+  /** Stocks selected for portfolio backtest */
+  portfolioStocks: PortfolioStock[];
+  /** Position sizing method */
+  positionSizing: PositionSizingMethod;
+  /** Max weight per single stock (0-1, default 0.1 = 10%) */
+  maxPositionPct: number;
+  /** Max weight per single sector (0-1, default 0.3 = 30%) */
+  maxSectorPct: number;
+  /** Rebalance frequency */
+  rebalanceFrequency: RebalanceFrequency;
+  /** Portfolio backtest result */
+  portfolioResult: PortfolioBacktestResult | null;
+
   // Transient state (not persisted)
   /** Whether a validation is currently running */
   isRunning: boolean;
@@ -123,6 +205,17 @@ interface ValidationActions {
   setRunning: (running: boolean) => void;
   setError: (error: string | null) => void;
   reset: () => void;
+
+  // Portfolio actions
+  addPortfolioStock: (stock: PortfolioStock) => void;
+  removePortfolioStock: (symbol: string) => void;
+  setPortfolioStocks: (stocks: PortfolioStock[]) => void;
+  clearPortfolioStocks: () => void;
+  setPositionSizing: (method: PositionSizingMethod) => void;
+  setMaxPositionPct: (pct: number) => void;
+  setMaxSectorPct: (pct: number) => void;
+  setRebalanceFrequency: (freq: RebalanceFrequency) => void;
+  setPortfolioResult: (result: PortfolioBacktestResult | null) => void;
 }
 
 export type ValidationStore = ValidationState & ValidationActions & HydrationState;
@@ -154,6 +247,12 @@ const INITIAL_STATE: ValidationState = {
   results: [],
   activeTab: 'config',
   lastRunAt: null,
+  portfolioStocks: [],
+  positionSizing: 'equal',
+  maxPositionPct: 0.1,
+  maxSectorPct: 0.3,
+  rebalanceFrequency: 'none',
+  portfolioResult: null,
   isRunning: false,
   error: null,
 };
@@ -238,13 +337,81 @@ export const useValidationStore = createPersistedStore<ValidationStore>(
         state.isRunning = false;
       }),
 
+    // Portfolio actions
+    addPortfolioStock: (stock) =>
+      set((state) => {
+        if (!state.portfolioStocks.some((s) => s.symbol === stock.symbol)) {
+          state.portfolioStocks.push(stock);
+        }
+      }),
+
+    removePortfolioStock: (symbol) =>
+      set((state) => {
+        state.portfolioStocks = state.portfolioStocks.filter((s) => s.symbol !== symbol);
+      }),
+
+    setPortfolioStocks: (stocks) =>
+      set((state) => {
+        state.portfolioStocks = stocks;
+      }),
+
+    clearPortfolioStocks: () =>
+      set((state) => {
+        state.portfolioStocks = [];
+        state.portfolioResult = null;
+      }),
+
+    setPositionSizing: (method) =>
+      set((state) => {
+        state.positionSizing = method;
+      }),
+
+    setMaxPositionPct: (pct) =>
+      set((state) => {
+        state.maxPositionPct = Math.max(0.01, Math.min(1, pct));
+      }),
+
+    setMaxSectorPct: (pct) =>
+      set((state) => {
+        state.maxSectorPct = Math.max(0.05, Math.min(1, pct));
+      }),
+
+    setRebalanceFrequency: (freq) =>
+      set((state) => {
+        state.rebalanceFrequency = freq;
+      }),
+
+    setPortfolioResult: (result) =>
+      set((state) => {
+        state.portfolioResult = result;
+        if (result) {
+          state.lastRunAt = Date.now();
+        }
+      }),
+
     reset: () =>
       set((state) => {
         Object.assign(state, INITIAL_STATE);
       }),
   }),
   {
-    version: 1,
+    version: 2,
+    migrate: (persisted: unknown, version: number) => {
+      const old = persisted as Record<string, unknown>;
+      if (version < 2) {
+        // v1->v2: Add portfolio fields with defaults
+        return {
+          ...old,
+          portfolioStocks: old.portfolioStocks ?? [],
+          positionSizing: old.positionSizing ?? 'equal',
+          maxPositionPct: old.maxPositionPct ?? 0.1,
+          maxSectorPct: old.maxSectorPct ?? 0.3,
+          rebalanceFrequency: old.rebalanceFrequency ?? 'never',
+          portfolioResult: old.portfolioResult ?? null,
+        } as ValidationStore;
+      }
+      return persisted as ValidationStore;
+    },
     partialize: (state) => ({
       mode: state.mode,
       targets: state.targets,
@@ -253,6 +420,11 @@ export const useValidationStore = createPersistedStore<ValidationStore>(
       results: state.results,
       activeTab: state.activeTab,
       lastRunAt: state.lastRunAt,
+      portfolioStocks: state.portfolioStocks,
+      positionSizing: state.positionSizing,
+      maxPositionPct: state.maxPositionPct,
+      maxSectorPct: state.maxSectorPct,
+      rebalanceFrequency: state.rebalanceFrequency,
     }) as typeof state,
   }
 );
@@ -270,3 +442,9 @@ export const selectValidationActiveTab = (state: ValidationStore) => state.activ
 export const selectValidationIsRunning = (state: ValidationStore) => state.isRunning;
 export const selectValidationError = (state: ValidationStore) => state.error;
 export const selectTargetCount = (state: ValidationStore) => state.targets.length;
+
+// Portfolio selectors
+export const selectPortfolioStocks = (state: ValidationStore) => state.portfolioStocks;
+export const selectPortfolioStockCount = (state: ValidationStore) => state.portfolioStocks.length;
+export const selectPositionSizing = (state: ValidationStore) => state.positionSizing;
+export const selectPortfolioResult = (state: ValidationStore) => state.portfolioResult;

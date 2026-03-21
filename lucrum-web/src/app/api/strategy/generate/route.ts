@@ -74,7 +74,18 @@ export async function POST(request: NextRequest) {
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json(
-        { error: 'Missing or invalid prompt' },
+        {
+          error: {
+            code: 'STRATEGY_NO_PROMPT',
+            title: '缺少策略描述',
+            description: '请输入策略描述后再生成，例如"双均线金叉买入死叉卖出"',
+            severity: 'error',
+            recoveryActions: [
+              { type: 'custom', label: '输入描述' },
+              { type: 'custom', label: '使用模板' },
+            ],
+          },
+        },
         { status: 400 }
       );
     }
@@ -88,8 +99,16 @@ export async function POST(request: NextRequest) {
     if (!usageStatus.allowed) {
       return NextResponse.json(
         {
-          error: `今日 AI 调用额度已用完 (${usageStatus.used}/${usageStatus.limit})`,
-          code: 'AI_QUOTA_EXCEEDED',
+          error: {
+            code: 'AI_QUOTA_EXCEEDED',
+            title: 'AI 调用额度已用完',
+            description: `今日已使用 ${usageStatus.used}/${usageStatus.limit} 次 AI 调用，额度将于明日重置`,
+            severity: 'warning',
+            recoveryActions: [
+              { type: 'navigate', href: '/dashboard/account', label: '升级套餐' },
+              { type: 'custom', label: '使用模板' },
+            ],
+          },
           resetAt: usageStatus.resetAt,
         },
         { status: 429 },
@@ -162,7 +181,22 @@ export async function POST(request: NextRequest) {
       const errorText = await response.text().catch(() => 'Unknown error');
       console.error('[strategy/generate] LLM API error:', response.status, errorText);
       return NextResponse.json(
-        { error: 'Failed to generate strategy', details: errorText, status: response.status },
+        {
+          error: {
+            code: 'STRATEGY_LLM_FAILED',
+            title: 'AI 策略生成失败',
+            description: response.status === 429
+              ? 'AI 服务繁忙，请稍后重试'
+              : 'AI 服务暂时不可用，可使用内置模板生成策略',
+            severity: 'error',
+            recoveryActions: [
+              { type: 'retry', label: '重试' },
+              { type: 'custom', label: '使用模板' },
+              { type: 'custom', label: '修改描述' },
+            ],
+          },
+          details: errorText,
+        },
         { status: response.status }
       );
     }
@@ -191,8 +225,22 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[strategy/generate] Error:', error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: 'Internal server error', message: String(error) },
+      {
+        error: {
+          code: 'STRATEGY_GEN_ERROR',
+          title: 'AI 策略生成失败',
+          description: msg.includes('fetch') || msg.includes('network')
+            ? '网络连接失败，请检查网络后重试'
+            : `策略生成服务出错: ${msg}`,
+          severity: 'error',
+          recoveryActions: [
+            { type: 'retry', label: '重试' },
+            { type: 'custom', label: '使用模板' },
+          ],
+        },
+      },
       { status: 500 }
     );
   }

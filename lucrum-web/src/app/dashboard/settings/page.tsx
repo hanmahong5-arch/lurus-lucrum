@@ -20,6 +20,7 @@ import { ProfileSettings } from "@/components/settings/profile-settings";
 import { SecuritySettings } from "@/components/settings/security-settings";
 import { NotificationSettings } from "@/components/settings/notification-settings";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
+import { OnboardingResetButton } from "@/components/settings/onboarding-reset-button";
 
 // Dynamic imports from extracted content components (no DashboardHeader inside)
 const AccountContent = dynamic(
@@ -98,6 +99,12 @@ function SettingsPageContent() {
                           通知设置
                         </h2>
                         <NotificationSettings />
+                      </div>
+                      <div className="bg-surface rounded-xl border border-border p-6">
+                        <h2 className="text-lg font-semibold text-white mb-4">
+                          其他
+                        </h2>
+                        <OnboardingResetButton />
                       </div>
                     </div>
                   );

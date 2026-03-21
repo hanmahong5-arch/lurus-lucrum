@@ -16,13 +16,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth";
-import { db, strategyHistory, sectors, stockSectorMapping, stocks } from "@/lib/db";
-import { eq, and, desc, inArray } from "drizzle-orm";
+import { getStockRepository, getStrategyRepository } from "@/lib/repositories";
 import {
-  getSectorStocks,
-  getSectorIndexKline,
-  getSectorName,
-} from "@/lib/data-service/sources/eastmoney-sector";
+  getSectorStocksProtected,
+  getSectorIndexKlineProtected,
+} from "@/lib/infra/external-apis";
+import { getSectorName } from "@/lib/data-service/sources/eastmoney-sector";
 import { batchGetKlinesWithDateRange } from "@/lib/data-service/batch-kline";
 import {
   STRATEGY_DETECTORS,
@@ -294,7 +293,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: validation.error,
+          error: {
+            code: 'SECTOR_INVALID_PARAMS',
+            title: '参数校验失败',
+            description: validation.error ?? '请检查请求参数后重试',
+            severity: 'error' as const,
+            recoveryActions: [
+              { type: 'custom' as const, label: '修改参数' },
+            ],
+          },
           availableStrategies: getAvailableStrategies(),
         },
         { status: 400 },
@@ -342,72 +349,28 @@ export async function POST(request: NextRequest) {
       warnings.push(`Loaded ${filteredStocks.length} stocks from Redis cache`);
     }
 
-    // --- Priority 2: Try Database (sectors + stock_sector_mapping) ---
+    // --- Priority 2: Try Database via repository ---
     if (filteredStocks.length === 0) {
       try {
-        const sectorRow = await db.query.sectors.findFirst({
-          where: eq(sectors.code, sectorCode),
+        const stockRepo = getStockRepository();
+        const dbStocks = await stockRepo.findBySector(sectorCode, {
+          excludeST: excludeSTStocks,
+          minMarketCap,
+          excludeNewStocks,
+          minListingDays,
+          status: "active",
+          maxStocks: maxStocks ?? 100,
         });
 
-        if (sectorRow) {
-          // Get stock IDs in this sector via mapping table
-          const mappings = await db
-            .select({
-              stockId: stockSectorMapping.stockId,
-            })
-            .from(stockSectorMapping)
-            .where(eq(stockSectorMapping.sectorId, sectorRow.id));
-
-          if (mappings.length > 0) {
-            const stockIds = mappings.map((m) => m.stockId);
-            // Fetch stock details
-            const dbStocks = await db
-              .select({
-                symbol: stocks.symbol,
-                name: stocks.name,
-                marketCap: stocks.marketCap,
-                isST: stocks.isST,
-                status: stocks.status,
-                listingDate: stocks.listingDate,
-              })
-              .from(stocks)
-              .where(inArray(stocks.id, stockIds));
-
-            // Apply SectorFilter: exclude ST, filter by status, market cap, listing age
-            let sectorFilteredStocks = dbStocks.filter((s) => s.status === "active");
-
-            if (excludeSTStocks) {
-              sectorFilteredStocks = sectorFilteredStocks.filter((s) => !s.isST);
-            }
-
-            if (minMarketCap !== undefined) {
-              // marketCap in DB is stored in 亿元 (hundreds of millions CNY)
-              sectorFilteredStocks = sectorFilteredStocks.filter(
-                (s) => s.marketCap !== null && s.marketCap >= minMarketCap!,
-              );
-            }
-
-            if (excludeNewStocks && minListingDays) {
-              const cutoffDate = new Date();
-              cutoffDate.setDate(cutoffDate.getDate() - (minListingDays ?? 60));
-              const cutoffStr = cutoffDate.toISOString().split("T")[0] ?? "";
-              sectorFilteredStocks = sectorFilteredStocks.filter(
-                (s) => !s.listingDate || s.listingDate <= cutoffStr,
-              );
-            }
-
-            filteredStocks = sectorFilteredStocks.map((s) => ({
-              symbol: s.symbol,
-              name: s.name,
-              marketCap: s.marketCap,
-            }));
-
-            if (filteredStocks.length > 0) {
-              dataSource = "database";
-              // Cache to Redis with 24h TTL (86400 seconds)
-              await cacheSet(cacheKey, filteredStocks, 86400);
-            }
-          }
+        if (dbStocks.length > 0) {
+          filteredStocks = dbStocks.map((s) => ({
+            symbol: s.symbol,
+            name: s.name,
+            marketCap: s.marketCap,
+          }));
+          dataSource = "database";
+          // Cache to Redis with 24h TTL (86400 seconds)
+          await cacheSet(cacheKey, filteredStocks, 86400);
         }
       } catch (dbErr) {
         console.warn("[SectorBacktest] Database query failed, falling back to API:", dbErr);
@@ -415,15 +378,24 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // --- Priority 3: EastMoney API fallback ---
+    // --- Priority 3: EastMoney API fallback (circuit-breaker protected) ---
     if (filteredStocks.length === 0) {
-      const sectorResponse = await getSectorStocks(sectorCode, maxStocks ?? 100);
+      const sectorResponse = await getSectorStocksProtected(sectorCode, maxStocks ?? 100);
 
       if (!sectorResponse.success || !sectorResponse.data) {
         return NextResponse.json(
           {
             success: false,
-            error: sectorResponse.error ?? "Failed to fetch sector stocks from both database and API",
+            error: {
+              code: 'SECTOR_FETCH_FAILED',
+              title: '获取板块成分股失败',
+              description: sectorResponse.error ?? '无法从数据库和API获取板块成分股数据，请检查网络后重试',
+              severity: 'error' as const,
+              recoveryActions: [
+                { type: 'retry' as const, label: '重试' },
+                { type: 'custom' as const, label: '更换板块' },
+              ],
+            },
           },
           { status: 500 },
         );
@@ -460,7 +432,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "No stocks found matching criteria",
+          error: {
+            code: 'SECTOR_NO_STOCKS',
+            title: '板块无成分股',
+            description: '没有符合条件的股票，请放宽过滤条件或更换板块',
+            severity: 'warning' as const,
+            recoveryActions: [
+              { type: 'custom' as const, label: '放宽过滤条件' },
+              { type: 'custom' as const, label: '更换板块' },
+            ],
+          },
         },
         { status: 404 },
       );
@@ -482,7 +463,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: "Failed to fetch K-line data for any stocks",
+          error: {
+            code: 'SECTOR_NO_KLINE',
+            title: '行情数据获取失败',
+            description: '无法获取任何股票的K线数据，请检查网络或缩短回测周期后重试',
+            severity: 'error' as const,
+            recoveryActions: [
+              { type: 'retry' as const, label: '重试' },
+              { type: 'custom' as const, label: '缩短回测周期' },
+            ],
+          },
         },
         { status: 500 },
       );
@@ -569,9 +559,9 @@ export async function POST(request: NextRequest) {
       warnings.push(`${scanStats.suspendedSignals}个信号因停牌延迟出场`);
     }
 
-    // 4. Fetch sector index for benchmark comparison
+    // 4. Fetch sector index for benchmark comparison (circuit-breaker protected)
     let sectorIndexReturn = 0;
-    const sectorKlineResponse = await getSectorIndexKline(
+    const sectorKlineResponse = await getSectorIndexKlineProtected(
       sectorCode,
       "1d",
       200,
@@ -699,10 +689,21 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Sector backtest error:", error);
+    const msg = error instanceof Error ? error.message : "Unknown error";
     return NextResponse.json(
       {
         success: false,
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: {
+          code: 'SECTOR_BACKTEST_ERROR',
+          title: '板块回测失败',
+          description: msg || '板块回测执行过程中出现错误，请稍后重试',
+          severity: 'error' as const,
+          recoveryActions: [
+            { type: 'retry' as const, label: '重试' },
+            { type: 'custom' as const, label: '调整参数' },
+            { type: 'custom' as const, label: '更换板块' },
+          ],
+        },
       },
       { status: 500 },
     );
@@ -737,15 +738,12 @@ export async function GET() {
     const session = await getServerSession(authOptions);
 
     if (session?.user?.id) {
-      // Query user strategies from database
-      const userStrategyRecords = await db.query.strategyHistory.findMany({
-        where: and(
-          eq(strategyHistory.userId, session.user.id),
-          eq(strategyHistory.isActive, true)
-        ),
-        orderBy: [desc(strategyHistory.createdAt)],
-        limit: 20, // Limit to 20 most recent strategies
-      });
+      // Query user strategies via repository
+      const strategyRepo = getStrategyRepository();
+      const userStrategyRecords = await strategyRepo.findByUser(
+        session.user.id,
+        { isActive: true, limit: 20 },
+      );
 
       // Transform to API format
       userStrategies = userStrategyRecords.map((s) => ({

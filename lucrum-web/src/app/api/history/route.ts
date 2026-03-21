@@ -326,23 +326,22 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // User ID is now from session (authenticated user)
-    // TODO: Verify ownership before deleting (check that record belongs to user)
-    const _userId = user.userId;
+    // Enforce ownership: only the record owner can delete
+    const userId = user.userId;
 
-    // Delete based on type
+    // Delete based on type (userId included in WHERE clause for ownership check)
     let success = false;
     const recordId = parseInt(id, 10);
 
     switch (type) {
       case 'strategy':
-        success = await deleteStrategy(recordId);
+        success = await deleteStrategy(recordId, userId);
         break;
       case 'backtest':
-        success = await deleteBacktest(recordId);
+        success = await deleteBacktest(recordId, userId);
         break;
       case 'trading':
-        success = await deleteTrade(recordId);
+        success = await deleteTrade(recordId, userId);
         break;
     }
 

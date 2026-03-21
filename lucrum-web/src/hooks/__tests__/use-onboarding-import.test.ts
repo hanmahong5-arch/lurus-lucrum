@@ -79,6 +79,21 @@ vi.mock("@/lib/backtest", () => ({
   ]),
 }));
 
+// Mock data-service for K-line data fetching
+vi.mock("@/lib/data-service", () => ({
+  getKLineData: vi.fn().mockResolvedValue({
+    success: true,
+    data: Array.from({ length: 310 }, (_, i) => ({
+      time: Math.floor(new Date("2025-01-01").getTime() / 1000) + i * 86400,
+      open: 100 + Math.random() * 10,
+      high: 105 + Math.random() * 10,
+      low: 95 + Math.random() * 10,
+      close: 100 + Math.random() * 10,
+      volume: 1000 + Math.floor(Math.random() * 500),
+    })),
+  }),
+}));
+
 vi.mock("@/lib/backtest/score", () => ({
   calculateScore: vi.fn().mockReturnValue({ grade: "B", score: 72 }),
 }));

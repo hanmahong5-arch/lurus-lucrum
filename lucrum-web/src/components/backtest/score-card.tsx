@@ -24,6 +24,7 @@ import Decimal from "decimal.js";
 import type { StrategyScore, ScoreGrade } from "@/lib/backtest/score";
 import { DIMENSION_WEIGHTS, GRADE_CONFIG } from "@/lib/backtest/score";
 import { Button } from "@/components/ui/button";
+import { SmartTooltip } from "@/components/ui/smart-tooltip";
 
 // =============================================================================
 // CONSTANTS / 常量
@@ -120,8 +121,8 @@ function generateAriaLabel(score: StrategyScore): string {
   const returnDirection = totalReturn.greaterThanOrEqualTo(0) ? "上涨" : "下跌";
   const drawdownDirection = "下跌";
 
-  const returnPct = `${totalReturn.abs().times(100).toFixed(1)}%`;
-  const drawdownPct = `${maxDrawdown.abs().times(100).toFixed(1)}%`;
+  const returnPct = `${totalReturn.abs().toFixed(1)}%`;
+  const drawdownPct = `${maxDrawdown.abs().toFixed(1)}%`;
 
   return `策略评分 ${grade} ${description}，总收益率 ${returnDirection} ${returnPct}，最大回撤 ${drawdownDirection} ${drawdownPct}`;
 }
@@ -310,10 +311,12 @@ function CoreMetricsDisplay({ score }: { score: StrategyScore }) {
   return (
     <div className="grid grid-cols-3 gap-4">
       <div className="space-y-0.5">
-        <span className="text-xs text-muted-foreground">总收益率</span>
+        <SmartTooltip term="totalReturn">
+          <span className="text-xs text-muted-foreground">总收益率</span>
+        </SmartTooltip>
         <div>
           <SimpleFinancialValue
-            value={totalReturn * 100}
+            value={totalReturn}
             type="percent"
             showSign
             showArrow
@@ -322,10 +325,12 @@ function CoreMetricsDisplay({ score }: { score: StrategyScore }) {
         </div>
       </div>
       <div className="space-y-0.5">
-        <span className="text-xs text-muted-foreground">年化收益率</span>
+        <SmartTooltip term="annualReturn">
+          <span className="text-xs text-muted-foreground">年化收益率</span>
+        </SmartTooltip>
         <div>
           <SimpleFinancialValue
-            value={annualizedReturn * 100}
+            value={annualizedReturn}
             type="percent"
             showSign
             showArrow
@@ -334,10 +339,12 @@ function CoreMetricsDisplay({ score }: { score: StrategyScore }) {
         </div>
       </div>
       <div className="space-y-0.5">
-        <span className="text-xs text-muted-foreground">最大回撤</span>
+        <SmartTooltip term="maxDrawdown">
+          <span className="text-xs text-muted-foreground">最大回撤</span>
+        </SmartTooltip>
         <div>
           <SimpleFinancialValue
-            value={-Math.abs(maxDrawdown * 100)}
+            value={-Math.abs(maxDrawdown)}
             type="percent"
             showSign
             showArrow

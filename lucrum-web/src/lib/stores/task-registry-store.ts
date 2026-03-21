@@ -181,6 +181,7 @@ export const useTaskRegistryStore = create<TaskRegistryState>()(
     {
       name: STORAGE_KEY,
       storage: createJSONStorage(() => localStorage),
+      skipHydration: true,
       // Only persist task list, not functions
       partialize: (state) => ({ tasks: state.tasks }),
     }

@@ -139,6 +139,7 @@ export const useStrategyVersionStore = create<VersionStore>()(
     }),
     {
       name: STORAGE_KEY,
+      skipHydration: true,
       partialize: (state) => ({
         versionsByStrategy: state.versionsByStrategy,
       }),

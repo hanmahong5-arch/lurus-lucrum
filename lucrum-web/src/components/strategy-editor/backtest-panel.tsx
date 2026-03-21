@@ -30,6 +30,10 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { calculateScore } from "@/lib/backtest/score";
 import { useFeatureUsage } from "@/hooks/use-feature-usage";
 import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
+import { DisabledWithReason } from "@/components/ui/disabled-with-reason";
+import { SmartTooltip } from "@/components/ui/smart-tooltip";
+import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/contextual-help";
+import { BacktestDecisionBadges } from "@/components/ui/decision-badge";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -82,6 +86,8 @@ interface BacktestPanelProps {
   onBacktestStart?: () => void;
   /** Callback when backtest ends / 回测结束时的回调 */
   onBacktestEnd?: () => void;
+  /** Callback with result data when backtest completes successfully */
+  onResult?: (result: BacktestResult) => void;
 }
 
 // =============================================================================
@@ -195,6 +201,7 @@ export function BacktestPanel({
   onRunBacktest,
   onBacktestStart,
   onBacktestEnd,
+  onResult,
 }: BacktestPanelProps) {
   // Config state
   const defaultDates = getDefaultDates(365);
@@ -455,6 +462,7 @@ export function BacktestPanel({
 
         if (data.success && data.data) {
           setResult(data.data);
+          onResult?.(data.data);
           backtestTask.complete({ symbol: effectiveSymbol });
           // Store data source info from API response
           if (data.meta?.dataSource) {
@@ -489,7 +497,7 @@ export function BacktestPanel({
       // Refresh usage data after backtest
       void refreshUsage();
     }
-  }, [hasBlocker, isBlocked, plan, strategyCode, config, effectiveSymbol, onRunBacktest, onBacktestStart, onBacktestEnd, refreshUsage]);
+  }, [hasBlocker, isBlocked, plan, strategyCode, config, effectiveSymbol, onRunBacktest, onBacktestStart, onBacktestEnd, onResult, refreshUsage]);
 
   /**
    * Export backtest report
@@ -578,45 +586,52 @@ export function BacktestPanel({
             </svg>
             设置
           </Button>
-          <TooltipProvider delayDuration={300}>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={handleRunBacktest}
-                  disabled={running || hasBlocker}
-                  className={cn(
-                    "btn-primary px-4 py-1.5 text-sm font-medium rounded-lg flex items-center gap-2",
-                    "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary",
-                    allReady && !running && "glow-active"
-                  )}
-                >
-                  {running ? (
-                    <>
-                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                      <span className="font-mono">运行中...</span>
-                    </>
-                  ) : (
-                    <>
-                      <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                        <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
-                      </svg>
-                      运行回测
-                      {usage.backtest && isFinite(usage.backtest.limit) && (
-                        <span className="font-mono text-xs opacity-70">
-                          {usage.backtest.remaining}/{usage.backtest.limit}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </button>
-              </TooltipTrigger>
-              {hasBlocker && (
-                <TooltipContent>
-                  <p>请先完成所有必要配置</p>
-                </TooltipContent>
+          <DisabledWithReason
+            disabled={hasBlocker && !running}
+            reason={
+              !strategyCode
+                ? "请先生成策略代码"
+                : !effectiveSymbol
+                  ? "请先选择一只股票"
+                  : "请先完成所有必要配置"
+            }
+            action={
+              !strategyCode
+                ? "去模板库选择"
+                : !effectiveSymbol
+                  ? "在上方搜索框输入股票代码"
+                  : undefined
+            }
+          >
+            <button
+              onClick={handleRunBacktest}
+              disabled={running || hasBlocker}
+              className={cn(
+                "btn-primary px-4 py-1.5 text-sm font-medium rounded-lg flex items-center gap-2",
+                "disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-primary",
+                allReady && !running && "glow-active"
               )}
-            </Tooltip>
-          </TooltipProvider>
+            >
+              {running ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  <span className="font-mono">运行中...</span>
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z" />
+                  </svg>
+                  运行回测
+                  {usage.backtest && isFinite(usage.backtest.limit) && (
+                    <span className="font-mono text-xs opacity-70">
+                      {usage.backtest.remaining}/{usage.backtest.limit}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          </DisabledWithReason>
         </div>
       </div>
 
@@ -1067,6 +1082,20 @@ export function BacktestPanel({
                   metricsGrid?.scrollIntoView({ behavior: "smooth" });
                 }}
                 onExport={handleExport}
+                className="mb-2"
+              />
+            )}
+
+            {/* Decision badges - auto-computed from metrics */}
+            {displayResult && (
+              <BacktestDecisionBadges
+                metrics={{
+                  annualizedReturn: displayResult.annualizedReturn,
+                  maxDrawdown: displayResult.maxDrawdown,
+                  winRate: displayResult.winRate,
+                  sharpeRatio: displayResult.sharpeRatio,
+                  tradeCount: displayResult.totalTrades,
+                }}
                 className="mb-4"
               />
             )}
@@ -1076,6 +1105,7 @@ export function BacktestPanel({
               <MetricCard
                 label="总收益率"
                 labelEn="Total Return"
+                tooltipTerm="totalReturn"
                 value={`${displayResult.totalReturn >= 0 ? "+" : ""}${displayResult.totalReturn.toFixed(2)}%`}
                 isProfit={displayResult.totalReturn >= 0}
                 highlight
@@ -1084,12 +1114,14 @@ export function BacktestPanel({
               <MetricCard
                 label="年化收益"
                 labelEn="Annualized"
+                tooltipTerm="annualReturn"
                 value={`${displayResult.annualizedReturn >= 0 ? "+" : ""}${displayResult.annualizedReturn.toFixed(1)}%`}
                 isProfit={displayResult.annualizedReturn >= 0}
               />
               <MetricCard
                 label="最大回撤"
                 labelEn="Max Drawdown"
+                tooltipTerm="maxDrawdown"
                 value={`-${Math.abs(displayResult.maxDrawdown).toFixed(1)}%`}
                 isProfit={false}
                 icon={
@@ -1101,6 +1133,7 @@ export function BacktestPanel({
               <MetricCard
                 label="夏普比率"
                 labelEn="Sharpe Ratio"
+                tooltipTerm="sharpe"
                 value={displayResult.sharpeRatio.toFixed(2)}
                 isProfit={displayResult.sharpeRatio >= 1}
                 neutral={displayResult.sharpeRatio < 1 && displayResult.sharpeRatio > 0}
@@ -1108,12 +1141,14 @@ export function BacktestPanel({
               <MetricCard
                 label="胜率"
                 labelEn="Win Rate"
+                tooltipTerm="winRate"
                 value={`${displayResult.winRate.toFixed(1)}%`}
                 isProfit={displayResult.winRate >= 50}
               />
               <MetricCard
                 label="交易次数"
                 labelEn="Total Trades"
+                tooltipTerm="tradeCount"
                 value={displayResult.totalTrades.toString()}
                 neutral
                 icon={
@@ -1529,6 +1564,8 @@ interface MetricCardProps {
   highlight?: boolean;
   size?: "default" | "large";
   icon?: React.ReactNode;
+  /** Financial term key for SmartTooltip explanation */
+  tooltipTerm?: string;
 }
 
 /**
@@ -1544,6 +1581,7 @@ function MetricCard({
   highlight = false,
   size = "default",
   icon,
+  tooltipTerm,
 }: MetricCardProps) {
   // Determine value color based on profit/loss state
   const valueColorClass = neutral
@@ -1573,7 +1611,11 @@ function MetricCard({
       {/* Label / 标签 */}
       <div className="flex items-center justify-between mb-2">
         <div className="text-xs text-neutral-500">
-          {label}
+          {tooltipTerm ? (
+            <SmartTooltip term={tooltipTerm}>{label}</SmartTooltip>
+          ) : (
+            label
+          )}
           <span className="block text-[10px] text-neutral-600">{labelEn}</span>
         </div>
         {icon && (

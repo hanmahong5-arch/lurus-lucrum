@@ -44,7 +44,6 @@ function determineGrade(score: number): GradeThreshold {
     }
   }
   // Fallback to D grade (always exists as GRADE_CONFIG has 5 elements)
-  // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
   return GRADE_CONFIG[GRADE_CONFIG.length - 1]!;
 }
 

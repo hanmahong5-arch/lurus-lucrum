@@ -9,8 +9,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { searchStocks } from '@/lib/db/queries';
+import { getStockRepository } from '@/lib/repositories';
 import { pinyin } from 'pinyin-pro';
+import { dedupRequest } from '@/lib/infra/request-dedup';
 
 // ============================================================================
 // Types
@@ -139,12 +140,17 @@ export async function GET(request: NextRequest) {
     // Determine if query could be pinyin (contains only latin characters)
     const isPinyinQuery = /^[a-zA-Z]+$/.test(q);
 
-    // Search stocks from DB (symbol + name match)
-    const dbStocks = await searchStocks(q, {
-      excludeST,
-      status: 'active',
-      limit: isPinyinQuery ? limit * 3 : limit, // Fetch more for pinyin re-ranking
-    });
+    // Search stocks from DB via repository (symbol + name match)
+    // Deduplicate identical concurrent searches (e.g., fast typing triggers)
+    const stockRepo = getStockRepository();
+    const dbSearchKey = `stock-search:${q}:${excludeST}:${isPinyinQuery ? limit * 3 : limit}`;
+    const dbStocks = await dedupRequest(dbSearchKey, () =>
+      stockRepo.search(q, {
+        excludeST,
+        status: 'active',
+        limit: isPinyinQuery ? limit * 3 : limit, // Fetch more for pinyin re-ranking
+      })
+    );
 
     // If query looks like pinyin but DB returned few results,
     // do a broader search and filter by pinyin on server
@@ -153,11 +159,14 @@ export async function GET(request: NextRequest) {
     if (isPinyinQuery && dbStocks.length < limit) {
       // For pinyin queries, the DB LIKE search won't match
       // Fetch a broader set of stocks to filter by pinyin
-      const broadStocks = await searchStocks('%', {
-        excludeST,
-        status: 'active',
-        limit: 200,
-      });
+      const broadSearchKey = `stock-search-broad:${excludeST}`;
+      const broadStocks = await dedupRequest(broadSearchKey, () =>
+        stockRepo.search('%', {
+          excludeST,
+          status: 'active',
+          limit: 200,
+        })
+      );
 
       // Merge with existing results, deduplicate
       const seen = new Set(dbStocks.map(s => s.symbol));

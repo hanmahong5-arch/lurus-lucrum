@@ -47,7 +47,10 @@ import {
   Bot,
   History,
   Settings,
+  Star,
 } from 'lucide-react';
+import { useWatchlistStore, selectIsPanelOpen, selectTotalStockCount } from '@/lib/stores/watchlist-store';
+import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // Navigation definition — 7 focused modules, always visible
@@ -166,6 +169,9 @@ export function DashboardHeader() {
   const workspace = useStrategyWorkspaceStore(selectWorkspace);
   const { saveDraft } = useStrategyWorkspaceStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const watchlistPanelOpen = useWatchlistStore(selectIsPanelOpen);
+  const watchlistCount = useWatchlistStore(selectTotalStockCount);
+  const { togglePanel: toggleWatchlistPanel } = useWatchlistStore();
 
   const { t } = useI18n();
   const roleColor = getRoleColor(user?.role);
@@ -212,6 +218,26 @@ export function DashboardHeader() {
 
             {/* Right side — Settings, Notifications, Quota & Account */}
             <div className="flex items-center gap-2">
+              {/* Watchlist toggle */}
+              <button
+                onClick={toggleWatchlistPanel}
+                className={cn(
+                  'relative p-1.5 rounded-md transition',
+                  watchlistPanelOpen
+                    ? 'text-accent bg-accent/10'
+                    : 'text-white/40 hover:text-white hover:bg-white/5'
+                )}
+                title="自选股 (f)"
+                aria-label="Toggle watchlist panel"
+              >
+                <Star className="w-4.5 h-4.5" />
+                {watchlistCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 min-w-[14px] h-[14px] flex items-center justify-center px-0.5 rounded-full bg-accent text-void text-[9px] font-bold font-mono tabular-nums">
+                    {watchlistCount > 99 ? '99+' : watchlistCount}
+                  </span>
+                )}
+              </button>
+
               {/* Task notification bell */}
               <TaskNotificationBell />
 

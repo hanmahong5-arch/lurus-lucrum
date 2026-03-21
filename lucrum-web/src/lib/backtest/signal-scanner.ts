@@ -155,17 +155,22 @@ export interface StrategyDetector {
 
 /**
  * Calculate Simple Moving Average (SMA)
- * 计算简单移动平均线
+ * O(n) sliding-window implementation — no per-bar slice/reduce.
+ * 计算简单移动平均线 — O(n) 滑动窗口实现
  */
 function calculateSMA(data: number[], period: number): number[] {
-  const result: number[] = [];
+  const result: number[] = new Array(data.length);
+  let sum = 0;
+
   for (let i = 0; i < data.length; i++) {
+    sum += data[i]!;
+    if (i >= period) {
+      sum -= data[i - period]!;
+    }
     if (i < period - 1) {
-      result.push(NaN);
+      result[i] = NaN;
     } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const sum = slice.reduce((a, b) => a + b, 0);
-      result.push(sum / period);
+      result[i] = sum / period;
     }
   }
   return result;
@@ -193,40 +198,52 @@ function calculateEMA(data: number[], period: number): number[] {
 
 /**
  * Calculate RSI (Relative Strength Index)
- * 计算相对强弱指标
+ * O(n) sliding-window for gain/loss averages — no per-bar slice/reduce.
+ * 计算相对强弱指标 — O(n) 滑动窗口实现
  */
 function calculateRSI(data: number[], period: number = 14): number[] {
-  const result: number[] = [];
-  const gains: number[] = [];
-  const losses: number[] = [];
+  const result: number[] = new Array(data.length);
+  const gains: number[] = new Array(data.length);
+  const losses: number[] = new Array(data.length);
+
+  let gainSum = 0;
+  let lossSum = 0;
 
   for (let i = 0; i < data.length; i++) {
     if (i === 0) {
-      result.push(50);
-      gains.push(0);
-      losses.push(0);
+      result[i] = 50;
+      gains[i] = 0;
+      losses[i] = 0;
       continue;
     }
 
     const change = (data[i] ?? 0) - (data[i - 1] ?? 0);
-    gains.push(change > 0 ? change : 0);
-    losses.push(change < 0 ? Math.abs(change) : 0);
+    const gain = change > 0 ? change : 0;
+    const loss = change < 0 ? Math.abs(change) : 0;
+    gains[i] = gain;
+    losses[i] = loss;
+
+    gainSum += gain;
+    lossSum += loss;
+
+    if (i > period) {
+      gainSum -= gains[i - period]!;
+      lossSum -= losses[i - period]!;
+    }
 
     if (i < period) {
-      result.push(50);
+      result[i] = 50;
       continue;
     }
 
-    const avgGain =
-      gains.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period;
-    const avgLoss =
-      losses.slice(i - period + 1, i + 1).reduce((a, b) => a + b, 0) / period;
+    const avgGain = gainSum / period;
+    const avgLoss = lossSum / period;
 
     if (avgLoss === 0) {
-      result.push(100);
+      result[i] = 100;
     } else {
       const rs = avgGain / avgLoss;
-      result.push(100 - 100 / (1 + rs));
+      result[i] = 100 - 100 / (1 + rs);
     }
   }
   return result;
@@ -257,7 +274,8 @@ function calculateMACD(
 
 /**
  * Calculate Bollinger Bands
- * 计算布林带
+ * Uses running sum-of-squares for O(n) total variance.
+ * 计算布林带 — 使用滑动窗口实现 O(n) 方差
  */
 function calculateBollingerBands(
   data: number[],
@@ -265,23 +283,33 @@ function calculateBollingerBands(
   stdDevMultiplier: number = 2,
 ): Array<{ upper: number; middle: number; lower: number }> {
   const middle = calculateSMA(data, period);
-  const result: Array<{ upper: number; middle: number; lower: number }> = [];
+  const result: Array<{ upper: number; middle: number; lower: number }> = new Array(data.length);
+
+  let windowSum = 0;
+  let windowSumSq = 0;
 
   for (let i = 0; i < data.length; i++) {
-    if (i < period - 1 || isNaN(middle[i] ?? 0)) {
-      result.push({ upper: NaN, middle: NaN, lower: NaN });
+    const val = data[i]!;
+    windowSum += val;
+    windowSumSq += val * val;
+
+    if (i >= period) {
+      const old = data[i - period]!;
+      windowSum -= old;
+      windowSumSq -= old * old;
+    }
+
+    if (i < period - 1 || isNaN(middle[i]!)) {
+      result[i] = { upper: NaN, middle: NaN, lower: NaN };
     } else {
-      const slice = data.slice(i - period + 1, i + 1);
-      const mean = middle[i] ?? 0;
-      const variance =
-        slice.reduce((sum, val) => sum + Math.pow((val ?? 0) - mean, 2), 0) /
-        period;
-      const std = Math.sqrt(variance);
-      result.push({
+      const mean = middle[i]!;
+      const variance = windowSumSq / period - (windowSum / period) * (windowSum / period);
+      const std = Math.sqrt(Math.max(0, variance));
+      result[i] = {
         upper: mean + stdDevMultiplier * std,
         middle: mean,
         lower: mean - stdDevMultiplier * std,
-      });
+      };
     }
   }
 
@@ -319,6 +347,48 @@ export function calculateAllIndicators(klines: BacktestKline[]): Indicators {
 function formatDate(timestamp: number): string {
   const date = new Date(timestamp * 1000);
   return date.toISOString().split("T")[0] ?? "";
+}
+
+// =============================================================================
+// SIGNAL DEDUPLICATOR / 信号去重器
+// =============================================================================
+
+/**
+ * Time-window deduplication using a Map for O(1) lookup per signal.
+ * Replaces linear-scan deduplication with constant-time checks.
+ *
+ * Usage:
+ *   const dedup = new SignalDeduplicator();
+ *   if (!dedup.isDuplicate('MACD金叉', signalTimestamp, 3)) {
+ *     // process signal
+ *   }
+ */
+export class SignalDeduplicator {
+  private activeWindows = new Map<string, number>();
+
+  /**
+   * Check if a signal is a duplicate within the minimum gap window.
+   * If not a duplicate, records this signal's timestamp for future checks.
+   *
+   * @param signalType - Signal type key (e.g., "MACD金叉")
+   * @param dateEpochMs - Signal date as epoch milliseconds
+   * @param minGapDays - Minimum gap between signals of the same type
+   * @returns true if this signal should be skipped (duplicate)
+   */
+  isDuplicate(signalType: string, dateEpochMs: number, minGapDays: number): boolean {
+    const lastDate = this.activeWindows.get(signalType);
+    if (lastDate !== undefined) {
+      const daysDiff = (dateEpochMs - lastDate) / (86400 * 1000);
+      if (daysDiff < minGapDays) return true;
+    }
+    this.activeWindows.set(signalType, dateEpochMs);
+    return false;
+  }
+
+  /** Reset all tracked windows. */
+  reset(): void {
+    this.activeWindows.clear();
+  }
 }
 
 // =============================================================================

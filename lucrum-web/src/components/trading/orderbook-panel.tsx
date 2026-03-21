@@ -136,13 +136,18 @@ export function OrderbookPanel({
   useEffect(() => {
     if (!orderbook) return;
 
+    let active = true;
+
     const interval = setInterval(async () => {
       const data = await fetchOrderbook(symbol);
-      if (data) setOrderbook(data);
+      if (active && data) setOrderbook(data);
     }, 5000);
 
-    return () => clearInterval(interval);
-  }, [symbol, orderbook !== null]);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [symbol, orderbook !== null]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Calculate spread
   const spread = useMemo(() => {

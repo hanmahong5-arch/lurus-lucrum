@@ -148,7 +148,7 @@ function MasterCard({
       {/* Quote */}
       <div className="flex-1">
         <blockquote className="text-sm text-white/80 italic border-l-2 border-white/30 pl-3">
-          "{master.quotes[0]}"
+          &quot;{master.quotes[0]}&quot;
         </blockquote>
       </div>
 
@@ -198,7 +198,7 @@ export function MasterAgentPreview({ masterId, className }: MasterAgentPreviewPr
       <div className="flex-1 min-w-0">
         <div className="font-medium text-white">{master.name}</div>
         <p className="text-sm text-white/70 mt-1 italic">
-          "{master.quotes[0]}"
+          &quot;{master.quotes[0]}&quot;
         </p>
         <div className="flex flex-wrap gap-1 mt-2">
           {master.focusAreas.slice(0, 4).map((area, i) => (
@@ -227,17 +227,18 @@ interface MasterQuoteProps {
 export function MasterQuote({ masterId, className }: MasterQuoteProps) {
   const master = getMasterAgentById(masterId);
 
-  if (!master) return null;
-
   const [quoteIndex, setQuoteIndex] = React.useState(0);
 
   // Rotate quotes
   React.useEffect(() => {
+    if (!master) return;
     const interval = setInterval(() => {
       setQuoteIndex((prev) => (prev + 1) % master.quotes.length);
     }, 8000);
     return () => clearInterval(interval);
-  }, [master.quotes.length]);
+  }, [master]);
+
+  if (!master) return null;
 
   return (
     <div className={cn('p-4 bg-white/5 rounded-lg', className)}>
@@ -246,7 +247,7 @@ export function MasterQuote({ masterId, className }: MasterQuoteProps) {
         <span className="font-medium text-white">{master.masterName}</span>
       </div>
       <blockquote className="text-white/80 italic transition-opacity duration-500">
-        "{master.quotes[quoteIndex]}"
+        &quot;{master.quotes[quoteIndex]}&quot;
       </blockquote>
       <div className="flex justify-center gap-1 mt-3">
         {master.quotes.map((_, i) => (

@@ -76,6 +76,8 @@ export interface UserPreferencesState {
   preferredBacktestTimeframe: '1d' | '1w' | '60m' | '30m' | '15m' | '5m' | '1m';
   /** Split panel ratio (left panel width percentage) */
   splitPanelRatio: number;
+  /** Whether the user has completed the first-time onboarding flow */
+  hasCompletedOnboarding: boolean;
 }
 
 interface UserPreferencesActions {
@@ -93,6 +95,7 @@ interface UserPreferencesActions {
   setDefaultSlippage: (slippage: number) => void;
   setPreferredBacktestTimeframe: (tf: '1d' | '1w' | '60m' | '30m' | '15m' | '5m' | '1m') => void;
   setSplitPanelRatio: (ratio: number) => void;
+  setHasCompletedOnboarding: (value: boolean) => void;
   reset: () => void;
 }
 
@@ -124,6 +127,7 @@ const INITIAL_STATE: UserPreferencesState = {
   defaultSlippage: 0.001,
   preferredBacktestTimeframe: '1d',
   splitPanelRatio: 50,
+  hasCompletedOnboarding: false,
 };
 
 // =============================================================================
@@ -207,13 +211,18 @@ export const useUserPreferencesStore = createPersistedStore<UserPreferencesStore
         state.splitPanelRatio = Math.max(25, Math.min(75, ratio));
       }),
 
+    setHasCompletedOnboarding: (value) =>
+      set((state) => {
+        state.hasCompletedOnboarding = value;
+      }),
+
     reset: () =>
       set((state) => {
         Object.assign(state, INITIAL_STATE);
       }),
   }),
   {
-    version: 1,
+    version: 2,
     // Persist everything (all state is user preference, no transient fields)
     partialize: (state) => ({
       theme: state.theme,
@@ -230,14 +239,17 @@ export const useUserPreferencesStore = createPersistedStore<UserPreferencesStore
       defaultSlippage: state.defaultSlippage,
       preferredBacktestTimeframe: state.preferredBacktestTimeframe,
       splitPanelRatio: state.splitPanelRatio,
+      hasCompletedOnboarding: state.hasCompletedOnboarding,
     }) as typeof state,
     migrate: (persisted: unknown, version: number) => {
+      const old = persisted as Partial<UserPreferencesStore>;
       // Version 0 (pre-versioning) -> Version 1: add new fields with defaults
-      if (version === 0) {
-        const old = persisted as Partial<UserPreferencesStore>;
+      if (version === 0 || version === 1) {
         return {
           ...INITIAL_STATE,
           ...old,
+          // V2: ensure hasCompletedOnboarding exists
+          hasCompletedOnboarding: old.hasCompletedOnboarding ?? false,
           _hasHydrated: false,
           _setHasHydrated: () => {},
         } as unknown as UserPreferencesStore & HydrationState;
@@ -265,3 +277,4 @@ export const selectLastTemplateCategory = (state: UserPreferencesStore) => state
 export const selectDefaultSlippage = (state: UserPreferencesStore) => state.defaultSlippage;
 export const selectPreferredBacktestTimeframe = (state: UserPreferencesStore) => state.preferredBacktestTimeframe;
 export const selectSplitPanelRatio = (state: UserPreferencesStore) => state.splitPanelRatio;
+export const selectHasCompletedOnboarding = (state: UserPreferencesStore) => state.hasCompletedOnboarding;

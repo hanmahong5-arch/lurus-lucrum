@@ -110,8 +110,8 @@ export function ResultSummary({
           </div>
         </div>
         <div className="p-8 text-center text-white/40">
-          <p>配置参数后点击"开始验证"</p>
-          <p className="text-xs mt-1">Configure and click "Start Validation"</p>
+          <p>配置参数后点击&quot;开始验证&quot;</p>
+          <p className="text-xs mt-1">Configure and click &quot;Start Validation&quot;</p>
         </div>
       </div>
     );

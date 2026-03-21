@@ -466,8 +466,8 @@ export function ParameterBoundaryPanel({
       {/* Empty state / 空状态 */}
       {!analysis && !isLoading && !error && (
         <div className="text-center py-6 text-white/40">
-          <p className="text-sm">选择参数并点击"分析边界"</p>
-          <p className="text-xs mt-1">Select a parameter and click "Analyze Boundaries"</p>
+          <p className="text-sm">选择参数并点击&quot;分析边界&quot;</p>
+          <p className="text-xs mt-1">Select a parameter and click &quot;Analyze Boundaries&quot;</p>
         </div>
       )}
     </div>

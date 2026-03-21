@@ -487,7 +487,7 @@ function MasterAgentCard({ master, icon, selected, onClick }: MasterAgentCardPro
             <div className="space-y-1">
               {master.signatureQuotes.slice(0, 2).map((quote, idx) => (
                 <p key={idx} className="text-xs text-white/60 italic">
-                  "{quote}"
+                  &quot;{quote}&quot;
                 </p>
               ))}
             </div>

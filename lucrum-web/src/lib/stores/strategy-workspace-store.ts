@@ -480,6 +480,7 @@ export const useStrategyWorkspaceStore = create<WorkspaceStore>()(
     })),
     {
       name: 'lucrum-strategy-workspace',
+      skipHydration: true,
       // Custom storage that handles user-scoped keys
       // 自定义存储，处理用户范围的键
       storage: {

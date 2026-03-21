@@ -6,7 +6,7 @@
  * 提供用于从顾问 API 获取流式对话响应的 React Hook
  */
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback, useRef, useEffect } from "react";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -52,6 +52,13 @@ export function useStreamingChat(): UseStreamingChatReturn {
   const [currentResponse, setCurrentResponse] = useState("");
 
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Abort streaming on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      abortControllerRef.current?.abort();
+    };
+  }, []);
 
   /**
    * Stop the current streaming request

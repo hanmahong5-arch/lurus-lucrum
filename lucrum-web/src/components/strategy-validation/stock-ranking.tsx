@@ -373,7 +373,7 @@ const MobileCard = React.memo(
     return (
       <div
         role="listitem"
-        aria-selected={isSelected}
+        data-selected={isSelected}
         aria-label={`${stock.stockName}: 排名 ${index + 1}, 胜率 ${stock.winRate.toFixed(0)}%`}
         tabIndex={hasClickHandler ? 0 : -1}
         onClick={handleClick}

@@ -502,6 +502,9 @@ export function calculateStreaks(signals: SignalDetail[]): {
 /**
  * Calculate risk-adjusted returns
  * 计算风险调整后收益
+ *
+ * Max drawdown uses O(n) single-pass peak tracking (no nested loops).
+ * Sortino downside deviation accumulates in the same pass as avgReturn.
  */
 export function calculateRiskAdjustedReturns(
   returns: number[],
@@ -521,30 +524,29 @@ export function calculateRiskAdjustedReturns(
     };
   }
 
-  const avgReturn = average(returns);
-  const stdDev = standardDeviation(returns);
-
-  // Sharpe Ratio
-  const sharpeRatio = stdDev > 0 ? (avgReturn - riskFreeRate) / stdDev : 0;
-
-  // Sortino Ratio: uses ALL returns with min(r, 0) for downside semi-deviation
-  // 索提诺比率：用全序列 min(r, 0) 计算下行半偏差
-  const downsideSquares = returns.map((r) => Math.pow(Math.min(r - riskFreeRate, 0), 2));
-  const downsideDeviation = Math.sqrt(average(downsideSquares));
-  const sortinoRatio =
-    downsideDeviation > 0
-      ? (avgReturn - riskFreeRate) / downsideDeviation
-      : avgReturn > riskFreeRate
-        ? Infinity
-        : 0;
-
-  // Max Drawdown (simplified - based on cumulative returns)
+  // Single pass: compute sum, sum-of-squares, downside squares, cumulative max drawdown
+  let totalReturn = 0;
+  let sumSquaredDiff = 0;
+  let downsideSquaredSum = 0;
+  let cumulative = 0;
   let peak = 0;
   let maxDrawdown = 0;
-  let cumulative = 0;
 
-  for (const ret of returns) {
-    cumulative += ret;
+  // First pass for mean
+  for (const r of returns) {
+    totalReturn += r;
+  }
+  const avgReturn = totalReturn / returns.length;
+
+  // Second pass for variance, downside, and drawdown
+  for (const r of returns) {
+    const diff = r - avgReturn;
+    sumSquaredDiff += diff * diff;
+
+    const downsideDiff = Math.min(r - riskFreeRate, 0);
+    downsideSquaredSum += downsideDiff * downsideDiff;
+
+    cumulative += r;
     if (cumulative > peak) {
       peak = cumulative;
     }
@@ -553,6 +555,20 @@ export function calculateRiskAdjustedReturns(
       maxDrawdown = drawdown;
     }
   }
+
+  // Sharpe Ratio
+  const variance = sumSquaredDiff / returns.length;
+  const stdDev = Math.sqrt(variance);
+  const sharpeRatio = stdDev > 0 ? (avgReturn - riskFreeRate) / stdDev : 0;
+
+  // Sortino Ratio
+  const downsideDeviation = Math.sqrt(downsideSquaredSum / returns.length);
+  const sortinoRatio =
+    downsideDeviation > 0
+      ? (avgReturn - riskFreeRate) / downsideDeviation
+      : avgReturn > riskFreeRate
+        ? Infinity
+        : 0;
 
   // Calmar Ratio
   const calmarRatio =
@@ -730,25 +746,29 @@ export function calculateDrawdownAnalysis(
   let maxDrawdown = 0;
   let maxDrawdownDuration = 0;
 
-  const drawdowns: number[] = [];
+  // Accumulate drawdown sum inline for O(1) avg (no intermediate array allocation)
+  let drawdownSum = 0;
   const periods: DrawdownPeriod[] = [];
   let currentPeriod: Partial<DrawdownPeriod> | null = null;
 
+  // Pre-parse start date once to avoid repeated new Date() in the hot path
+  let currentPeriodStartMs = 0;
+  let currentPeriodTroughMs = 0;
+
   for (let i = 0; i < equityCurve.length; i++) {
     const point = equityCurve[i]!;
-    const drawdown = ((peak - point.equity) / peak) * 100;
+    const drawdown = peak > 0 ? ((peak - point.equity) / peak) * 100 : 0;
 
-    drawdowns.push(drawdown);
+    drawdownSum += drawdown;
 
     if (point.equity > peak) {
       // New peak reached, close any open drawdown period
       if (currentPeriod && currentPeriod.startDate) {
+        const pointMs = new Date(point.date).getTime();
         currentPeriod.recoveryDate = point.date;
         currentPeriod.isRecovered = true;
         currentPeriod.recoveryDays = Math.round(
-          (new Date(point.date).getTime() -
-            new Date(currentPeriod.troughDate!).getTime()) /
-            (1000 * 60 * 60 * 24),
+          (pointMs - currentPeriodTroughMs) / (1000 * 60 * 60 * 24),
         );
         periods.push(currentPeriod as DrawdownPeriod);
         currentPeriod = null;
@@ -758,6 +778,8 @@ export function calculateDrawdownAnalysis(
     } else if (drawdown > 0) {
       // In drawdown
       if (!currentPeriod) {
+        currentPeriodStartMs = new Date(peakDate).getTime();
+        currentPeriodTroughMs = new Date(point.date).getTime();
         currentPeriod = {
           startDate: peakDate,
           troughDate: point.date,
@@ -770,13 +792,13 @@ export function calculateDrawdownAnalysis(
       if (drawdown > currentPeriod.maxDrawdown!) {
         currentPeriod.maxDrawdown = drawdown;
         currentPeriod.troughDate = point.date;
+        currentPeriodTroughMs = new Date(point.date).getTime();
       }
 
       currentPeriod.endDate = point.date;
+      const pointMs = new Date(point.date).getTime();
       currentPeriod.durationDays = Math.round(
-        (new Date(point.date).getTime() -
-          new Date(currentPeriod.startDate!).getTime()) /
-          (1000 * 60 * 60 * 24),
+        (pointMs - currentPeriodStartMs) / (1000 * 60 * 60 * 24),
       );
 
       if (drawdown > maxDrawdown) {
@@ -794,7 +816,7 @@ export function calculateDrawdownAnalysis(
   }
 
   const lastPoint = equityCurve[equityCurve.length - 1]!;
-  const currentDrawdown = ((peak - lastPoint.equity) / peak) * 100;
+  const currentDrawdown = peak > 0 ? ((peak - lastPoint.equity) / peak) * 100 : 0;
 
   // Recovery factor = total return / max drawdown
   const totalReturn =
@@ -810,7 +832,7 @@ export function calculateDrawdownAnalysis(
   return {
     maxDrawdown: roundReturnPct(maxDrawdown),
     maxDrawdownDuration,
-    avgDrawdown: roundReturnPct(average(drawdowns)),
+    avgDrawdown: roundReturnPct(equityCurve.length > 0 ? drawdownSum / equityCurve.length : 0),
     drawdownPeriods: periods.map((p) => ({
       ...p,
       maxDrawdown: roundReturnPct(p.maxDrawdown),

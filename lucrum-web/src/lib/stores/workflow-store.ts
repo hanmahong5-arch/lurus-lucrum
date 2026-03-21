@@ -328,6 +328,7 @@ export const useWorkflowStore = create<WorkflowStore>()(
     })),
     {
       name: 'lucrum-workflow-store',
+      skipHydration: true,
       partialize: (state) => ({
         userId: state.userId,
         // Persist session reference so it can be reloaded on navigation return

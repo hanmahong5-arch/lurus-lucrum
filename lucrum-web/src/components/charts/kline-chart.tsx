@@ -545,7 +545,7 @@ export function KLineChart({
           time: m.timestamp as Time,
           position: (m.type === "buy" ? "belowBar" : "aboveBar") as SeriesMarkerPosition,
           shape: (m.type === "buy" ? "arrowUp" : "arrowDown") as SeriesMarkerShape,
-          color: m.type === "buy" ? "#10b981" : "#ef4444",
+          color: m.type === "buy" ? "#ef4444" : "#10b981", // CN convention: red=buy, green=sell
           text: m.type === "buy" ? "B" : "S",
           size: 1,
         }))
@@ -853,17 +853,17 @@ function TradeTooltip({ marker }: { marker: TradeMarkerInfo }) {
     <div className="w-60 rounded-lg border shadow-xl text-xs"
       style={{
         background: "rgba(15,17,23,0.97)",
-        borderColor: isBuy ? "rgba(16,185,129,0.5)" : "rgba(239,68,68,0.5)",
+        borderColor: isBuy ? "rgba(239,68,68,0.5)" : "rgba(16,185,129,0.5)",
       }}
     >
-      {/* Header */}
+      {/* Header — CN convention: red=buy, green=sell */}
       <div
         className="px-3 py-2 rounded-t-lg flex items-center justify-between"
-        style={{ background: isBuy ? "rgba(16,185,129,0.15)" : "rgba(239,68,68,0.15)" }}
+        style={{ background: isBuy ? "rgba(239,68,68,0.15)" : "rgba(16,185,129,0.15)" }}
       >
         <span
           className="font-bold text-sm"
-          style={{ color: isBuy ? "#10b981" : "#ef4444" }}
+          style={{ color: isBuy ? "#ef4444" : "#10b981" }}
         >
           {isBuy ? "▲ 买入" : "▼ 卖出"}
         </span>

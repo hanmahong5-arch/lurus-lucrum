@@ -335,11 +335,11 @@ describe("WorkflowStepper Component - Story 1.5", () => {
       expect(completedStep).not.toHaveAttribute("aria-current");
     });
 
-    it("should have aria-disabled='true' on pending steps", () => {
+    it("should have data-disabled on pending steps", () => {
       render(<WorkflowStepper steps={mockSteps} currentStep={2} />);
 
       const pendingStep = screen.getByText("回测").closest('[role="listitem"]');
-      expect(pendingStep).toHaveAttribute("aria-disabled", "true");
+      expect(pendingStep).toHaveAttribute("data-disabled");
     });
 
     it("should have tabIndex=0 for clickable steps", () => {

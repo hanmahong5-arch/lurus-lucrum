@@ -221,14 +221,34 @@ export async function POST(request: NextRequest) {
     // 验证输入
     if (!message || typeof message !== "string") {
       return NextResponse.json(
-        { error: "Missing or invalid message" },
+        {
+          error: {
+            code: 'ADVISOR_NO_MESSAGE',
+            title: '请输入问题',
+            description: '请输入您想咨询的投资问题',
+            severity: 'warning',
+            recoveryActions: [
+              { type: 'custom', label: '输入问题' },
+            ],
+          },
+        },
         { status: 400 },
       );
     }
 
     if (message.length > 5000) {
       return NextResponse.json(
-        { error: "Message too long (max 5000 characters)" },
+        {
+          error: {
+            code: 'ADVISOR_MSG_TOO_LONG',
+            title: '问题过长',
+            description: '问题内容不能超过5000字，请简化问题后重试',
+            severity: 'warning',
+            recoveryActions: [
+              { type: 'custom', label: '简化问题' },
+            ],
+          },
+        },
         { status: 400 },
       );
     }
@@ -251,11 +271,16 @@ export async function POST(request: NextRequest) {
       if (!quota.allowed) {
         return NextResponse.json(
           {
-            error: "AI 对话次数已达今日上限",
-            code: "QUOTA_EXCEEDED",
-            remaining: quota.remaining,
-            plan: quota.plan,
-            upgradeUrl: "/dashboard/account",
+            error: {
+              code: 'ADVISOR_QUOTA',
+              title: 'AI 对话次数已达今日上限',
+              description: `当前${quota.plan ?? '免费'}计划的对话额度已用完，剩余 ${quota.remaining ?? 0} 次`,
+              severity: 'warning',
+              recoveryActions: [
+                { type: 'navigate', href: '/dashboard/account', label: '升级套餐' },
+                { type: 'custom', label: '使用模板问题' },
+              ],
+            },
           },
           { status: 429 }
         );
@@ -316,9 +341,18 @@ export async function POST(request: NextRequest) {
       console.error("[Advisor API] LLM error:", response.status, errorText);
       return NextResponse.json(
         {
-          error: "Failed to get advisor response",
-          details: errorText,
-          status: response.status,
+          error: {
+            code: 'ADVISOR_LLM',
+            title: 'AI 顾问响应失败',
+            description: response.status === 429
+              ? 'AI 服务繁忙，请稍后再试'
+              : `AI 服务暂时不可用 (${response.status})，请稍后重试`,
+            severity: 'error',
+            recoveryActions: [
+              { type: 'retry', label: '重试' },
+              { type: 'custom', label: '简化问题' },
+            ],
+          },
         },
         { status: response.status },
       );
@@ -396,7 +430,18 @@ export async function POST(request: NextRequest) {
 
     if (!advisorResponse) {
       return NextResponse.json(
-        { error: "Empty response from advisor" },
+        {
+          error: {
+            code: 'ADVISOR_EMPTY',
+            title: 'AI 未返回内容',
+            description: 'AI 顾问未生成有效回复，请尝试换一种方式提问',
+            severity: 'warning',
+            recoveryActions: [
+              { type: 'retry', label: '重试' },
+              { type: 'custom', label: '换一种提问方式' },
+            ],
+          },
+        },
         { status: 500 },
       );
     }
@@ -469,8 +514,24 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("[Advisor API] Error:", error);
+    const msg = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      { error: "Internal server error", message: String(error) },
+      {
+        error: {
+          code: 'ADVISOR_ERROR',
+          title: 'AI 顾问服务异常',
+          description: msg.includes('timeout') || msg.includes('TIMEOUT')
+            ? '请求超时，建议简化问题后重试'
+            : msg.includes('fetch') || msg.includes('network')
+              ? '网络连接失败，请检查网络后重试'
+              : `AI 顾问服务出错: ${msg}`,
+          severity: 'error',
+          recoveryActions: [
+            { type: 'retry', label: '重试' },
+            { type: 'custom', label: '简化问题' },
+          ],
+        },
+      },
       { status: 500 },
     );
   }

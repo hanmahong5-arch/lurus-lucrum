@@ -45,8 +45,8 @@ describe("QuickPreviewResult", () => {
 
   it("displays total return and max drawdown", () => {
     render(<QuickPreviewResult data={createMockData()} state="success" onRetry={vi.fn()} />);
-    expect(screen.getByTestId("quick-preview-result")).toHaveTextContent("15.00%");
-    expect(screen.getByTestId("quick-preview-result")).toHaveTextContent("8.00%");
+    expect(screen.getByTestId("quick-preview-result")).toHaveTextContent("+0.15%");
+    expect(screen.getByTestId("quick-preview-result")).toHaveTextContent("-0.08%");
   });
 
   it("shows trade count", () => {

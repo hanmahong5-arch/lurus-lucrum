@@ -34,6 +34,15 @@ const BacktestAgentPanel = dynamic(
   },
 );
 
+const PortfolioContent = dynamic(
+  () =>
+    import("@/components/pages/portfolio-content").then((m) => m.PortfolioContent),
+  {
+    ssr: false,
+    loading: () => <TabSkeleton />,
+  },
+);
+
 function TabSkeleton() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -47,6 +56,7 @@ function TabSkeleton() {
 
 const TABS = [
   { value: "validation", label: "策略验证" },
+  { value: "portfolio", label: "组合分仓" },
   { value: "ai", label: "AI 智能回测" },
 ];
 
@@ -62,7 +72,7 @@ function ValidationPageContent() {
             策略验证
           </h1>
           <p className="text-sm text-white/50">
-            多维度验证交易策略的有效性 — 单股回测、多股批量验证与 AI 智能分析
+            多维度验证交易策略的有效性 — 单股回测、组合分仓、多股验证与 AI 智能分析
           </p>
         </div>
 
@@ -72,6 +82,8 @@ function ValidationPageContent() {
               switch (activeTab) {
                 case "validation":
                   return <StrategyValidationContent />;
+                case "portfolio":
+                  return <PortfolioContent />;
                 case "ai":
                   return (
                     <div className="h-[calc(100vh-280px)] min-h-[500px]">
