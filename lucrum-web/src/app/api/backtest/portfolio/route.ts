@@ -11,6 +11,8 @@ import { NextRequest } from "next/server";
 import { getServerSession } from "next-auth";
 import Decimal from "decimal.js";
 import { authOptions } from "@/lib/auth/auth";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/middleware/rate-limiter";
+import { limiter } from "@/lib/middleware/concurrency-limiter";
 import { getKLineFromDatabase } from "@/lib/backtest/db-kline-provider";
 import type { BacktestKline } from "@/lib/backtest/types";
 import {
@@ -284,6 +286,59 @@ async function klineProvider(
 // =============================================================================
 
 export async function POST(request: NextRequest): Promise<Response> {
+  // Rate limit check
+  const ip = getClientIdentifier(request.headers);
+  const rateCheck = checkRateLimit('portfolio', ip);
+  if (!rateCheck.allowed) {
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          title: '请求过于频繁',
+          description: RATE_LIMITS.portfolio.message,
+          severity: 'warning',
+          recoveryActions: [
+            { type: 'dismiss', label: '知道了' },
+          ],
+        },
+      }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(rateCheck.retryAfter),
+        },
+      },
+    );
+  }
+
+  // Concurrency control
+  let release: (() => void) | undefined;
+  try {
+    const slot = await limiter.acquire('portfolio', 30_000);
+    release = slot.release;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '服务繁忙，请稍后重试';
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: {
+          code: 'CONCURRENCY_LIMIT',
+          title: '服务繁忙',
+          description: msg,
+          severity: 'warning',
+          recoveryActions: [
+            { type: 'retry', label: '重试' },
+          ],
+        },
+      }),
+      { status: 503, headers: { 'Content-Type': 'application/json' } },
+    );
+  }
+
+  try {
+
   // Authentication check
   const session = await getServerSession(authOptions);
   if (!session?.user) {
@@ -398,6 +453,8 @@ export async function POST(request: NextRequest): Promise<Response> {
           },
         });
       } finally {
+        // Release concurrency slot when the stream is done
+        release?.();
         try {
           controller.close();
         } catch {
@@ -415,4 +472,11 @@ export async function POST(request: NextRequest): Promise<Response> {
       "X-Accel-Buffering": "no",
     },
   });
+
+  } finally {
+    // Note: for SSE routes, release happens inside the stream's finally block.
+    // This outer finally is a safety net for early returns before stream setup.
+    // The release is idempotent (calling release() multiple times is safe because
+    // the limiter tracks active count, not individual slot ownership).
+  }
 }

@@ -90,11 +90,46 @@ export function toAppError(err: unknown, fallbackCode = 'UNKNOWN'): AppError {
 /**
  * Parse the JSON body of a failed API response into an AppError.
  * Handles both new structured format and legacy { error: string } format.
+ * Special handling for 429 (rate limited) responses with Retry-After header.
  */
 export async function parseApiError(
   response: Response,
   fallbackCode = 'API_ERROR',
 ): Promise<AppError> {
+  // Special handling for rate limit responses
+  if (response.status === 429) {
+    const retryAfter = response.headers.get('Retry-After');
+    const retrySeconds = retryAfter ? parseInt(retryAfter, 10) : 0;
+
+    try {
+      const body = await response.json();
+      if (body.error && typeof body.error === 'object' && body.error.code) {
+        return {
+          code: body.error.code,
+          title: body.error.title ?? '请求过于频繁',
+          description: body.error.description ?? `请等待${retrySeconds || '几'}秒后再试`,
+          severity: 'warning',
+          recoveryActions: body.error.recoveryActions ?? [
+            { type: 'dismiss', label: '知道了' },
+          ],
+          raw: JSON.stringify(body),
+        };
+      }
+    } catch {
+      // Fall through to default 429 handling
+    }
+
+    return {
+      code: 'RATE_LIMITED',
+      title: '请求过于频繁',
+      description: retrySeconds > 0
+        ? `请等待${retrySeconds}秒后再试`
+        : '请稍后再试',
+      severity: 'warning',
+      recoveryActions: [{ type: 'dismiss', label: '知道了' }],
+    };
+  }
+
   try {
     const body = await response.json();
 

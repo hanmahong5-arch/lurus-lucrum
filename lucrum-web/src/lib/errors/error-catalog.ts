@@ -378,4 +378,29 @@ export const ErrorCatalog = {
       ],
     );
   },
+
+  // === Rate Limiting ===
+  rateLimitExceeded(retryAfterSeconds: number): AppError {
+    return makeError(
+      'RATE_LIMITED',
+      '请求过于频繁',
+      `请等待${retryAfterSeconds}秒后再试`,
+      'warning',
+      [
+        { type: 'dismiss', label: '知道了' },
+      ],
+    );
+  },
+
+  concurrencyLimitExceeded(activeCount: number): AppError {
+    return makeError(
+      'CONCURRENCY_LIMIT',
+      '服务繁忙',
+      `当前有${activeCount}个任务正在执行，请稍后重试`,
+      'warning',
+      [
+        { type: 'retry', label: '稍后重试' },
+      ],
+    );
+  },
 } as const;

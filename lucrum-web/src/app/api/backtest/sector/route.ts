@@ -16,6 +16,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/middleware/rate-limiter";
+import { limiter } from "@/lib/middleware/concurrency-limiter";
 import { getStockRepository, getStrategyRepository } from "@/lib/repositories";
 import {
   getSectorStocksProtected,
@@ -283,6 +285,53 @@ function validateRequest(body: unknown): {
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
   const warnings: string[] = [];
+
+  // Rate limit check
+  const ip = getClientIdentifier(request.headers);
+  const rateCheck = checkRateLimit('sector', ip);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          title: '请求过于频繁',
+          description: RATE_LIMITS.sector.message,
+          severity: 'warning' as const,
+          recoveryActions: [
+            { type: 'dismiss' as const, label: '知道了' },
+          ],
+        },
+      },
+      { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } },
+    );
+  }
+
+  // Concurrency control
+  let release: (() => void) | undefined;
+  try {
+    const slot = await limiter.acquire('sector', 30_000);
+    release = slot.release;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '服务繁忙，请稍后重试';
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'CONCURRENCY_LIMIT',
+          title: '服务繁忙',
+          description: msg,
+          severity: 'warning' as const,
+          recoveryActions: [
+            { type: 'retry' as const, label: '重试' },
+          ],
+        },
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
 
   try {
     // Parse and validate request
@@ -707,6 +756,11 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     );
+  }
+
+  } finally {
+    // Release concurrency slot regardless of success or failure
+    release?.();
   }
 }
 

@@ -477,10 +477,21 @@ export function BacktestPanel({
             setUpgradeDialogOpen(true);
           }
         } else if (response.status === 429) {
-          // Server-side quota exceeded
-          setUpgradeVariant("limit");
-          setUpgradeDialogOpen(true);
-          backtestTask.fail('配额超限');
+          // Rate limited or quota exceeded
+          const errorCode = data.error?.code;
+          if (errorCode === 'RATE_LIMITED' || errorCode === 'CONCURRENCY_LIMIT') {
+            // Rate limit — show error message, not upgrade dialog
+            const retryAfter = response.headers.get('Retry-After');
+            const description = data.error?.description
+              ?? (retryAfter ? `请等待${retryAfter}秒后再试` : '请求过于频繁，请稍后再试');
+            setError(description);
+            backtestTask.fail(description);
+          } else {
+            // Quota exceeded — show upgrade dialog
+            setUpgradeVariant("limit");
+            setUpgradeDialogOpen(true);
+            backtestTask.fail('配额超限');
+          }
         } else {
           const errMsg = data.error?.message ?? data.error ?? "回测失败 / Backtest failed";
           setError(errMsg);

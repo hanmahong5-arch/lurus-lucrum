@@ -22,6 +22,8 @@ import { v4 as uuidv4 } from "uuid";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth/auth";
 import { checkUsage, incrementUsage } from "@/lib/middleware/usage-tracker";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS, type RateLimitEndpoint } from "@/lib/middleware/rate-limiter";
+import { limiter, type ConcurrencyType } from "@/lib/middleware/concurrency-limiter";
 import { upsertPopularStrategy, recordUserEvent } from "@/lib/db/queries";
 import type {
   UnifiedBacktestRequest,
@@ -1130,6 +1132,80 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Determine rate limit and concurrency tier based on request mode
+    const normalizedMode = (() => {
+      const m = validatedRequest.target.mode;
+      if (m === "single") return "stock";
+      if (m === "multi") return "portfolio";
+      return m;
+    })();
+
+    const rateLimitTier: RateLimitEndpoint =
+      normalizedMode === "sector"
+        ? "sector"
+        : normalizedMode === "portfolio"
+          ? "portfolio"
+          : "backtest";
+
+    const concurrencyTier: ConcurrencyType =
+      normalizedMode === "sector"
+        ? "sector"
+        : normalizedMode === "portfolio"
+          ? "portfolio"
+          : "backtest";
+
+    // Rate limit check (skip for internal agent calls)
+    if (!isInternalCall) {
+      const ip = getClientIdentifier(request.headers);
+      const rateCheck = checkRateLimit(rateLimitTier, ip);
+      if (!rateCheck.allowed) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: {
+              code: "RATE_LIMITED",
+              title: "请求过于频繁",
+              description: RATE_LIMITS[rateLimitTier].message,
+              severity: "warning",
+              recoveryActions: [
+                { type: "dismiss", label: "知道了" },
+              ],
+            },
+          },
+          {
+            status: 429,
+            headers: { "Retry-After": String(rateCheck.retryAfter) },
+          },
+        );
+      }
+    }
+
+    // Concurrency control — acquire a slot (queue if full)
+    let release: (() => void) | undefined;
+    try {
+      const slot = await limiter.acquire(concurrencyTier, 15_000);
+      release = slot.release;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "服务繁忙，请稍后重试";
+      return NextResponse.json(
+        {
+          success: false,
+          error: {
+            code: "CONCURRENCY_LIMIT",
+            title: "服务繁忙",
+            description: msg,
+            severity: "warning",
+            recoveryActions: [
+              { type: "retry", label: "重试" },
+            ],
+          },
+        },
+        { status: 503 },
+      );
+    }
+
+    try {
+
     // Create timeout promise
     const timeoutPromise = new Promise<never>((_, reject) => {
       setTimeout(() => {
@@ -1141,14 +1217,6 @@ export async function POST(request: NextRequest) {
     let result: UnifiedBacktestResult;
 
     try {
-      // Normalize mode: "single" → "stock", "multi" → "portfolio"
-      const normalizedMode = (() => {
-        const m = validatedRequest.target.mode;
-        if (m === "single") return "stock";
-        if (m === "multi") return "portfolio";
-        return m;
-      })();
-
       const backtestPromise = (async () => {
         switch (normalizedMode) {
           case "sector":
@@ -1239,6 +1307,11 @@ export async function POST(request: NextRequest) {
       data: result,
       metadata: { dataSource: "postgresql" },
     });
+
+    } finally {
+      // Release concurrency slot regardless of success or failure
+      release?.();
+    }
   } catch (error) {
     console.error("Unified backtest error:", error);
 

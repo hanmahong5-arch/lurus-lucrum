@@ -160,6 +160,17 @@ export function SmartStrategyPicker() {
       if (data.success && data.data) {
         setRecommendations(data.data.recommendations);
         setMeta(data.data);
+      } else if (resp.status === 429) {
+        // Rate limited or concurrency limit
+        const retryAfter = resp.headers.get('Retry-After');
+        setError({
+          code: data.error?.code ?? 'RATE_LIMITED',
+          title: data.error?.title ?? '请求过于频繁',
+          description: data.error?.description
+            ?? (retryAfter ? `请等待${retryAfter}秒后再试` : '请求过于频繁，请稍后再试'),
+          severity: 'warning',
+          recoveryActions: [{ type: 'dismiss', label: '知道了' }],
+        });
       } else if (data.error) {
         setError(data.error);
       }

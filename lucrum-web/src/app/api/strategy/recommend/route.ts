@@ -22,6 +22,8 @@
  */
 
 import { NextRequest, NextResponse } from "next/server";
+import { checkRateLimit, getClientIdentifier, RATE_LIMITS } from "@/lib/middleware/rate-limiter";
+import { limiter } from "@/lib/middleware/concurrency-limiter";
 import { getSectorStocksProtected } from "@/lib/infra/external-apis";
 import { getSectorName } from "@/lib/data-service/sources/eastmoney-sector";
 import { batchGetKlinesWithDateRange } from "@/lib/data-service/batch-kline";
@@ -37,6 +39,53 @@ const MIN_KLINE_BARS = 100; // Minimum K-line bars for meaningful analysis
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+
+  // Rate limit check
+  const ip = getClientIdentifier(request.headers);
+  const rateCheck = checkRateLimit('recommend', ip);
+  if (!rateCheck.allowed) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'RATE_LIMITED',
+          title: '请求过于频繁',
+          description: RATE_LIMITS.recommend.message,
+          severity: 'warning' as const,
+          recoveryActions: [
+            { type: 'dismiss' as const, label: '知道了' },
+          ],
+        },
+      },
+      { status: 429, headers: { 'Retry-After': String(rateCheck.retryAfter) } },
+    );
+  }
+
+  // Concurrency control
+  let release: (() => void) | undefined;
+  try {
+    const slot = await limiter.acquire('recommend', 30_000);
+    release = slot.release;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : '服务繁忙，请稍后重试';
+    return NextResponse.json(
+      {
+        success: false,
+        error: {
+          code: 'CONCURRENCY_LIMIT',
+          title: '服务繁忙',
+          description: msg,
+          severity: 'warning' as const,
+          recoveryActions: [
+            { type: 'retry' as const, label: '重试' },
+          ],
+        },
+      },
+      { status: 503 },
+    );
+  }
+
+  try {
 
   try {
     const body = await request.json();
@@ -300,5 +349,10 @@ export async function POST(request: NextRequest) {
       },
       { status: 500 },
     );
+  }
+
+  } finally {
+    // Release concurrency slot regardless of success or failure
+    release?.();
   }
 }
