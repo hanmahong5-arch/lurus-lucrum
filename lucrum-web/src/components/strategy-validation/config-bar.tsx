@@ -11,6 +11,7 @@
 
 import { cn } from "@/lib/utils";
 import { Play, Square, ChevronDown } from "lucide-react";
+import { AsyncButton } from "@/components/ui/async-button";
 import { DisabledWithReason } from "@/components/ui/disabled-with-reason";
 import type { BacktestConfig } from "@/lib/stores/validation-store";
 
@@ -21,7 +22,7 @@ import type { BacktestConfig } from "@/lib/stores/validation-store";
 interface ConfigBarProps {
   config: BacktestConfig;
   onConfigChange: (patch: Partial<BacktestConfig>) => void;
-  onStart: () => void;
+  onStart: () => void | Promise<void>;
   onCancel: () => void;
   isRunning: boolean;
   disabled?: boolean;
@@ -188,19 +189,20 @@ export function ConfigBar({
             disabled={disabled}
             reason={disabledReason ?? '请完善验证配置'}
           >
-            <button
-              onClick={onStart}
+            <AsyncButton
+              onClick={async () => { await onStart(); }}
               disabled={disabled}
+              loadingText="正在验证..."
+              successText="验证完成"
+              variant="primary"
               className={cn(
-                "flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-all btn-tactile",
-                disabled
-                  ? "bg-white/5 text-white/30 cursor-not-allowed"
-                  : "bg-accent text-void hover:brightness-110 shadow-[0_0_15px_rgba(var(--lucrum-accent-rgb,234,179,8),0.25)]",
+                "px-5 py-2 text-sm",
+                !disabled && "!bg-accent !text-void hover:brightness-110 shadow-[0_0_15px_rgba(var(--lucrum-accent-rgb,234,179,8),0.25)]",
               )}
             >
               <Play className="w-3.5 h-3.5" />
               开始验证
-            </button>
+            </AsyncButton>
           </DisabledWithReason>
         )}
       </div>

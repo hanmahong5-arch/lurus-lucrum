@@ -1214,6 +1214,7 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -1289,12 +1290,14 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
               disabled={loading}
               className="p-1.5 text-white/50 hover:text-white hover:bg-white/5 rounded transition disabled:opacity-50"
               title={"\u5237\u65b0\u6570\u636e"}
+              aria-label={"\u5237\u65b0\u6570\u636e"}
             >
               <svg
                 className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -1353,13 +1356,14 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
 
         {/* Error */}
         {error && (
-          <div className="px-4 py-3 bg-loss/10 border-b border-loss/30 flex items-center justify-between">
+          <div className="px-4 py-3 bg-loss/10 border-b border-loss/30 flex items-center justify-between" role="alert">
             <div className="flex items-center gap-2">
               <svg
                 className="w-4 h-4 text-loss"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -1387,6 +1391,8 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
             {/* Main candlestick chart */}
             <div
               ref={chartContainerRef}
+              role="img"
+              aria-label={`K线图表: ${symbol}, ${TIMEFRAME_LABELS[selectedTimeFrame]?.zh || selectedTimeFrame}`}
               className="w-full bg-[#0f1117] relative"
               style={{
                 height: `${height}px`,

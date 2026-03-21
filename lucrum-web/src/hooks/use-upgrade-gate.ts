@@ -148,6 +148,13 @@ export function useUpgradeGate(currentPlanCode: string | undefined | null) {
   }, []);
 
   /**
+   * Show the "balance" upgrade nudge (insufficient wallet balance).
+   */
+  const showBalance = useCallback(() => {
+    setState({ ...INITIAL_STATE, open: true, variant: "balance" });
+  }, []);
+
+  /**
    * Close the dialog.
    */
   const close = useCallback(() => {
@@ -175,6 +182,8 @@ export function useUpgradeGate(currentPlanCode: string | undefined | null) {
     showLimit,
     /** Show upsell upgrade nudge */
     showUpsell,
+    /** Show balance insufficient nudge */
+    showBalance,
     /** Dialog state */
     dialogState: state,
     /** Close dialog */

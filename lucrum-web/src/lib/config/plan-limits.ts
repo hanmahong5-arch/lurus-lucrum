@@ -66,10 +66,10 @@ export interface PlanDisplayInfo {
 
 const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    dailyBacktests: 10,
-    dailyAiCalls: 5,
-    accessibleTemplates: Infinity,
-    maxMultiStocks: 0,
+    dailyBacktests: 5,
+    dailyAiCalls: 3,
+    accessibleTemplates: 5,
+    maxMultiStocks: 3,
     historyYears: 1,
     advancedMetrics: false,
     maxSavedResults: 3,
@@ -99,7 +99,7 @@ const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
     dailyBacktests: Infinity,
     dailyAiCalls: Infinity,
     accessibleTemplates: Infinity,
-    maxMultiStocks: 20,
+    maxMultiStocks: 50,
     historyYears: 10,
     advancedMetrics: true,
     maxSavedResults: Infinity,

@@ -54,6 +54,9 @@ import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/context
 import { ErrorCard } from "@/components/ui/error-card";
 import { ErrorCatalog } from "@/lib/errors/error-catalog";
 import { toAppError, parseApiError, type AppError } from "@/lib/errors/error-types";
+import { useFeatureUsage } from "@/hooks/use-feature-usage";
+import { getLimitsForPlan } from "@/lib/config/plan-limits";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 
 // =============================================================================
 // TYPES
@@ -172,6 +175,18 @@ export function StrategyValidationContent() {
 
   // Operation guard: prevents concurrent validations and confirms mode switches
   const validationGuard = useOperationGuard();
+
+  // ---------------------------------------------------------------------------
+  // Paywall: multi-stock limit based on plan
+  // ---------------------------------------------------------------------------
+  const { plan: userPlan } = useFeatureUsage();
+  const planLimits = useMemo(() => getLimitsForPlan(userPlan), [userPlan]);
+  const effectiveMaxStocks = useMemo(() => {
+    const planMax = planLimits.maxMultiStocks;
+    // 0 means feature not available; fall back to 3 for display
+    return planMax <= 0 ? 3 : planMax;
+  }, [planLimits]);
+  const [multistockUpgradeOpen, setMultistockUpgradeOpen] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Derived from store
@@ -655,11 +670,16 @@ export function StrategyValidationContent() {
                 <StockMultiSelector
                   selectedSymbols={targets.map((t) => t.symbol)}
                   onSelectionChange={(symbols) => {
+                    // Paywall: if attempting to add beyond plan limit, show upgrade dialog
+                    if (symbols.length > effectiveMaxStocks) {
+                      setMultistockUpgradeOpen(true);
+                      return;
+                    }
                     // Preserve names for known targets, use symbol as fallback
                     const existing = new Map(targets.map((t) => [t.symbol, t.name]));
                     vStore.setTargets(symbols.map((s) => ({ symbol: s, name: existing.get(s) ?? s })));
                   }}
-                  maxStocks={storeConfig.maxStocks}
+                  maxStocks={effectiveMaxStocks}
                   excludeST={storeConfig.excludeST}
                 />
               </div>
@@ -880,6 +900,13 @@ export function StrategyValidationContent() {
           </p>
         </div>
       )}
+
+      {/* Multi-stock paywall upgrade dialog */}
+      <UpgradeDialog
+        open={multistockUpgradeOpen}
+        onOpenChange={setMultistockUpgradeOpen}
+        variant="multistock"
+      />
     </div>
   );
 }

@@ -341,6 +341,7 @@ export function ParameterEditor({
                 {/* Category header */}
                 <button
                   onClick={() => toggleCategory(category)}
+                  aria-expanded={isExpanded}
                   className="w-full px-4 py-2.5 flex items-center justify-between bg-primary/20 hover:bg-primary/30 transition"
                 >
                   <span className="text-sm font-medium text-white/80">
@@ -358,6 +359,7 @@ export function ParameterEditor({
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
+                      aria-hidden="true"
                     >
                       <path
                         strokeLinecap="round"
@@ -654,9 +656,10 @@ function ParameterInput({
                 readOnly ||
                 (range?.min !== undefined && (value as number) <= range.min)
               }
+              aria-label={`${displayName} 减少`}
               className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 12H4" />
               </svg>
             </button>
@@ -674,6 +677,8 @@ function ParameterInput({
                 max={range?.max}
                 step={step ?? 1}
                 disabled={readOnly}
+                aria-describedby={`param-desc-${name}`}
+                aria-invalid={error ? "true" : undefined}
                 className={cn(
                   "w-full px-3 py-2 bg-primary/50 border rounded text-sm text-white text-center",
                   "focus:outline-none focus:ring-2 focus:ring-accent/50",
@@ -701,9 +706,10 @@ function ParameterInput({
                 readOnly ||
                 (range?.max !== undefined && (value as number) >= range.max)
               }
+              aria-label={`${displayName} 增加`}
               className="w-8 h-8 flex items-center justify-center rounded bg-white/10 hover:bg-white/20 text-white/60 disabled:opacity-30 disabled:cursor-not-allowed transition"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
             </button>
@@ -716,6 +722,9 @@ function ParameterInput({
           type="button"
           onClick={handleBooleanChange}
           disabled={readOnly}
+          role="switch"
+          aria-checked={!!value}
+          aria-describedby={`param-desc-${name}`}
           className={cn(
             "w-full px-3 py-2 rounded text-sm text-left transition",
             "flex items-center justify-between",
@@ -751,6 +760,8 @@ function ParameterInput({
           onFocus={handleFocusEvent}
           onBlur={handleBlurEvent}
           disabled={readOnly}
+          aria-describedby={`param-desc-${name}`}
+          aria-invalid={error ? "true" : undefined}
           className={cn(
             "w-full px-3 py-2 bg-primary/50 border rounded text-sm text-white",
             "focus:outline-none focus:ring-2 focus:ring-accent/50",
@@ -766,7 +777,11 @@ function ParameterInput({
 
       {/* Description and error */}
       <div className="mt-1.5 flex items-start justify-between gap-2">
-        <p className={cn("text-xs", error ? "text-loss" : "text-white/40")}>
+        <p
+          id={`param-desc-${name}`}
+          className={cn("text-xs", error ? "text-loss" : "text-white/40")}
+          role={error ? "alert" : undefined}
+        >
           {error ?? description}
         </p>
         {/* Default value indicator */}

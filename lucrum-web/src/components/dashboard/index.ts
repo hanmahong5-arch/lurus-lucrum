@@ -5,3 +5,4 @@
 
 export { DashboardHeader } from './dashboard-header';
 export { DashboardLayout, withDashboardLayout } from './dashboard-layout';
+export { StreakBadge } from './streak-badge';

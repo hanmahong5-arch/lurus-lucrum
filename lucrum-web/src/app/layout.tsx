@@ -11,6 +11,7 @@ import { SkipLink } from "@/components/accessibility/skip-link";
 import { LiveRegionProvider } from "@/components/accessibility/live-region";
 import { PWAInstallBanner } from "@/components/pwa/install-banner";
 import { I18nProvider } from "@/lib/i18n/context";
+import { AchievementToastManager } from "@/components/achievements/achievement-toast";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -87,6 +88,8 @@ export default function RootLayout({
           <GlobalCommandPalette />
           {/* Toast notification system (Story 1.2) */}
           <ToastSystem />
+          {/* Achievement unlock toast manager (Attention Economy P1) */}
+          <AchievementToastManager />
           {/* PWA install banner (Phase 4 Task 4) */}
           <PWAInstallBanner />
           {/* Bottom status bar (Story 1.3) */}

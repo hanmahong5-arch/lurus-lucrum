@@ -43,6 +43,15 @@ const PortfolioContent = dynamic(
   },
 );
 
+const SmartStrategyPicker = dynamic(
+  () =>
+    import("@/components/strategy-validation/smart-strategy-picker").then((m) => m.SmartStrategyPicker),
+  {
+    ssr: false,
+    loading: () => <TabSkeleton />,
+  },
+);
+
 function TabSkeleton() {
   return (
     <div className="flex items-center justify-center h-64">
@@ -56,6 +65,7 @@ function TabSkeleton() {
 
 const TABS = [
   { value: "validation", label: "策略验证" },
+  { value: "recommend", label: "智能选策" },
   { value: "portfolio", label: "组合分仓" },
   { value: "ai", label: "AI 智能回测" },
 ];
@@ -82,6 +92,8 @@ function ValidationPageContent() {
               switch (activeTab) {
                 case "validation":
                   return <StrategyValidationContent />;
+                case "recommend":
+                  return <SmartStrategyPicker />;
                 case "portfolio":
                   return <PortfolioContent />;
                 case "ai":

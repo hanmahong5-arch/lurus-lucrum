@@ -7,7 +7,7 @@
  *
  * Flow:
  *   checkAndConsumeQuota()
- *     → fetch plan via GET /api/lurus/overview
+ *     → fetch plan via platform client
  *     → read Redis counter
  *     → if within plan limit → increment counter → allow
  *     → if over plan limit + has LB → debit wallet → allow
@@ -17,11 +17,18 @@
  */
 
 import { getRedis } from '@/lib/redis';
+import {
+  getAccountByZitadelSub,
+  getAccountOverview,
+  debitWallet,
+  PlatformError,
+  type AccountOverview,
+} from '@/lib/platform/client';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const IDENTITY_URL = process.env.LURUS_IDENTITY_URL ?? 'https://identity.lurus.cn';
-const IDENTITY_INTERNAL_KEY = process.env.LURUS_IDENTITY_INTERNAL_KEY ?? '';
+const PLATFORM_URL = process.env.LURUS_IDENTITY_URL ?? 'https://identity.lurus.cn';
+const PLATFORM_KEY = process.env.LURUS_IDENTITY_INTERNAL_KEY ?? '';
 
 /** 1 LB covers this many tokens when used as overage fallback */
 const TOKENS_PER_LB = 10_000;
@@ -40,9 +47,6 @@ const FREE_MONTHLY_TOKENS = PLAN_MONTHLY_TOKENS.free as number;
 /** Plans that use LB fallback when over limit (free plan is hard-blocked). */
 const LB_FALLBACK_PLANS = new Set(['basic', 'pro']);
 
-/** Timeout for identity service calls (ms). */
-const IDENTITY_TIMEOUT_MS = 1_500;
-
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 export interface QuotaResult {
@@ -53,11 +57,6 @@ export interface QuotaResult {
   lb_spent?: number;    // LB deducted this call (if overage path)
   reason?: string;      // Error code when allowed=false
   topup_url?: string;
-}
-
-interface OverviewResponse {
-  subscription?: { plan_code?: string } | null;
-  wallet?: { balance?: number };
 }
 
 interface MonthlyUsage {
@@ -120,77 +119,36 @@ async function incrementUsage(userId: string, tokens: number, lbSpent = 0): Prom
  * Returns null when the identity service is unavailable (fail-open).
  */
 export async function resolveAccountId(zitadelSub: string): Promise<string | null> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), IDENTITY_TIMEOUT_MS);
   try {
-    const res = await fetch(
-      `${IDENTITY_URL}/internal/v1/accounts/by-zitadel-sub/${encodeURIComponent(zitadelSub)}`,
-      {
-        headers: { Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}` },
-        cache: 'no-store',
-        signal: ac.signal,
-      }
-    );
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    const account = (await res.json()) as { id: number };
+    const account = await getAccountByZitadelSub(zitadelSub);
     return String(account.id);
   } catch {
-    clearTimeout(timer);
     return null;
   }
 }
 
-async function fetchOverview(accountId: string): Promise<OverviewResponse | null> {
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), IDENTITY_TIMEOUT_MS);
+async function fetchOverview(accountId: string): Promise<AccountOverview | null> {
   try {
-    const res = await fetch(
-      `${IDENTITY_URL}/internal/v1/accounts/${encodeURIComponent(accountId)}/overview?product_id=lurus-lucrum`,
-      {
-        headers: { Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}` },
-        cache: 'no-store',
-        signal: ac.signal,
-      }
-    );
-    clearTimeout(timer);
-    if (!res.ok) return null;
-    return (await res.json()) as OverviewResponse;
+    return await getAccountOverview(parseInt(accountId, 10), 'lurus-lucrum');
   } catch {
-    clearTimeout(timer);
     return null;
   }
 }
 
 async function deductLubell(accountId: string, tokens: number): Promise<{ success: boolean; balanceAfter?: number }> {
   const lbNeeded = Math.ceil(tokens / TOKENS_PER_LB);
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), IDENTITY_TIMEOUT_MS);
   try {
-    const res = await fetch(
-      `${IDENTITY_URL}/internal/v1/accounts/${encodeURIComponent(accountId)}/wallet/debit`,
-      {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          amount:      lbNeeded,
-          type:        'ai_quota_overage',
-          product_id:  'lurus-lucrum',
-          description: `超出月度 AI 配额，消耗 ${tokens.toLocaleString()} tokens`,
-        }),
-        cache: 'no-store',
-        signal: ac.signal,
-      }
+    const result = await debitWallet(
+      accountId,
+      lbNeeded,
+      'ai_quota_overage',
+      `超出月度 AI 配额，消耗 ${tokens.toLocaleString()} tokens`,
     );
-    clearTimeout(timer);
-    if (!res.ok) return { success: false };
-    const body = (await res.json()) as { success: boolean; balance_after?: number };
-    return { success: body.success, balanceAfter: body.balance_after };
-  } catch {
-    clearTimeout(timer);
+    return { success: result.success, balanceAfter: result.balance_after };
+  } catch (err) {
+    if (err instanceof PlatformError && err.code === 'insufficient_balance') {
+      return { success: false };
+    }
     return { success: false };
   }
 }
@@ -288,10 +246,10 @@ export function consumeQuota(params: {
 
   // Report to identity for VIP accumulation (skip if accountId not provided)
   if (!params.accountId) return;
-  void fetch(`${IDENTITY_URL}/internal/v1/usage/report`, {
+  void fetch(`${PLATFORM_URL}/internal/v1/usage/report`, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}`,
+      Authorization: `Bearer ${PLATFORM_KEY}`,
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({

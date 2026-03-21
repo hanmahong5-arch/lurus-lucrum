@@ -91,6 +91,7 @@ function TH({
   dir,
   onSort,
   className,
+  scope = "col",
 }: {
   label: string;
   sortKey: SortKey;
@@ -98,10 +99,12 @@ function TH({
   dir: SortDir;
   onSort: (key: SortKey) => void;
   className?: string;
+  scope?: "col" | "row";
 }) {
   const active = currentKey === sortKey;
   return (
     <th
+      scope={scope}
       className={cn(
         "px-2 py-2 text-[10px] font-medium uppercase tracking-wide cursor-pointer select-none whitespace-nowrap",
         "hover:text-neutral-200 transition-colors",
@@ -143,19 +146,24 @@ export function TradeTableView({ trades, dataIncomplete }: TradeTableViewProps) 
 
   const rows = sortRows(toRows(trades), sortKey, sortDir);
 
+  // Compute summary stats for screen reader
+  const winCount = rows.filter((r) => r.pnl !== null && r.pnl >= 0).length;
+  const sellCount = rows.filter((r) => r.pnl !== null).length;
+  const winRate = sellCount > 0 ? ((winCount / sellCount) * 100).toFixed(1) : "0";
+
   return (
-    <div className="overflow-x-auto">
+    <div role="region" aria-label="交易记录" className="overflow-x-auto">
       <table className="w-full text-xs font-mono tabular-nums">
         <thead>
           <tr className="border-b border-white/5">
-            <TH label="日期" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-            <TH label="方向" sortKey="type" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-            <TH label="股价" sortKey="price" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-            <TH label="手数" sortKey="lots" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-            <TH label="金额" sortKey="amount" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-            <TH label="手续费" sortKey="commission" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-            <TH label="盈亏" sortKey="pnl" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
-            <TH label="持仓天" sortKey="holdingDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" />
+            <TH label="日期" sortKey="date" currentKey={sortKey} dir={sortDir} onSort={handleSort} scope="col" />
+            <TH label="方向" sortKey="type" currentKey={sortKey} dir={sortDir} onSort={handleSort} scope="col" />
+            <TH label="股价" sortKey="price" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
+            <TH label="手数" sortKey="lots" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
+            <TH label="金额" sortKey="amount" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
+            <TH label="手续费" sortKey="commission" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
+            <TH label="盈亏" sortKey="pnl" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
+            <TH label="持仓天" sortKey="holdingDays" currentKey={sortKey} dir={sortDir} onSort={handleSort} className="text-right" scope="col" />
           </tr>
         </thead>
         <tbody>
@@ -220,6 +228,9 @@ export function TradeTableView({ trades, dataIncomplete }: TradeTableViewProps) 
           ))}
         </tbody>
       </table>
+      <div className="sr-only" aria-live="polite">
+        共 {rows.length} 笔交易，胜率 {winRate}%
+      </div>
     </div>
   );
 }

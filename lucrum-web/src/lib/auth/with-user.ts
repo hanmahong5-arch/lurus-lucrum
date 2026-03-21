@@ -16,6 +16,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { NextRequest, NextResponse } from "next/server";
 import { verifyZitadelJWT } from "./jwt-verify";
+import { getEntitlementTier, type EntitlementTier } from "@/lib/platform/entitlements";
 
 // ============================================================================
 // Types
@@ -72,11 +73,14 @@ async function getUserFromBearerJWT(request: NextRequest): Promise<UserContext |
   const claims = await verifyZitadelJWT(token);
   if (!claims?.sub) return null;
 
+  // Resolve real tier from platform entitlements (cached, fail-open to 'free')
+  const tier = await getEntitlementTier(claims.sub);
+
   return {
     userId: claims.sub,
     email: claims.email ?? "",
     name: claims.name ?? claims.preferred_username ?? null,
-    role: "free", // Real tier is resolved from lurus-platform entitlements, not JWT
+    role: tier,
   };
 }
 
@@ -122,12 +126,20 @@ export async function withUser<T>(
     let userContext: UserContext | null = null;
 
     if (session?.user?.id) {
-      // Extract user context from NextAuth session
+      // Resolve real tier from platform entitlements (cached, fail-open to session role)
+      const sessionRole = session.user.role || "free";
+      let resolvedRole: EntitlementTier = sessionRole as EntitlementTier;
+      try {
+        resolvedRole = await getEntitlementTier(session.user.id);
+      } catch {
+        // Fail-open: use session role
+      }
+
       userContext = {
         userId: session.user.id,
         email: session.user.email || "",
         name: session.user.name || null,
-        role: session.user.role || "free",
+        role: resolvedRole,
       };
     } else {
       // Fallback: try Zitadel JWT from Authorization header (mobile app)

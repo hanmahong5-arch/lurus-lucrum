@@ -17,7 +17,7 @@
 
 "use client";
 
-import { useState, useMemo, useCallback, useRef } from "react";
+import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
 import { KLineChart, type TradeMarkerInfo, type KLineChartHandle } from "@/components/charts/kline-chart";
@@ -27,6 +27,11 @@ import { SmartTooltip } from "@/components/ui/smart-tooltip";
 import type { BacktestResult, DetailedTrade, BacktestTrade } from "@/lib/backtest/types";
 import type { StrategyScore } from "@/lib/backtest/score/types";
 import { calculateScore } from "@/lib/backtest/score";
+import { showToast } from "@/lib/toast";
+import { useAchievementStore } from "@/lib/stores/achievement-store";
+import { StickyMetricsBanner } from "@/components/backtest/sticky-metrics-banner";
+import { SuccessCelebration } from "@/components/ui/success-celebration";
+import { getGradeFromScore } from "@/lib/backtest/score/score-calculator";
 import Link from "next/link";
 
 // Lazy-load ScoreCard since it has heavy deps
@@ -95,9 +100,32 @@ export function BacktestResultsView({
   const [tradeView, setTradeView] = useState<"card" | "table">("card");
   const [showAllTrades, setShowAllTrades] = useState(false);
   const [analysisTab, setAnalysisTab] = useState<"equity" | "distribution" | "drawdown">("equity");
+  // Show celebration banner once for positive returns
+  const [showCelebration, setShowCelebration] = useState(() => result.totalReturn > 0);
+
+  // Achievement tracking for share action
+  const recordAchievementStat = useAchievementStore((s) => s.recordStat);
 
   // Chart ref for scrolling to trade on click
   const chartRef = useRef<KLineChartHandle>(null);
+
+  // Sticky metrics banner — visible when score section scrolls out of view
+  const [showStickyMetrics, setShowStickyMetrics] = useState(false);
+  const scoreRibbonRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scoreRibbonRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        // Show sticky banner when score ribbon is NOT visible
+        setShowStickyMetrics(!(entry?.isIntersecting ?? true));
+      },
+      { threshold: 0, rootMargin: "-60px 0px 0px 0px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Compute strategy score
   const strategyScore = useMemo<StrategyScore | null>(() => {
@@ -223,6 +251,29 @@ export function BacktestResultsView({
     [];
   const displayedTrades = showAllTrades ? allTrades : allTrades.slice(0, 10);
 
+  // Share handler — copy share text to clipboard
+  const handleShare = useCallback(async () => {
+    const sharpe = result.sharpeRatio.toFixed(2);
+    const totalReturn = result.totalReturn >= 0
+      ? `+${result.totalReturn.toFixed(2)}%`
+      : `${result.totalReturn.toFixed(2)}%`;
+    const winRate = result.winRate.toFixed(1);
+    const nameStr = strategyName ? `${strategyName} ` : "";
+    const shareText =
+      `${nameStr}AI 量化策略回测: 收益 ${totalReturn}，夏普 ${sharpe}，胜率 ${winRate}%` +
+      ` — lucrum.lurus.cn`;
+
+    try {
+      await navigator.clipboard.writeText(shareText);
+      showToast.success("\u5DF2\u590D\u5236\u5230\u526A\u8D34\u677F");
+      // Achievement tracking: record share action
+      recordAchievementStat('sharesCount', 1);
+    } catch {
+      // Fallback for environments where clipboard API is unavailable
+      showToast.error("\u590D\u5236\u5931\u8D25\uFF0C\u8BF7\u624B\u52A8\u590D\u5236");
+    }
+  }, [result, strategyName, recordAchievementStat]);
+
   // Export handler
   const handleExport = useCallback(() => {
     if (onExportReport) {
@@ -269,6 +320,24 @@ export function BacktestResultsView({
       )}
     >
       {/* ================================================================= */}
+      {/* SUCCESS CELEBRATION (positive return only, auto-dismiss)          */}
+      {/* ================================================================= */}
+      {showCelebration && (
+        <SuccessCelebration
+          annualizedReturn={result.annualizedReturn}
+          sharpeRatio={result.sharpeRatio}
+          totalReturn={result.totalReturn}
+          winRate={result.winRate}
+          onViewResults={() => setShowCelebration(false)}
+          onGoToValidation={() => {
+            setShowCelebration(false);
+            window.location.href = "/dashboard/validation";
+          }}
+          onDismiss={() => setShowCelebration(false)}
+        />
+      )}
+
+      {/* ================================================================= */}
       {/* HEADER                                                            */}
       {/* ================================================================= */}
       <div className="flex items-center justify-between">
@@ -314,9 +383,25 @@ export function BacktestResultsView({
       </div>
 
       {/* ================================================================= */}
+      {/* STICKY METRICS BANNER (visible when scrolled past score section)  */}
+      {/* ================================================================= */}
+      {showStickyMetrics && (
+        <StickyMetricsBanner
+          grade={strategyScore ? getGradeFromScore(strategyScore.score) : undefined}
+          gradeLabel={quickGrade.desc}
+          totalReturn={result.totalReturn}
+          annualizedReturn={result.annualizedReturn}
+          sharpeRatio={result.sharpeRatio}
+          maxDrawdown={result.maxDrawdown}
+          winRate={result.winRate}
+        />
+      )}
+
+      {/* ================================================================= */}
       {/* SCORE SUMMARY RIBBON                                              */}
       {/* ================================================================= */}
       <div
+        ref={scoreRibbonRef}
         className={cn(
           "rounded-xl border p-4 sm:p-5",
           quickGrade.bg,
@@ -708,6 +793,25 @@ export function BacktestResultsView({
               />
             </svg>
             导出报告
+          </button>
+          <button
+            onClick={handleShare}
+            className="px-4 py-2 text-sm text-neutral-300 bg-surface hover:bg-surface-hover border border-white/5 hover:border-white/10 rounded-lg transition-all btn-tactile flex items-center gap-2"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+              />
+            </svg>
+            分享结果
           </button>
         </div>
 

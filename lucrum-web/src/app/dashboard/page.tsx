@@ -11,6 +11,7 @@ import { PanelSkeleton, ChartSkeleton, FormSkeleton, TabContentSkeleton } from "
 import type { BacktestResult } from "@/lib/backtest/types";
 import { toAppError, type AppError } from "@/lib/errors/error-types";
 import { DashboardHeader } from "@/components/dashboard/dashboard-header";
+import { ContinueWorkBanner } from "@/components/dashboard/continue-work-banner";
 import { useOnboardingImport } from "@/hooks/use-onboarding-import";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
 import { useUserWorkspace } from "@/hooks/use-user-workspace";
@@ -19,6 +20,7 @@ import type { CompactBacktestConfigData } from "@/components/strategy-editor/com
 import {
   useUserPreferencesStore,
   selectSplitPanelRatio,
+  selectCodePreviewCollapsed,
 } from "@/lib/stores/user-preferences-store";
 import {
   useStrategyWorkspaceStore,
@@ -30,6 +32,10 @@ import {
   selectIsGenerating,
   selectIsBacktesting,
 } from "@/lib/stores/strategy-workspace-store";
+import { useAchievementStore } from "@/lib/stores/achievement-store";
+import { useFeatureUsage } from "@/hooks/use-feature-usage";
+import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
+import { trackUsage } from "@/lib/paywall/usage-tracker";
 
 // ---------------------------------------------------------------------------
 // Dynamic imports — heavy components loaded on demand to reduce initial bundle
@@ -132,6 +138,11 @@ export default function DashboardPage() {
   // User action tracking for smart suggestions
   const { trackAction } = useUserActions();
 
+  // Achievement system
+  const recordAchievementStat = useAchievementStore((s) => s.recordStat);
+  const recordAchievementLogin = useAchievementStore((s) => s.recordLogin);
+  const recordAchievementStock = useAchievementStore((s) => s.recordStockValidated);
+
   // Zustand store state
   const workspace = useStrategyWorkspaceStore(selectWorkspace);
   const autoSaveStatus = useStrategyWorkspaceStore(selectAutoSaveStatus);
@@ -154,6 +165,8 @@ export default function DashboardPage() {
   // User preferences
   const savedSplitRatio = useUserPreferencesStore(selectSplitPanelRatio);
   const setSplitPanelRatio = useUserPreferencesStore((s) => s.setSplitPanelRatio);
+  const codePreviewCollapsed = useUserPreferencesStore(selectCodePreviewCollapsed);
+  const setCodePreviewCollapsed = useUserPreferencesStore((s) => s.setCodePreviewCollapsed);
 
   // Local state
   const [error, setError] = useState<AppError | null>(null);
@@ -180,6 +193,10 @@ export default function DashboardPage() {
   }, [searchParams, router]);
   // Latest backtest result for results view
   const [latestBacktestResult, setLatestBacktestResult] = useState<BacktestResult | null>(null);
+
+  // Paywall: AI generation quota check
+  const { usage, plan: userPlan, isBlocked: isFeatureBlocked, refresh: refreshUsage } = useFeatureUsage();
+  const [aiUpgradeDialogOpen, setAiUpgradeDialogOpen] = useState(false);
 
   // Safety hooks: abort generation on unmount or re-trigger
   const createSignal = useAbortController();
@@ -264,6 +281,11 @@ export default function DashboardPage() {
     };
   }, [hasUnsavedChanges, saveDraft]);
 
+  // Record daily login for achievement streak tracking
+  useEffect(() => {
+    recordAchievementLogin();
+  }, [recordAchievementLogin]);
+
   /**
    * Persist strategy to database
    */
@@ -311,6 +333,12 @@ export default function DashboardPage() {
   const handleGenerate = useCallback(async (prompt: string) => {
     // If already generating, do nothing (prevent double-click)
     if (isGenerating) return;
+
+    // Paywall: client-side pre-check for AI call quota
+    if (isFeatureBlocked("ai_call")) {
+      setAiUpgradeDialogOpen(true);
+      return;
+    }
 
     setGenerating(true);
     updateGeneratedCode("");
@@ -367,8 +395,13 @@ export default function DashboardPage() {
 
       if (data.success && data.code) {
         updateGeneratedCode(data.code);
+        setCodePreviewCollapsed(false); // Auto-expand code on generation
         generateTask.complete({ codeLength: data.code.length });
         trackAction('strategy-generated', { prompt: prompt.slice(0, 50) });
+        trackUsage("ai"); // Client-side usage tracking for paywall
+        void refreshUsage(); // Refresh server-side usage data
+        // Achievement tracking: record strategy creation
+        recordAchievementStat('totalStrategies', 1);
         setTimeout(() => saveDraft(), 0);
 
         const name = extractStrategyName(prompt, data.code);
@@ -404,7 +437,7 @@ export default function DashboardPage() {
     } finally {
       setGenerating(false);
     }
-  }, [isGenerating, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction]);
+  }, [isGenerating, isFeatureBlocked, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction, refreshUsage, recordAchievementStat, setCodePreviewCollapsed]);
 
   // Handle template selection — abort generation if in progress
   const handleSelectTemplate = useCallback((prompt: string) => {
@@ -435,8 +468,9 @@ export default function DashboardPage() {
   const handleBacktestStart = useCallback(() => {
     setBacktesting(true);
     setCodeChangedDuringBacktest(false);
+    setCodePreviewCollapsed(true); // Auto-collapse code on backtest start
     setViewMode("running");
-  }, [setBacktesting]);
+  }, [setBacktesting, setCodePreviewCollapsed]);
 
   const handleBacktestEnd = useCallback(() => {
     setBacktesting(false);
@@ -459,7 +493,21 @@ export default function DashboardPage() {
       ? result.totalReturn
       : parseFloat(String(result.totalReturn ?? '0'));
     trackAction('backtest-complete', { positive: totalReturn > 0 });
-  }, [trackAction]);
+
+    // Achievement tracking: record backtest completion and best metrics
+    recordAchievementStat('totalBacktests', 1);
+    if (typeof result.sharpeRatio === 'number' && isFinite(result.sharpeRatio)) {
+      recordAchievementStat('bestSharpe', result.sharpeRatio);
+    }
+    if (isFinite(totalReturn)) {
+      recordAchievementStat('bestReturn', totalReturn);
+    }
+    // Track unique stock validated
+    const symbol = result.backtestMeta?.targetSymbol ?? result.config?.symbol;
+    if (symbol) {
+      recordAchievementStock(symbol);
+    }
+  }, [trackAction, recordAchievementStat, recordAchievementStock]);
 
   // Handle AI assistant parameter application
   const handleApplyAIParameter = useCallback(
@@ -527,6 +575,11 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Dashboard Header */}
       <DashboardHeader />
+
+      {/* Continue last work banner — only when in edit mode and no code */}
+      {viewMode === "edit" && !generatedCode && !isGenerating && (
+        <ContinueWorkBanner />
+      )}
 
       {/* Workbench Toolbar */}
       <WorkbenchToolbar
@@ -651,6 +704,8 @@ export default function DashboardPage() {
                     onSelectTemplate={handleSelectTemplate}
                     onApplyParameter={handleApplyAIParameter}
                     onApplyAllSuggestions={handleApplyAllAISuggestions}
+                    codePreviewCollapsed={codePreviewCollapsed}
+                    onCodeCollapseChange={setCodePreviewCollapsed}
                   />
                 }
               />
@@ -690,6 +745,8 @@ export default function DashboardPage() {
                 onSelectTemplate={handleSelectTemplate}
                 onApplyParameter={handleApplyAIParameter}
                 onApplyAllSuggestions={handleApplyAllAISuggestions}
+                codePreviewCollapsed={codePreviewCollapsed}
+                onCodeCollapseChange={setCodePreviewCollapsed}
               />
             </div>
 
@@ -710,6 +767,17 @@ export default function DashboardPage() {
 
       {/* Bottom status bar */}
       {user?.id && <WorkspaceStatusBar userId={user.id} />}
+
+      {/* AI generation paywall dialog */}
+      <UpgradeDialog
+        open={aiUpgradeDialogOpen}
+        onOpenChange={setAiUpgradeDialogOpen}
+        variant="limit"
+        featureName="ai_call"
+        used={usage.ai_call?.used ?? 0}
+        limit={usage.ai_call?.limit ?? 0}
+        resetAt={usage.ai_call?.resetAt}
+      />
     </div>
   );
 }
@@ -845,6 +913,8 @@ interface RightPanelProps {
   onSelectTemplate: (prompt: string) => void;
   onApplyParameter: (name: string, value: number | string | boolean) => void;
   onApplyAllSuggestions: (suggestions: Array<{ name: string; value: number | string | boolean }>) => void;
+  codePreviewCollapsed: boolean;
+  onCodeCollapseChange: (collapsed: boolean) => void;
 }
 
 function RightPanel({
@@ -862,19 +932,26 @@ function RightPanel({
   onSelectTemplate,
   onApplyParameter,
   onApplyAllSuggestions,
+  codePreviewCollapsed,
+  onCodeCollapseChange,
 }: RightPanelProps) {
   return (
     <div className="space-y-4 p-3">
-      {/* Code Preview */}
-      <CodePreview
-        code={generatedCode}
-        isLoading={isGenerating}
-        collapsible={true}
-        highlightedLine={focusedLine}
-        onHighlightClear={onHighlightClear}
+      {/* 1. Quick Preview Panel — highest priority, shows results first */}
+      <QuickPreviewPanel
+        strategyCode={generatedCode}
+        isGenerating={isGenerating}
       />
 
-      {/* Strategy Logic Summary (after code generation) */}
+      {/* 2. Full Backtest Panel — action area */}
+      <BacktestPanel
+        strategyCode={generatedCode}
+        onBacktestStart={onBacktestStart}
+        onBacktestEnd={onBacktestEnd}
+        onResult={onBacktestResult}
+      />
+
+      {/* 3. Strategy Logic Summary — readable summary */}
       {(generatedCode || isGenerating) && logicSummary && (
         <StrategyLogicSummary
           conditions={logicSummary.conditions}
@@ -885,18 +962,15 @@ function RightPanel({
         />
       )}
 
-      {/* Quick Preview Panel (auto-runs after generation) */}
-      <QuickPreviewPanel
-        strategyCode={generatedCode}
-        isGenerating={isGenerating}
-      />
-
-      {/* Full Backtest Panel */}
-      <BacktestPanel
-        strategyCode={generatedCode}
-        onBacktestStart={onBacktestStart}
-        onBacktestEnd={onBacktestEnd}
-        onResult={onBacktestResult}
+      {/* 4. Code Preview — lowest priority, default collapsed */}
+      <CodePreview
+        code={generatedCode}
+        isLoading={isGenerating}
+        collapsible={true}
+        defaultCollapsed={codePreviewCollapsed}
+        onCollapseChange={onCodeCollapseChange}
+        highlightedLine={focusedLine}
+        onHighlightClear={onHighlightClear}
       />
 
       {/* Navigation to full validation */}

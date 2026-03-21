@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { DisabledWithReason } from "@/components/ui/disabled-with-reason";
+import { AsyncButton } from "@/components/ui/async-button";
 import { cn } from "@/lib/utils";
 
 /**
@@ -75,7 +75,6 @@ export function StrategyInput({
 
   const [showExamples, setShowExamples] = useState(false);
   const [showHints, setShowHints] = useState(true);
-
   // Sync internal state when controlled value changes
   // 当受控值变化时同步内部状态
   useEffect(() => {
@@ -281,26 +280,16 @@ Describe your trading strategy in plain language...`}
               <span>✨</span>
               AI优化
             </Button>
-            <DisabledWithReason
-              disabled={!prompt || isLoading || isOverLimit}
-              reason={!prompt ? '请输入策略描述' : isLoading ? '生成中...' : '描述过长，请精简'}
+            <AsyncButton
+              onClick={handleSubmit}
+              disabled={!prompt.trim() || isOverLimit}
+              loadingText="正在生成..."
+              successText="已生成"
+              variant="primary"
+              className="min-w-[120px] text-sm"
             >
-              <Button
-                size="sm"
-                onClick={handleSubmit}
-                disabled={!prompt || isLoading || isOverLimit}
-                className="min-w-[120px]"
-              >
-                {isLoading ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-primary-600/30 border-t-primary-600 rounded-full animate-spin" />
-                    生成中...
-                  </span>
-                ) : (
-                  "生成策略 / Generate"
-                )}
-              </Button>
-            </DisabledWithReason>
+              生成策略 / Generate
+            </AsyncButton>
           </div>
         </div>
       </div>

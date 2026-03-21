@@ -45,12 +45,23 @@ export interface BacktestRunningViewProps {
 // =============================================================================
 
 const DEFAULT_STEPS: BacktestRunningStep[] = [
-  { id: "parse", label: "解析策略参数", detail: "", status: "pending" },
-  { id: "fetch", label: "获取K线数据", detail: "", status: "pending" },
-  { id: "validate", label: "数据质量校验", detail: "", status: "pending" },
-  { id: "execute", label: "执行回测模拟", detail: "", status: "pending" },
-  { id: "stats", label: "计算统计指标", detail: "", status: "pending" },
-  { id: "report", label: "生成报告", detail: "", status: "pending" },
+  { id: "parse", label: "正在理解你的策略逻辑...", detail: "", status: "pending" },
+  { id: "fetch", label: "正在获取历史行情数据...", detail: "", status: "pending" },
+  { id: "validate", label: "检查数据完整性，排除停牌和异常交易日...", detail: "", status: "pending" },
+  { id: "execute", label: "按照策略规则逐日模拟交易中...", detail: "", status: "pending" },
+  { id: "stats", label: "计算收益率、夏普比率、最大回撤等30+项指标...", detail: "", status: "pending" },
+  { id: "report", label: "整理交易记录，生成分析报告...", detail: "", status: "pending" },
+];
+
+const ROTATING_TIPS = [
+  "MACD金叉是最常用的趋势跟踪信号，适合震荡市场",
+  "RSI低于30通常表示超卖，可能出现反弹机会",
+  "布林带收窄往往预示着大幅波动即将到来",
+  "均线多头排列（5>10>20>60）是强势趋势的标志",
+  "回测结果的胜率比总收益更能反映策略的稳定性",
+  "夏普比率>1.0说明策略的风险调整后收益较好",
+  "最大回撤反映最坏情况下的亏损幅度",
+  "历史回测不代表未来收益，但能验证策略逻辑",
 ];
 
 // Simulated step durations (milliseconds) for realistic timeline progression
@@ -69,7 +80,13 @@ export function BacktestRunningView({
   className,
 }: BacktestRunningViewProps) {
   const [steps, setSteps] = useState<BacktestRunningStep[]>(() =>
-    DEFAULT_STEPS.map((s) => ({ ...s }))
+    DEFAULT_STEPS.map((s) => {
+      // Contextual label for fetch step when symbol is provided
+      if (s.id === "fetch" && symbol) {
+        return { ...s, label: `正在获取${symbol}的历史行情数据...` };
+      }
+      return { ...s };
+    })
   );
   const [progress, setProgress] = useState(0);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -210,6 +227,9 @@ export function BacktestRunningView({
           </div>
         </div>
 
+        {/* Rotating tip */}
+        <RotatingTip />
+
         {/* Cancel button */}
         {onCancel && (
           <div className="text-center">
@@ -320,20 +340,46 @@ function getStepDetail(
 ): string {
   switch (stepId) {
     case "parse":
-      return "参数解析完成";
+      return "买入条件、卖出条件、仓位管理已就绪";
     case "fetch":
       return symbol
-        ? `${symbol}, ${startDate ?? ""} ~ ${endDate ?? ""}`
-        : "数据获取完成";
+        ? `${symbol} ${startDate ?? ""} ~ ${endDate ?? ""}`
+        : "行情数据已到位";
     case "validate":
-      return "数据质量符合要求";
+      return "无缺失、无异常，数据质量合格";
     case "execute":
-      return "模拟交易执行完成";
+      return "逐根 K 线模拟完毕";
     case "stats":
-      return "30+ 财务指标计算完成";
+      return "收益率、夏普、最大回撤等指标已算出";
     case "report":
-      return "报告生成完成";
+      return "报告已生成，即将展示";
     default:
       return "";
   }
+}
+
+// =============================================================================
+// ROTATING TIP SUB-COMPONENT
+// =============================================================================
+
+function RotatingTip() {
+  const [tipIndex, setTipIndex] = useState(
+    () => Math.floor(Math.random() * ROTATING_TIPS.length),
+  );
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTipIndex((prev) => (prev + 1) % ROTATING_TIPS.length);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="mb-6 text-center">
+      <p className="text-xs text-neutral-500 transition-opacity duration-500">
+        <span className="text-primary/60 mr-1.5">tip</span>
+        {ROTATING_TIPS[tipIndex]}
+      </p>
+    </div>
+  );
 }

@@ -401,7 +401,7 @@ class MacdMomentumStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "A" },
     prompt: "MACD动量策略：DIF上穿DEA金叉且成交量放大1.5倍时买入，DIF下穿DEA死叉时卖出，参数12-26-9",
-    tier: "basic",
+    tier: "free",
   },
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -481,7 +481,7 @@ class BollingerBreakoutStrategy(CtaTemplate):
     },
     expectedScoreRange: { min: "C", max: "B" },
     prompt: "布林带突破策略：价格突破布林带上轨时买入，跌破中轨时卖出，布林带周期20，标准差倍数2",
-    tier: "basic",
+    tier: "free",
   },
 
   // ─────────────────────────────────────────────────────────────────────────

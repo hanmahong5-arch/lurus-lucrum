@@ -11,6 +11,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import { toast } from "sonner";
 import dynamic from "next/dynamic";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { useStaleGuard } from "@/hooks/use-stale-guard";
@@ -96,6 +97,9 @@ export default function MarketplacePage() {
   // Comparison mode
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [showComparison, setShowComparison] = useState(false);
+
+  // Subscribe loading
+  const [subscribingId, setSubscribingId] = useState<number | null>(null);
 
   // Detail panel
   const [detailStrategy, setDetailStrategy] = useState<MarketplaceStrategy | null>(null);
@@ -236,12 +240,35 @@ export default function MarketplacePage() {
 
   // ─── Handlers ────────────────────────────────────────────────────────
   const handleSubscribe = useCallback(
-    (strategyId: number) => {
+    async (strategyId: number) => {
       if (!upgradeGate.gate("marketplace_subscribe")) return;
-      const strategy = strategies.find((s) => s.id === strategyId);
-      alert(`订阅 "${strategy?.title}" 功能即将推出`);
+      setSubscribingId(strategyId);
+
+      try {
+        const res = await fetch("/api/lurus/marketplace/subscribe", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ strategy_id: strategyId }),
+        });
+
+        if (res.ok) {
+          const strategy = strategies.find((s) => s.id === strategyId);
+          toast.success(`已订阅「${strategy?.title ?? "策略"}」`);
+          void fetchStrategies();
+        } else if (res.status === 402) {
+          upgradeGate.showBalance();
+        } else if (res.status === 409) {
+          toast.info("你已订阅该策略");
+        } else {
+          toast.error("订阅失败，请稍后重试");
+        }
+      } catch {
+        toast.error("网络异常，请检查连接");
+      } finally {
+        setSubscribingId(null);
+      }
     },
-    [upgradeGate, strategies],
+    [upgradeGate, strategies, fetchStrategies],
   );
 
   const handleViewDetail = useCallback((strategy: MarketplaceStrategy) => {

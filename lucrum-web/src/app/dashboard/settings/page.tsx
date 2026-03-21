@@ -21,6 +21,7 @@ import { SecuritySettings } from "@/components/settings/security-settings";
 import { NotificationSettings } from "@/components/settings/notification-settings";
 import { SubscriptionSettings } from "@/components/settings/subscription-settings";
 import { OnboardingResetButton } from "@/components/settings/onboarding-reset-button";
+import { AchievementPanel } from "@/components/achievements/achievement-panel";
 
 // Dynamic imports from extracted content components (no DashboardHeader inside)
 const AccountContent = dynamic(
@@ -53,10 +54,11 @@ function TabSkeleton() {
 }
 
 const TABS = [
-  { value: "profile", label: "账户设置" },
-  { value: "subscription", label: "订阅管理" },
-  { value: "referral", label: "推荐计划" },
-  { value: "account", label: "交易账户" },
+  { value: "profile", label: "\u8D26\u6237\u8BBE\u7F6E" },
+  { value: "achievements", label: "\u6211\u7684\u6210\u5C31" },
+  { value: "subscription", label: "\u8BA2\u9605\u7BA1\u7406" },
+  { value: "referral", label: "\u63A8\u8350\u8BA1\u5212" },
+  { value: "account", label: "\u4EA4\u6613\u8D26\u6237" },
 ];
 
 function SettingsPageContent() {
@@ -106,6 +108,12 @@ function SettingsPageContent() {
                         </h2>
                         <OnboardingResetButton />
                       </div>
+                    </div>
+                  );
+                case "achievements":
+                  return (
+                    <div className="bg-surface rounded-xl border border-border p-6">
+                      <AchievementPanel />
                     </div>
                   );
                 case "subscription":

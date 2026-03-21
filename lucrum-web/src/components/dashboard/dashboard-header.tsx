@@ -46,11 +46,13 @@ import {
   Radar,
   Bot,
   History,
+  Trophy,
   Settings,
   Star,
 } from 'lucide-react';
 import { useWatchlistStore, selectIsPanelOpen, selectTotalStockCount } from '@/lib/stores/watchlist-store';
 import { cn } from '@/lib/utils';
+import { StreakBadge } from '@/components/dashboard/streak-badge';
 
 // ---------------------------------------------------------------------------
 // Navigation definition — 7 focused modules, always visible
@@ -70,6 +72,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/analysis', key: 'nav.analysis', icon: Radar },
   { href: '/dashboard/advisor', key: 'nav.advisor', icon: Bot },
   { href: '/dashboard/history', key: 'nav.history', icon: History },
+  { href: '/dashboard/leaderboard', key: 'nav.leaderboard', icon: Trophy },
 ];
 
 // Role display mapping — keys reference i18n translation keys
@@ -218,6 +221,9 @@ export function DashboardHeader() {
 
             {/* Right side — Settings, Notifications, Quota & Account */}
             <div className="flex items-center gap-2">
+              {/* Daily streak badge */}
+              <StreakBadge />
+
               {/* Watchlist toggle */}
               <button
                 onClick={toggleWatchlistPanel}

@@ -208,12 +208,25 @@ export function SubscriptionSettings() {
               </div>
             </div>
           </div>
-          {/* LuBell balance */}
+          {/* LuBell balance + topup */}
           <div className="text-right hidden sm:block">
             <span className="text-xs text-white/40">鹿贝余额</span>
             <div className="text-lg font-mono tabular-nums text-amber-400 mt-0.5">
               {walletBalance.toFixed(2)} <span className="text-xs">LB</span>
             </div>
+            {(overview?.wallet?.frozen ?? 0) > 0 && (
+              <div className="text-xs font-mono tabular-nums text-white/30 mt-0.5">
+                冻结: {overview!.wallet.frozen.toFixed(2)} LB
+              </div>
+            )}
+            <a
+              href={overview?.topup_url ?? "https://identity.lurus.cn/wallet/topup"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block mt-2 px-3 py-1 text-xs font-medium rounded-md bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition border border-amber-500/30"
+            >
+              充值
+            </a>
           </div>
         </div>
       </div>

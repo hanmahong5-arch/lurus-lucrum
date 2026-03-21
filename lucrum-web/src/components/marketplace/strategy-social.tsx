@@ -9,6 +9,7 @@
 
 import { useState, useCallback } from "react";
 import { Heart, MessageCircle, Share2, Send } from "lucide-react";
+import { useAchievementStore } from "@/lib/stores/achievement-store";
 
 // =============================================================================
 // TYPES
@@ -104,6 +105,7 @@ export function ShareButton({
   title: string;
 }) {
   const [copied, setCopied] = useState(false);
+  const recordAchievementStat = useAchievementStore((s) => s.recordStat);
 
   const handleShare = useCallback(async () => {
     const url = `${window.location.origin}/dashboard/marketplace?highlight=${strategyId}`;
@@ -111,6 +113,8 @@ export function ShareButton({
     if (navigator.share) {
       try {
         await navigator.share({ title, url });
+        // Achievement tracking: record share action
+        recordAchievementStat('sharesCount', 1);
         return;
       } catch {
         // User cancelled or error, fall through to clipboard
@@ -119,8 +123,10 @@ export function ShareButton({
 
     await navigator.clipboard.writeText(url);
     setCopied(true);
+    // Achievement tracking: record share action
+    recordAchievementStat('sharesCount', 1);
     setTimeout(() => setCopied(false), 2000);
-  }, [strategyId, title]);
+  }, [strategyId, title, recordAchievementStat]);
 
   return (
     <button

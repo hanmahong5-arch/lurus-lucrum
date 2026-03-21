@@ -339,4 +339,43 @@ export const ErrorCatalog = {
       ],
     );
   },
+  // === Strategy Recommendation ===
+  recommendNoData(sectorName: string): AppError {
+    return makeError(
+      'RECOMMEND_NO_DATA',
+      '无可用数据',
+      `"${sectorName}"板块的股票缺少足够的K线数据，无法进行策略推荐`,
+      'warning',
+      [
+        { type: 'custom', label: '更换板块' },
+        { type: 'custom', label: '减少股票数量' },
+      ],
+    );
+  },
+
+  recommendNoSignals(sectorName: string): AppError {
+    return makeError(
+      'RECOMMEND_NO_SIGNALS',
+      '未检测到有效信号',
+      `所有策略在"${sectorName}"板块中均未产生交易信号，可能该板块近期走势平淡`,
+      'warning',
+      [
+        { type: 'custom', label: '更换板块' },
+        { type: 'custom', label: '调整持仓天数' },
+      ],
+    );
+  },
+
+  recommendTimeout(): AppError {
+    return makeError(
+      'RECOMMEND_TIMEOUT',
+      '策略推荐超时',
+      '扫描时间过长，请减少股票数量或缩短回测周期后重试',
+      'error',
+      [
+        { type: 'custom', label: '减少股票数量' },
+        { type: 'retry', label: '重试' },
+      ],
+    );
+  },
 } as const;

@@ -28,7 +28,7 @@ import { Button } from "@/components/ui/button";
 // TYPES
 // =============================================================================
 
-export type UpgradeDialogVariant = "limit" | "lock" | "aha" | "upsell";
+export type UpgradeDialogVariant = "limit" | "lock" | "aha" | "upsell" | "balance" | "multistock";
 
 interface UpgradeDialogProps {
   open: boolean;
@@ -46,6 +46,10 @@ interface UpgradeDialogProps {
   templateName?: string;
   /** Sharpe ratio for aha variant */
   sharpeRatio?: number;
+  /** Topup URL for balance variant */
+  topupUrl?: string;
+  /** Current wallet balance for balance variant */
+  currentBalance?: number;
 }
 
 // =============================================================================
@@ -93,12 +97,17 @@ function LimitContent({
   limit: number;
   countdown: string;
 }) {
-  const featureLabel = featureName === "backtest" ? "回测" : "AI 调用";
+  const isAi = featureName === "ai_call" || featureName === "ai";
+  const featureLabel = isAi ? "AI 策略生成" : "回测";
+  const proFeature = isAi ? "无限 AI 策略生成" : "无限回测次数";
+  const nudge = isAi
+    ? "Pro 用户的夏普比率平均高 40%"
+    : "Pro 用户的策略验证更充分，收益更稳定";
   return (
     <>
       <DialogHeader>
         <DialogTitle className="text-white">
-          {featureLabel}额度已用完
+          今日{featureLabel}次数已用完
         </DialogTitle>
         <DialogDescription className="text-gray-400">
           今日已使用 <span className="font-mono text-yellow-400">{used}/{limit}</span> 次{featureLabel}
@@ -107,11 +116,14 @@ function LimitContent({
       <div className="space-y-4">
         <div className="text-center p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
           <p className="text-sm text-gray-400 mb-1">额度将在以下时间重置</p>
-          <p className="font-mono text-xl text-blue-400">{countdown || "计算中..."}</p>
+          <p className="font-mono text-2xl text-blue-400">{countdown || "计算中..."}</p>
         </div>
-        <p className="text-sm text-gray-400">
-          升级到进阶版可享受每日 50 次{featureLabel}，专业版则无限制。
-        </p>
+        <div className="p-3 bg-gradient-to-r from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-700/20">
+          <p className="text-xs text-blue-300 mb-1">{nudge}</p>
+          <p className="text-sm text-gray-300">
+            升级 Pro 可解锁{proFeature}，不再等待。
+          </p>
+        </div>
       </div>
     </>
   );
@@ -164,6 +176,70 @@ function AhaContent({ sharpeRatio }: { sharpeRatio: number }) {
   );
 }
 
+function BalanceContent({
+  currentBalance,
+}: {
+  currentBalance: number;
+}) {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-white flex items-center gap-2">
+          <span className="text-2xl">💰</span>
+          鹿贝余额不足
+        </DialogTitle>
+        <DialogDescription className="text-gray-400">
+          当前余额 <span className="font-mono text-yellow-400">{currentBalance.toFixed(2)} LB</span>，不足以完成此操作
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="p-4 bg-slate-800/50 rounded-lg border border-slate-700/50">
+          <p className="text-sm text-gray-400">
+            请先充值鹿贝（LuBell），充值后即可继续使用策略订阅、AI 调用等付费功能。
+          </p>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function MultistockContent() {
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle className="text-white flex items-center gap-2">
+          <span className="text-2xl">🔒</span>
+          此功能需要 Pro 版
+        </DialogTitle>
+        <DialogDescription className="text-gray-400">
+          免费版最多验证 3 只股票，Pro 版支持 50+
+        </DialogDescription>
+      </DialogHeader>
+      <div className="space-y-3">
+        <div className="p-4 bg-gradient-to-br from-blue-900/20 to-purple-900/20 rounded-lg border border-blue-700/20">
+          <p className="text-sm text-gray-300 mb-2">
+            多股票验证能帮你发现策略在不同标的上的真实表现，避免过拟合。
+          </p>
+          <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400">+</span> 50+ 股票同时验证
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400">+</span> 批量回测报告
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400">+</span> 板块级别分析
+            </div>
+            <div className="flex items-center gap-1">
+              <span className="text-blue-400">+</span> 失败归因分析
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function UpsellContent() {
   return (
     <>
@@ -205,10 +281,21 @@ export function UpgradeDialog({
   resetAt,
   templateName = "",
   sharpeRatio = 0,
+  topupUrl,
+  currentBalance = 0,
 }: UpgradeDialogProps) {
   const countdown = useCountdown(resetAt);
 
   const handleUpgrade = () => {
+    if (variant === "balance") {
+      // Open topup page in new tab
+      window.open(
+        topupUrl ?? "https://identity.lurus.cn/wallet/topup",
+        "_blank",
+        "noopener,noreferrer",
+      );
+      return;
+    }
     // Navigate to subscription settings
     window.location.href = "/dashboard/settings/subscription";
   };
@@ -226,6 +313,8 @@ export function UpgradeDialog({
         )}
         {variant === "lock" && <LockContent templateName={templateName} />}
         {variant === "aha" && <AhaContent sharpeRatio={sharpeRatio} />}
+        {variant === "balance" && <BalanceContent currentBalance={currentBalance} />}
+        {variant === "multistock" && <MultistockContent />}
         {variant === "upsell" && <UpsellContent />}
 
         <DialogFooter className="flex-col sm:flex-row gap-2">
@@ -234,13 +323,19 @@ export function UpgradeDialog({
             onClick={() => onOpenChange(false)}
             className="border-slate-600 text-gray-400 hover:text-white"
           >
-            稍后再说
+            {variant === "limit" ? "明天再来" : "稍后再说"}
           </Button>
           <Button
             onClick={handleUpgrade}
             className="bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white"
           >
-            {variant === "aha" ? "解锁 Pro 版" : "查看升级方案"}
+            {variant === "balance"
+              ? "前往充值"
+              : variant === "aha"
+              ? "解锁 Pro 版"
+              : variant === "multistock"
+              ? "升级 Pro，无限验证"
+              : "查看升级方案"}
           </Button>
         </DialogFooter>
       </DialogContent>

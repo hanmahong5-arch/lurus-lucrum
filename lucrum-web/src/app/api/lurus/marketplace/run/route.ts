@@ -13,62 +13,14 @@ import { authOptions } from '@/lib/auth';
 import { db } from '@/lib/db';
 import { marketplaceStrategies, strategySubscriptions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import {
+  resolveAccountId,
+  debitWallet,
+  creditWallet,
+  PlatformError,
+} from '@/lib/platform/client';
 
-const IDENTITY_URL = process.env.LURUS_IDENTITY_URL ?? 'https://identity.lurus.cn';
-const IDENTITY_INTERNAL_KEY = process.env.LURUS_IDENTITY_INTERNAL_KEY ?? '';
 const PLATFORM_FEE_RATE = 0.30;
-
-const internalHeaders = {
-  Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}`,
-  'Content-Type': 'application/json',
-};
-
-async function resolveIdentityAccountId(zitadelSub: string): Promise<string | null> {
-  const res = await fetch(
-    `${IDENTITY_URL}/internal/v1/accounts/by-zitadel-sub/${encodeURIComponent(zitadelSub)}`,
-    { headers: internalHeaders, cache: 'no-store' }
-  );
-  if (!res.ok) return null;
-  const account = (await res.json()) as { id: number };
-  return String(account.id);
-}
-
-async function debitWallet(accountId: string, amount: number, description: string): Promise<boolean> {
-  const res = await fetch(
-    `${IDENTITY_URL}/internal/v1/accounts/${accountId}/wallet/debit`,
-    {
-      method: 'POST',
-      headers: internalHeaders,
-      body: JSON.stringify({
-        amount,
-        type: 'marketplace_run',
-        product_id: 'lurus-lucrum',
-        description,
-      }),
-      cache: 'no-store',
-    }
-  );
-  return res.ok;
-}
-
-async function creditWallet(accountId: string, amount: number, description: string): Promise<void> {
-  await fetch(
-    `${IDENTITY_URL}/internal/v1/accounts/${accountId}/wallet/credit`,
-    {
-      method: 'POST',
-      headers: internalHeaders,
-      body: JSON.stringify({
-        amount,
-        type: 'marketplace_revenue',
-        product_id: 'lurus-lucrum',
-        description,
-      }),
-      cache: 'no-store',
-    }
-  ).catch((err: unknown) => {
-    console.error('[marketplace/run] credit failed:', err);
-  });
-}
 
 export async function POST(request: NextRequest) {
   const session = await getServerSession(authOptions);
@@ -102,9 +54,14 @@ export async function POST(request: NextRequest) {
   const price = strategy.pricePerRun ?? 0;
 
   // Resolve subscriber's identity account ID
-  const subscriberAccountId = await resolveIdentityAccountId(session.user.id);
-  if (!subscriberAccountId) {
-    return NextResponse.json({ error: 'account not found' }, { status: 404 });
+  let subscriberAccountId: string;
+  try {
+    subscriberAccountId = await resolveAccountId(session.user.id);
+  } catch (err) {
+    if (err instanceof PlatformError && err.code === 'not_found') {
+      return NextResponse.json({ error: 'account not found' }, { status: 404 });
+    }
+    return NextResponse.json({ error: 'identity service unavailable' }, { status: 503 });
   }
 
   // Prevent self-purchase
@@ -114,24 +71,35 @@ export async function POST(request: NextRequest) {
 
   // Debit subscriber wallet (full price)
   if (price > 0) {
-    const debitOk = await debitWallet(
-      subscriberAccountId,
-      price,
-      `运行策略「${strategy.title}」`,
-    );
-    if (!debitOk) {
-      return NextResponse.json({ error: 'insufficient_balance' }, { status: 402 });
+    try {
+      await debitWallet(
+        subscriberAccountId,
+        price,
+        'marketplace_run',
+        `运行策略「${strategy.title}」`,
+      );
+    } catch (err) {
+      if (err instanceof PlatformError && err.code === 'insufficient_balance') {
+        return NextResponse.json(
+          { code: 'insufficient_balance', topup_url: 'https://identity.lurus.cn/wallet/topup' },
+          { status: 402 },
+        );
+      }
+      return NextResponse.json({ error: 'payment failed' }, { status: 503 });
     }
   }
 
   // Credit author wallet (70% after platform fee)
   const authorRevenue = price > 0 ? price * (1 - PLATFORM_FEE_RATE) : 0;
   if (authorRevenue > 0 && strategy.authorIdentityAccountId) {
-    await creditWallet(
+    void creditWallet(
       strategy.authorIdentityAccountId,
       authorRevenue,
+      'marketplace_revenue',
       `策略「${strategy.title}」运行收益`,
-    );
+    ).catch((err: unknown) => {
+      console.error('[marketplace/run] credit failed:', err);
+    });
   }
 
   // Record transaction

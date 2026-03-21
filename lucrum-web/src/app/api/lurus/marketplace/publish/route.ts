@@ -12,49 +12,13 @@ import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { marketplaceStrategies, strategyHistory } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
+import {
+  resolveAccountId,
+  debitWallet,
+  PlatformError,
+} from "@/lib/platform/client";
 
-const IDENTITY_URL = process.env.LURUS_IDENTITY_URL ?? "https://identity.lurus.cn";
-const IDENTITY_INTERNAL_KEY = process.env.LURUS_IDENTITY_INTERNAL_KEY ?? "";
 const STAKE_AMOUNT = 10;
-
-const internalHeaders = {
-  Authorization: `Bearer ${IDENTITY_INTERNAL_KEY}`,
-  "Content-Type": "application/json",
-};
-
-async function resolveIdentityAccountId(
-  zitadelSub: string,
-): Promise<string | null> {
-  const res = await fetch(
-    `${IDENTITY_URL}/internal/v1/accounts/by-zitadel-sub/${encodeURIComponent(zitadelSub)}`,
-    { headers: internalHeaders, cache: "no-store" },
-  );
-  if (!res.ok) return null;
-  const account = (await res.json()) as { id: number };
-  return String(account.id);
-}
-
-async function debitWallet(
-  accountId: string,
-  amount: number,
-  description: string,
-): Promise<boolean> {
-  const res = await fetch(
-    `${IDENTITY_URL}/internal/v1/accounts/${accountId}/wallet/debit`,
-    {
-      method: "POST",
-      headers: internalHeaders,
-      body: JSON.stringify({
-        amount,
-        type: "marketplace_stake",
-        product_id: "lurus-lucrum",
-        description,
-      }),
-      cache: "no-store",
-    },
-  );
-  return res.ok;
-}
 
 interface PublishBody {
   strategy_history_id: number;
@@ -123,25 +87,38 @@ export async function POST(request: NextRequest) {
   }
 
   // Resolve identity account
-  const accountId = await resolveIdentityAccountId(session.user.id);
-  if (!accountId) {
+  let accountId: string;
+  try {
+    accountId = await resolveAccountId(session.user.id);
+  } catch (err) {
+    if (err instanceof PlatformError && err.code === "not_found") {
+      return NextResponse.json(
+        { error: "identity account not found" },
+        { status: 404 },
+      );
+    }
     return NextResponse.json(
-      { error: "identity account not found" },
-      { status: 404 },
+      { error: "identity service unavailable" },
+      { status: 503 },
     );
   }
 
   // Debit staking amount
-  const debitOk = await debitWallet(
-    accountId,
-    STAKE_AMOUNT,
-    `策略上架质押「${body.title.trim()}」`,
-  );
-  if (!debitOk) {
-    return NextResponse.json(
-      { error: "insufficient_balance" },
-      { status: 402 },
+  try {
+    await debitWallet(
+      accountId,
+      STAKE_AMOUNT,
+      "marketplace_stake",
+      `策略上架质押「${body.title.trim()}」`,
     );
+  } catch (err) {
+    if (err instanceof PlatformError && err.code === "insufficient_balance") {
+      return NextResponse.json(
+        { code: "insufficient_balance", topup_url: "https://identity.lurus.cn/wallet/topup" },
+        { status: 402 },
+      );
+    }
+    return NextResponse.json({ error: "payment failed" }, { status: 503 });
   }
 
   // Insert marketplace listing
