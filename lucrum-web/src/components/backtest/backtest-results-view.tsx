@@ -17,10 +17,10 @@
 
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useRef } from "react";
 import dynamic from "next/dynamic";
 import { cn } from "@/lib/utils";
-import { KLineChart, type TradeMarkerInfo } from "@/components/charts/kline-chart";
+import { KLineChart, type TradeMarkerInfo, type KLineChartHandle } from "@/components/charts/kline-chart";
 import { EnhancedTradeCard } from "@/components/strategy-editor/enhanced-trade-card";
 import { TradeTableView } from "@/components/strategy-editor/trade-table-view";
 import { SmartTooltip } from "@/components/ui/smart-tooltip";
@@ -95,6 +95,9 @@ export function BacktestResultsView({
   const [tradeView, setTradeView] = useState<"card" | "table">("card");
   const [showAllTrades, setShowAllTrades] = useState(false);
   const [analysisTab, setAnalysisTab] = useState<"equity" | "distribution" | "drawdown">("equity");
+
+  // Chart ref for scrolling to trade on click
+  const chartRef = useRef<KLineChartHandle>(null);
 
   // Compute strategy score
   const strategyScore = useMemo<StrategyScore | null>(() => {
@@ -188,6 +191,24 @@ export function BacktestResultsView({
     ).length;
     return { buyCount, sellCount, profitCount };
   }, [tradeMarkers]);
+
+  // Daily logs for indicator sub-panels
+  const dailyLogs = useMemo(
+    () => result.enhanced?.dailyLogs ?? [],
+    [result],
+  );
+
+  // Handle trade click from trade list — scroll chart to that trade
+  const handleTradeClick = useCallback(
+    (trade: DetailedTrade | BacktestTrade) => {
+      const timestamp =
+        "timestamp" in trade ? trade.timestamp : 0;
+      if (timestamp > 0) {
+        chartRef.current?.scrollToTrade(timestamp);
+      }
+    },
+    [],
+  );
 
   // Target info
   const targetSymbol =
@@ -406,9 +427,11 @@ export function BacktestResultsView({
           )}
         </div>
         <KLineChart
+          ref={chartRef}
           symbol={targetSymbol}
           initialTimeFrame={result.config.timeframe}
           tradeMarkers={tradeMarkers.length > 0 ? tradeMarkers : undefined}
+          dailyLogs={dailyLogs.length > 0 ? dailyLogs : undefined}
           height={460}
           showVolume={true}
           showMA={true}
@@ -539,18 +562,40 @@ export function BacktestResultsView({
                   "triggerReason" in trade;
                 if (isDetailed) {
                   return (
-                    <EnhancedTradeCard
+                    <div
                       key={trade.id || `trade-${index}`}
-                      trade={trade as unknown as DetailedTrade}
-                    />
+                      className="cursor-pointer hover:ring-1 hover:ring-white/10 rounded-lg transition-all"
+                      onClick={() => handleTradeClick(trade)}
+                      role="button"
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ")
+                          handleTradeClick(trade);
+                      }}
+                    >
+                      <EnhancedTradeCard
+                        trade={trade as unknown as DetailedTrade}
+                      />
+                    </div>
                   );
                 }
                 // Legacy trade card fallback
                 return (
-                  <LegacyTradeRow
+                  <div
                     key={trade.id || `trade-${index}`}
-                    trade={trade as BacktestTrade}
-                  />
+                    className="cursor-pointer hover:ring-1 hover:ring-white/10 rounded-lg transition-all"
+                    onClick={() => handleTradeClick(trade)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ")
+                        handleTradeClick(trade);
+                    }}
+                  >
+                    <LegacyTradeRow
+                      trade={trade as BacktestTrade}
+                    />
+                  </div>
                 );
               })}
             </div>
