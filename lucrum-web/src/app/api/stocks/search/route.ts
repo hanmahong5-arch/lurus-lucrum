@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getStockRepository } from '@/lib/repositories';
 import { pinyin } from 'pinyin-pro';
 import { dedupRequest } from '@/lib/infra/request-dedup';
+import { cacheGet, cacheSet } from '@/lib/redis/client';
 
 // ============================================================================
 // Types
@@ -137,6 +138,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // Check Redis cache first (hot queries return instantly)
+    const cacheKey = `stock-search:${q}:${excludeST}:${limit}`;
+    const cached = await cacheGet<Record<string, unknown>>(cacheKey);
+    if (cached) {
+      return NextResponse.json(cached, {
+        headers: { 'X-Cache': 'HIT' },
+      });
+    }
+
     // Determine if query could be pinyin (contains only latin characters)
     const isPinyinQuery = /^[a-zA-Z]+$/.test(q);
 
@@ -214,8 +224,8 @@ export async function GET(request: NextRequest) {
     // Combine in priority order, respecting limit
     const results = [...exact, ...nameMatch, ...pinyinMatch].slice(0, limit);
 
-    // Return response
-    return NextResponse.json({
+    // Build response
+    const response = {
       success: true,
       results,
       groups: {
@@ -226,6 +236,13 @@ export async function GET(request: NextRequest) {
       total: results.length,
       query: q,
       timestamp: new Date().toISOString(),
+    };
+
+    // Cache in Redis for 10 minutes (stock list doesn't change often)
+    await cacheSet(cacheKey, JSON.stringify(response), 600).catch(() => {});
+
+    return NextResponse.json(response, {
+      headers: { 'X-Cache': 'MISS' },
     });
 
   } catch (error) {
