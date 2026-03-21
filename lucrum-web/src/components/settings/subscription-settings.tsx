@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAccountOverview } from "@/hooks/useAccountOverview";
 import {
   PLAN_DISPLAY,
@@ -9,6 +10,15 @@ import {
   type PlanTier,
   type PlanDisplayInfo,
 } from "@/lib/config/plan-limits";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import { showToast } from "@/lib/toast";
 
 // Feature comparison rows for the plan table
 const FEATURE_ROWS: Array<{
@@ -142,30 +152,117 @@ function YearlySaving({ plan }: { plan: PlanDisplayInfo }) {
   );
 }
 
+type PaymentMethod = "wallet" | "alipay" | "wechat";
+
+interface CheckoutResponse {
+  success?: boolean;
+  order_no?: string;
+  subscription?: {
+    plan_code: string;
+    status: string;
+    expires_at?: string;
+  };
+  pay_url?: string;
+  error?: string;
+  topup_url?: string;
+  message?: string;
+}
+
 /**
  * Subscription Settings Component
  * 4-tier pricing: Explorer (free) / Trader (49) / Pro (149) / Enterprise
  */
 export function SubscriptionSettings() {
   const { data: overview, isLoading } = useAccountOverview();
+  const queryClient = useQueryClient();
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [isUpgrading, setIsUpgrading] = useState(false);
+
+  // Checkout dialog state
+  const [isCheckoutDialogOpen, setIsCheckoutDialogOpen] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<PlanDisplayInfo | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("wallet");
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [showInsufficientDialog, setShowInsufficientDialog] = useState(false);
+  const [topupUrl, setTopupUrl] = useState("https://identity.lurus.cn/wallet/topup");
 
   const currentPlan = normalizePlanTier(overview?.subscription?.plan_code);
   const currentDisplay = PLAN_DISPLAY.find((p) => p.code === currentPlan) ?? PLAN_DISPLAY[0]!;
 
-  const handleUpgrade = async (code: PlanTier) => {
+  const handleUpgrade = useCallback((code: PlanTier) => {
     if (code === currentPlan) return;
     if (code === "enterprise") {
       window.open("mailto:sales@lurus.cn?subject=Lucrum 企业版咨询", "_blank");
       return;
     }
+    const plan = PLAN_DISPLAY.find((p) => p.code === code);
+    if (!plan) return;
+    setSelectedPlan(plan);
+    setCheckoutError(null);
+    setPaymentMethod("wallet");
+    setIsCheckoutDialogOpen(true);
+  }, [currentPlan]);
+
+  const handleConfirmCheckout = useCallback(async () => {
+    if (!selectedPlan) return;
     setIsUpgrading(true);
-    // TODO: integrate with real payment API
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    alert(`升级到${PLAN_DISPLAY.find((p) => p.code === code)?.name}功能即将推出！`);
-    setIsUpgrading(false);
-  };
+    setCheckoutError(null);
+
+    try {
+      const res = await fetch("/api/lurus/subscription/checkout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          plan_code: selectedPlan.code,
+          billing_cycle: billingCycle,
+          payment_method: paymentMethod,
+        }),
+      });
+
+      const data = (await res.json()) as CheckoutResponse;
+
+      if (!res.ok) {
+        if (res.status === 402 && data.error === "insufficient_balance") {
+          // Insufficient balance — show topup dialog
+          setTopupUrl(data.topup_url ?? "https://identity.lurus.cn/wallet/topup");
+          setIsCheckoutDialogOpen(false);
+          setShowInsufficientDialog(true);
+          return;
+        }
+        setCheckoutError(data.message ?? data.error ?? "Checkout failed");
+        return;
+      }
+
+      // Success path
+      if (data.subscription) {
+        // Wallet payment — immediate activation
+        setIsCheckoutDialogOpen(false);
+        void queryClient.invalidateQueries({ queryKey: ["account-overview"] });
+        showToast.success(
+          `Upgraded to ${selectedPlan.name}!`,
+        );
+      } else if (data.pay_url) {
+        // External payment — redirect to payment gateway
+        setIsCheckoutDialogOpen(false);
+        window.location.href = data.pay_url;
+      } else if (data.order_no) {
+        // Order created but needs external confirmation — redirect to callback
+        setIsCheckoutDialogOpen(false);
+        window.location.href = `/dashboard/checkout/callback?order_no=${encodeURIComponent(data.order_no)}`;
+      }
+    } catch {
+      setCheckoutError("Network error, please try again");
+    } finally {
+      setIsUpgrading(false);
+    }
+  }, [selectedPlan, billingCycle, paymentMethod, queryClient]);
+
+  // Computed price for checkout dialog
+  const selectedPrice = selectedPlan
+    ? billingCycle === "yearly"
+      ? selectedPlan.priceYearly
+      : selectedPlan.priceMonthly
+    : 0;
 
   // Usage stats from account overview
   const walletBalance = overview?.wallet?.balance ?? 0;
@@ -431,6 +528,167 @@ export function SubscriptionSettings() {
           </details>
         </div>
       </div>
+
+      {/* Checkout Confirmation Dialog */}
+      <Dialog open={isCheckoutDialogOpen} onOpenChange={setIsCheckoutDialogOpen}>
+        <DialogContent className="bg-surface border-white/10 text-white sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Confirm Subscription
+            </DialogTitle>
+            <DialogDescription className="text-white/60">
+              You are upgrading to {selectedPlan?.name} ({selectedPlan?.nameEn}).
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Plan summary */}
+            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{selectedPlan?.icon}</span>
+                <div>
+                  <p className="text-sm font-medium text-white">{selectedPlan?.name}</p>
+                  <p className="text-xs text-white/50">
+                    {billingCycle === "yearly" ? "Annual" : "Monthly"} billing
+                  </p>
+                </div>
+              </div>
+              <div className="text-right">
+                <p className="text-lg font-bold font-mono tabular-nums text-white">
+                  ¥{selectedPrice}
+                </p>
+                <p className="text-xs text-white/40">
+                  {billingCycle === "yearly" ? "/year" : "/month"}
+                </p>
+              </div>
+            </div>
+
+            {/* Payment method selector */}
+            <div>
+              <label className="text-sm text-white/70 mb-2 block">
+                Payment Method
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { key: "wallet" as const, label: "Wallet", sub: `${walletBalance.toFixed(2)} LB` },
+                    { key: "alipay" as const, label: "Alipay", sub: "" },
+                    { key: "wechat" as const, label: "WeChat", sub: "" },
+                  ] as const
+                ).map((m) => (
+                  <button
+                    key={m.key}
+                    onClick={() => setPaymentMethod(m.key)}
+                    className={`p-3 rounded-lg border text-center transition ${
+                      paymentMethod === m.key
+                        ? "border-accent bg-accent/10 text-white"
+                        : "border-white/10 bg-white/5 text-white/70 hover:border-white/20"
+                    }`}
+                  >
+                    <span className="text-sm font-medium block">{m.label}</span>
+                    {m.sub && (
+                      <span className="text-[10px] text-white/40 font-mono tabular-nums block mt-0.5">
+                        {m.sub}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Wallet balance warning */}
+            {paymentMethod === "wallet" && selectedPrice > walletBalance && (
+              <p className="text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg p-2">
+                Current wallet balance (¥{walletBalance.toFixed(2)}) is less than ¥{selectedPrice}.
+                You may need to top up first.
+              </p>
+            )}
+
+            {/* Error message */}
+            {checkoutError && (
+              <p className="text-xs text-loss bg-loss/10 border border-loss/20 rounded-lg p-2">
+                {checkoutError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setIsCheckoutDialogOpen(false)}
+              disabled={isUpgrading}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-white/10 text-white hover:bg-white/20 transition disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => void handleConfirmCheckout()}
+              disabled={isUpgrading}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-accent text-primary-600 hover:bg-accent/90 transition disabled:opacity-50 flex items-center gap-2"
+            >
+              {isUpgrading && (
+                <div className="w-4 h-4 border-2 border-primary-600/30 border-t-primary-600 rounded-full animate-spin" />
+              )}
+              {isUpgrading ? "Processing..." : `Pay ¥${selectedPrice}`}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Insufficient Balance Dialog */}
+      <Dialog open={showInsufficientDialog} onOpenChange={setShowInsufficientDialog}>
+        <DialogContent className="bg-surface border-white/10 text-white sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="text-white">
+              Insufficient Balance
+            </DialogTitle>
+            <DialogDescription className="text-white/60">
+              Your wallet balance is not enough for this subscription.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-3">
+            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <span className="text-sm text-white/70">Current Balance</span>
+              <span className="text-sm font-mono tabular-nums text-amber-400">
+                ¥{walletBalance.toFixed(2)} LB
+              </span>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-white/5 rounded-lg">
+              <span className="text-sm text-white/70">Required</span>
+              <span className="text-sm font-mono tabular-nums text-white">
+                ¥{selectedPrice}
+              </span>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <button
+              onClick={() => setShowInsufficientDialog(false)}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-white/10 text-white hover:bg-white/20 transition"
+            >
+              Cancel
+            </button>
+            <a
+              href={topupUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-lg bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 transition border border-amber-500/30"
+            >
+              Top Up Wallet
+            </a>
+            <button
+              onClick={() => {
+                setShowInsufficientDialog(false);
+                setPaymentMethod("alipay");
+                setIsCheckoutDialogOpen(true);
+              }}
+              className="px-4 py-2 text-sm font-medium rounded-lg bg-accent text-primary-600 hover:bg-accent/90 transition"
+            >
+              Pay with Alipay
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

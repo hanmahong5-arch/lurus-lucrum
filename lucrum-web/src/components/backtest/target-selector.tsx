@@ -688,7 +688,7 @@ function StockMode({ value, onChange }: StockModeProps) {
             <Search className="ml-2 h-4 w-4 shrink-0 opacity-50" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-[400px] p-0" align="start">
+        <PopoverContent className="w-[400px] p-0 z-50" align="start" sideOffset={4} collisionPadding={8}>
           {/* Disable cmdk built-in filtering — results are API-controlled */}
           <Command shouldFilter={false}>
             <CommandInput

@@ -179,3 +179,16 @@ Read `lucrum-web/docs/DESIGN_SYSTEM.md` before writing any UI. Key rules:
 | UX Design | `./_bmad-output/planning-artifacts/ux-design-specification.md` |
 | Sprint Status | `./_bmad-output/implementation-artifacts/sprint-status.yaml` |
 | Dev Stories | `./_bmad-output/implementation-artifacts/<story-id>.md` |
+
+## Platform Integration (2026-03-21)
+
+Auth: Zitadel OIDC (NextAuth.js) → entitlement tier from platform (60s Redis cache)
+Billing: 3-layer quota (plan ceiling → Redis counter → wallet fallback)
+
+| Client Function | Endpoint | Purpose |
+|----------------|----------|---------|
+| `subscriptionCheckout` | `POST /internal/v1/subscriptions/checkout` | Real checkout (wallet/Alipay/WeChat) |
+| `getCheckoutStatus` | `GET /internal/v1/checkout/:order_no/status` | Poll payment status |
+| `invalidateEntitlementCache` | Redis DEL | Clear tier cache after subscription change |
+
+Key files: `src/lib/platform/client.ts`, `src/app/api/lurus/subscription/checkout/route.ts`, `src/app/dashboard/checkout/callback/page.tsx`

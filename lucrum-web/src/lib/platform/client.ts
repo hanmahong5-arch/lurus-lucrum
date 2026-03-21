@@ -109,6 +109,27 @@ export interface CheckoutStatus {
   amount: number;
 }
 
+export interface SubscriptionCheckoutRequest {
+  product_id: string;
+  plan_code: string;
+  billing_cycle: string;
+  payment_method: string;
+  return_url?: string;
+}
+
+export interface SubscriptionCheckoutResult {
+  /** Order number for tracking */
+  order_no?: string;
+  /** Subscription record (present on wallet-paid immediate activation) */
+  subscription?: {
+    plan_code: string;
+    status: string;
+    expires_at?: string;
+  };
+  /** External payment URL (present for alipay/wechat) */
+  pay_url?: string;
+}
+
 export interface ReferralStats {
   aff_code: string;
   total_referrals: number;
@@ -313,6 +334,22 @@ export async function getCheckoutStatus(orderNo: string): Promise<CheckoutStatus
     `/internal/v1/checkout/status/${encodeURIComponent(orderNo)}`,
   );
   return handleResponse<CheckoutStatus>(res);
+}
+
+// --- Subscription ---
+
+export async function subscriptionCheckout(
+  accountId: number,
+  req: SubscriptionCheckoutRequest,
+): Promise<SubscriptionCheckoutResult> {
+  const res = await platformFetch('/internal/v1/subscriptions/checkout', {
+    method: 'POST',
+    body: JSON.stringify({
+      account_id: accountId,
+      ...req,
+    }),
+  });
+  return handleResponse<SubscriptionCheckoutResult>(res);
 }
 
 // --- Referral ---
