@@ -69,7 +69,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'cannot purchase your own strategy' }, { status: 422 });
   }
 
-  // Debit subscriber wallet (full price)
+  // Debit subscriber wallet (full price) and record transaction atomically
+  const authorRevenue = price > 0 ? price * (1 - PLATFORM_FEE_RATE) : 0;
+
   if (price > 0) {
     try {
       await debitWallet(
@@ -89,28 +91,37 @@ export async function POST(request: NextRequest) {
     }
   }
 
-  // Credit author wallet (70% after platform fee)
-  const authorRevenue = price > 0 ? price * (1 - PLATFORM_FEE_RATE) : 0;
-  if (authorRevenue > 0 && strategy.authorIdentityAccountId) {
-    void creditWallet(
-      strategy.authorIdentityAccountId,
-      authorRevenue,
-      'marketplace_revenue',
-      `策略「${strategy.title}」运行收益`,
-    ).catch((err: unknown) => {
-      console.error('[marketplace/run] credit failed:', err);
+  // Record transaction in DB (must succeed after debit)
+  await db.transaction(async (tx) => {
+    await tx.insert(strategySubscriptions).values({
+      subscriberIdentityAccountId: subscriberAccountId ?? undefined,
+      marketplaceStrategyId: strategy.id,
+      type: 'per_run',
+      lbPaid: price,
+      platformFeeRate: PLATFORM_FEE_RATE,
+      authorRevenueLb: authorRevenue,
     });
-  }
-
-  // Record transaction
-  await db.insert(strategySubscriptions).values({
-    subscriberIdentityAccountId: subscriberAccountId ?? undefined,
-    marketplaceStrategyId: strategy.id,
-    type: 'per_run',
-    lbPaid: price,
-    platformFeeRate: PLATFORM_FEE_RATE,
-    authorRevenueLb: authorRevenue,
   });
+
+  // Credit author wallet (70% after platform fee) — must await, not fire-and-forget
+  if (authorRevenue > 0 && strategy.authorIdentityAccountId) {
+    try {
+      await creditWallet(
+        strategy.authorIdentityAccountId,
+        authorRevenue,
+        'marketplace_revenue',
+        `策略「${strategy.title}」运行收益`,
+      );
+    } catch (creditError) {
+      // Debit already succeeded and subscription recorded — log for manual reconciliation
+      console.error(
+        '[CRITICAL] Author credit failed after subscriber debit:',
+        { strategyId: strategy.id, authorAccountId: strategy.authorIdentityAccountId, authorRevenue },
+        creditError,
+      );
+      // TODO: Add to outbox for retry
+    }
+  }
 
   // Increment run counter (fire-and-forget)
   void db

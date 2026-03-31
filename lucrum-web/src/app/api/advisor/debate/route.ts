@@ -21,8 +21,7 @@ import {
 
 // lurus-api configuration
 const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const LURUS_API_KEY =
-  process.env.LURUS_API_KEY || "sk-lucrumAIQuantTradingPlatform2026";
+const LURUS_API_KEY = process.env.LURUS_API_KEY ?? "";
 
 // Request interfaces
 interface DebateStartRequest {
@@ -109,6 +108,13 @@ async function callLLM(
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!LURUS_API_KEY) {
+      return NextResponse.json(
+        { error: 'Server misconfigured: missing API key' },
+        { status: 500 },
+      );
+    }
+
     const body: DebateRequest = await request.json();
 
     switch (body.action) {

@@ -191,7 +191,7 @@ async function runSectorScan(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-token": process.env.NEXTAUTH_SECRET ?? "lucrum-internal",
+      "x-internal-token": process.env.INTERNAL_API_SECRET ?? "",
     },
     body: JSON.stringify(backtestBody),
     signal: AbortSignal.timeout(90_000),

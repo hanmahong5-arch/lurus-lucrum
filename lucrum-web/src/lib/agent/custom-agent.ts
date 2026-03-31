@@ -117,7 +117,7 @@ async function runStockBacktest(
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-token": process.env.NEXTAUTH_SECRET ?? "lucrum-internal",
+      "x-internal-token": process.env.INTERNAL_API_SECRET ?? "",
     },
     body: JSON.stringify({
       target: { mode: "stock", stock: { symbol, name } },

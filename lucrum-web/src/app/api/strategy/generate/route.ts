@@ -16,8 +16,7 @@ import { findPopularStrategyByKey, upsertPopularStrategy } from '@/lib/db/querie
 
 // lurus-api configuration
 const LURUS_API_URL = process.env.LURUS_API_URL || 'https://api.lurus.cn';
-const LURUS_API_KEY =
-  process.env.LURUS_API_KEY || 'sk-lucrumAIQuantTradingPlatform2026';
+const LURUS_API_KEY = process.env.LURUS_API_KEY ?? '';
 
 // Approximate tokens per character (rough estimate for cache savings display)
 const TOKENS_PER_CHAR = 0.4;
@@ -65,6 +64,19 @@ function extractCode(raw: string): string {
 
 export async function POST(request: NextRequest) {
   try {
+    if (!LURUS_API_KEY) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'SERVER_MISCONFIGURED',
+            title: 'Server misconfigured: missing API key',
+            severity: 'error',
+          },
+        },
+        { status: 500 },
+      );
+    }
+
     const body = await request.json();
     const { prompt, strategyType, params } = body as {
       prompt?: unknown;

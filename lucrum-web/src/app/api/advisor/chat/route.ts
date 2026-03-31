@@ -34,8 +34,7 @@ import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memor
 // lurus-api configuration
 // 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
 const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const LURUS_API_KEY =
-  process.env.LURUS_API_KEY || "sk-lucrumAIQuantTradingPlatform2026";
+const LURUS_API_KEY = process.env.LURUS_API_KEY ?? "";
 
 // Message interface for chat history
 // 聊天历史的消息接口
@@ -192,6 +191,13 @@ function getModeConfig(mode: ChatMode): {
  */
 export async function POST(request: NextRequest) {
   try {
+    if (!LURUS_API_KEY) {
+      return NextResponse.json(
+        { error: { code: 'SERVER_MISCONFIGURED', title: 'Server misconfigured: missing API key', severity: 'error' } },
+        { status: 500 },
+      );
+    }
+
     const session = await getServerSession(authOptions);
     let userId = session?.user?.id as string | undefined;
 

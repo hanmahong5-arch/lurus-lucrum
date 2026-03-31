@@ -1108,7 +1108,7 @@ export async function POST(request: NextRequest) {
     // because the calling route has already performed its own quota check.
     const internalSecret = request.headers.get("x-internal-token");
     const isInternalCall =
-      internalSecret === (process.env.NEXTAUTH_SECRET ?? "lucrum-internal");
+      !!process.env.INTERNAL_API_SECRET && internalSecret === process.env.INTERNAL_API_SECRET;
 
     // Quota check: verify user has remaining backtest quota
     let userId = "anonymous";
