@@ -16,7 +16,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { immer } from 'zustand/middleware/immer';
-import { getUserScopedKey } from '@/lib/auth/with-user';
+import { getUserScopedKey } from '@/lib/auth/user-scoped-key';
 
 // ============================================================================
 // Types

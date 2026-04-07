@@ -17,11 +17,12 @@ export {
   withRole,
   withOptionalUser,
   hasRequiredRole,
-  getUserScopedKey,
-  parseUserScopedKey,
   type UserContext,
   type AuthenticatedHandler,
 } from "./with-user";
+
+// Client-safe utilities (no server dependencies)
+export { getUserScopedKey, parseUserScopedKey } from "./user-scoped-key";
 
 // JWT verification for mobile app Bearer token fallback
 export { verifyZitadelJWT, type ZitadelClaims } from "./jwt-verify";

@@ -341,40 +341,5 @@ export async function withOptionalUser<T>(
   }
 }
 
-// ============================================================================
-// Client-Side Helpers (for use in components)
-// 客户端辅助函数（用于组件）
-// ============================================================================
-
-/**
- * Generate a user-scoped storage key for localStorage/sessionStorage
- * 为 localStorage/sessionStorage 生成用户范围的存储键
- *
- * @param baseKey - The base storage key / 基础存储键
- * @param userId - The user's ID / 用户 ID
- * @returns A user-scoped key / 用户范围的键
- *
- * @example
- * ```typescript
- * const key = getUserScopedKey("strategy-workspace", userId);
- * // Returns: "lucrum:user123:strategy-workspace"
- * ```
- */
-export function getUserScopedKey(baseKey: string, userId: string): string {
-  return `lucrum:${userId}:${baseKey}`;
-}
-
-/**
- * Parse a user-scoped storage key to extract the base key and user ID
- * 解析用户范围的存储键以提取基础键和用户 ID
- *
- * @param scopedKey - The user-scoped key / 用户范围的键
- * @returns Object with baseKey and userId, or null if invalid / 包含 baseKey 和 userId 的对象，如果无效则返回 null
- */
-export function parseUserScopedKey(
-  scopedKey: string
-): { baseKey: string; userId: string } | null {
-  const match = scopedKey.match(/^lucrum:([^:]+):(.+)$/);
-  if (!match || !match[1] || !match[2]) return null;
-  return { userId: match[1], baseKey: match[2] };
-}
+// Client-side helpers (getUserScopedKey, parseUserScopedKey) moved to
+// ./user-scoped-key.ts to avoid pulling server dependencies into client bundles.
