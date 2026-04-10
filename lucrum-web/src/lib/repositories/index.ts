@@ -12,12 +12,13 @@
  */
 
 import { db } from '@/lib/db';
-import type { IStockRepository, IKlineRepository, IBacktestRepository, IStrategyRepository, ISectorRepository } from './interfaces';
+import type { IStockRepository, IKlineRepository, IBacktestRepository, IStrategyRepository, ISectorRepository, ITeamRepository } from './interfaces';
 import { DrizzleStockRepository } from './drizzle/stock-repository';
 import { DrizzleKlineRepository } from './drizzle/kline-repository';
 import { DrizzleBacktestRepository } from './drizzle/backtest-repository';
 import { DrizzleStrategyRepository } from './drizzle/strategy-repository';
 import { DrizzleSectorRepository } from './drizzle/sector-repository';
+import { DrizzleTeamRepository } from './drizzle/team-repository';
 
 // Re-export all interface types for convenient imports
 export type {
@@ -37,6 +38,9 @@ export type {
   KlineBar,
   UserStrategyFilter,
   MarketplaceFilter,
+  ITeamRepository,
+  TeamMemberRow,
+  CursorPage,
 } from './interfaces';
 
 // Re-export implementations for direct use or testing
@@ -45,6 +49,7 @@ export { DrizzleKlineRepository } from './drizzle/kline-repository';
 export { DrizzleBacktestRepository } from './drizzle/backtest-repository';
 export { DrizzleStrategyRepository } from './drizzle/strategy-repository';
 export { DrizzleSectorRepository } from './drizzle/sector-repository';
+export { DrizzleTeamRepository } from './drizzle/team-repository';
 
 // =============================================================================
 // LAZY SINGLETONS
@@ -55,6 +60,7 @@ let _klines: IKlineRepository | null = null;
 let _backtests: IBacktestRepository | null = null;
 let _strategies: IStrategyRepository | null = null;
 let _sectors: ISectorRepository | null = null;
+let _teams: ITeamRepository | null = null;
 
 /** Get the singleton stock repository instance */
 export function getStockRepository(): IStockRepository {
@@ -86,6 +92,12 @@ export function getSectorRepository(): ISectorRepository {
   return _sectors;
 }
 
+/** Get the singleton team repository instance */
+export function getTeamRepository(): ITeamRepository {
+  if (!_teams) _teams = new DrizzleTeamRepository(db);
+  return _teams;
+}
+
 /**
  * Reset all singleton instances.
  * Intended for testing only — allows injecting mock implementations.
@@ -96,4 +108,5 @@ export function _resetRepositories(): void {
   _backtests = null;
   _strategies = null;
   _sectors = null;
+  _teams = null;
 }

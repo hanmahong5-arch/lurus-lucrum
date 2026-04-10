@@ -93,6 +93,58 @@ const zh = {
   // Risk
   "risk.disclaimer": "风险提示",
   "risk.disclaimerText": "本工具生成的策略代码仅供学习研究使用，不构成任何投资建议。",
+
+  // Team
+  "nav.team": "我的团队",
+  "team.title": "团队管理",
+  "team.myTeams": "我的团队",
+  "team.members": "成员管理",
+  "team.activity": "团队动态",
+  "team.create": "创建团队",
+  "team.createTitle": "创建新团队",
+  "team.name": "团队名称",
+  "team.slug": "团队标识",
+  "team.slugHint": "仅限小写字母、数字和短横线",
+  "team.memberCount": "{count} 位成员",
+  "team.invite": "邀请成员",
+  "team.inviteTitle": "邀请新成员",
+  "team.inviteEmail": "邮箱地址",
+  "team.inviteRole": "角色",
+  "team.inviteSend": "发送邀请",
+  "team.inviteSuccess": "邀请已发送",
+  "team.removeMember": "移除成员",
+  "team.removeConfirm": "确定移除此成员？",
+  "team.changeRole": "更改角色",
+  "team.leaveTeam": "离开团队",
+  "team.deleteTeam": "解散团队",
+  "team.deleteConfirm": "确定解散此团队？此操作不可撤销。",
+  "team.noTeams": "还没有加入任何团队",
+  "team.createFirst": "创建你的第一个团队，开始协作量化交易",
+  "team.scope.personal": "个人空间",
+  "team.scope.switch": "切换空间",
+  "team.role.owner": "所有者",
+  "team.role.admin": "管理员",
+  "team.role.member": "成员",
+  "team.role.viewer": "观察者",
+
+  // Notifications
+  "notification.title": "通知",
+  "notification.empty": "暂无通知",
+  "notification.markAllRead": "全部已读",
+  "notification.markRead": "标记已读",
+  "notification.unread": "{count} 条未读",
+
+  // Activity
+  "activity.title": "团队动态",
+  "activity.empty": "暂无动态",
+  "activity.strategy_created": "创建了新策略",
+  "activity.strategy_updated": "更新了策略",
+  "activity.backtest_run": "运行了回测",
+  "activity.member_invited": "邀请了新成员",
+  "activity.member_joined": "加入了团队",
+  "activity.member_removed": "移除了成员",
+  "activity.member_role_changed": "更改了成员角色",
+  "activity.team_updated": "更新了团队设置",
 } as const;
 
 export type TranslationKey = keyof typeof zh;

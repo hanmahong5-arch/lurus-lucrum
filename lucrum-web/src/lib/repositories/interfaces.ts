@@ -15,6 +15,12 @@ import type {
   StrategyHistory,
   NewBacktestHistory,
   NewStrategyHistory,
+  Tenant,
+  NewTenant,
+  TenantMember,
+  TenantInvitation,
+  TeamActivity,
+  Notification,
 } from '@/lib/db/schema';
 
 // =============================================================================
@@ -237,4 +243,86 @@ export interface ISectorRepository {
 
   /** Get stocks in a sector with filtering (delegates to mapping table) */
   getStocks(sectorCode: string, filters?: SectorStockFilter): Promise<Stock[]>;
+}
+
+// =============================================================================
+// TEAM COLLABORATION
+// =============================================================================
+
+/** Team member row with joined user info */
+export interface TeamMemberRow {
+  readonly id: number;
+  readonly userId: string;
+  readonly role: string;
+  readonly status: string;
+  readonly joinedAt: Date;
+  readonly name: string | null;
+  readonly email: string;
+  readonly avatar: string | null;
+}
+
+/** Cursor-based page result */
+export interface CursorPage<T> {
+  readonly items: T[];
+  readonly nextCursor: number | null;
+  readonly hasMore: boolean;
+}
+
+/**
+ * Team collaboration data access interface
+ *
+ * Abstracts all team/member/invitation/activity queries.
+ */
+export interface ITeamRepository {
+  /** Get a team by ID */
+  findById(id: number): Promise<Tenant | null>;
+
+  /** Get all teams a user belongs to */
+  findByUser(userId: string): Promise<Tenant[]>;
+
+  /** Create a new team and auto-add owner */
+  create(data: Omit<NewTenant, 'id' | 'createdAt' | 'updatedAt'>): Promise<Tenant | null>;
+
+  /** Update a team's mutable fields */
+  update(id: number, data: { name?: string; settings?: string }): Promise<void>;
+
+  /** Delete a team and cascade members */
+  delete(id: number): Promise<void>;
+
+  /** Get member count for a team */
+  getMemberCount(teamId: number): Promise<number>;
+
+  /** List members with joined user info */
+  getMembers(teamId: number): Promise<TeamMemberRow[]>;
+
+  /** Check if a user is a member and their role */
+  checkAccess(userId: string, teamId: number): Promise<{ hasAccess: boolean; role: string | null }>;
+
+  /** Update a member's role */
+  updateMemberRole(teamId: number, userId: string, role: string): Promise<void>;
+
+  /** Remove a member */
+  removeMember(teamId: number, userId: string): Promise<void>;
+
+  /** Add a member */
+  addMember(teamId: number, userId: string, role: string, invitedBy?: string): Promise<void>;
+
+  /** Create an invitation */
+  createInvitation(data: {
+    tenantId: number;
+    email: string;
+    role: string;
+    token: string;
+    invitedBy: string;
+    expiresAt: Date;
+  }): Promise<TenantInvitation | null>;
+
+  /** Find a pending invitation by token */
+  findInvitationByToken(token: string): Promise<TenantInvitation | null>;
+
+  /** Update invitation status */
+  updateInvitationStatus(id: number, status: string): Promise<void>;
+
+  /** Check for pending invitation by email + team */
+  hasPendingInvitation(teamId: number, email: string): Promise<boolean>;
 }

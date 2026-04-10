@@ -49,10 +49,12 @@ import {
   Trophy,
   Settings,
   Star,
+  Users,
 } from 'lucide-react';
 import { useWatchlistStore, selectIsPanelOpen, selectTotalStockCount } from '@/lib/stores/watchlist-store';
 import { cn } from '@/lib/utils';
 import { StreakBadge } from '@/components/dashboard/streak-badge';
+import { NotificationBell } from '@/components/team/notification-bell';
 
 // ---------------------------------------------------------------------------
 // Navigation definition — 7 focused modules, always visible
@@ -73,6 +75,7 @@ const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard/advisor', key: 'nav.advisor', icon: Bot },
   { href: '/dashboard/history', key: 'nav.history', icon: History },
   { href: '/dashboard/leaderboard', key: 'nav.leaderboard', icon: Trophy },
+  { href: '/dashboard/team', key: 'nav.team', icon: Users },
 ];
 
 // Role display mapping — keys reference i18n translation keys
@@ -246,6 +249,9 @@ export function DashboardHeader() {
 
               {/* Task notification bell */}
               <TaskNotificationBell />
+
+              {/* Team notification bell */}
+              <NotificationBell />
 
               {/* Language switcher */}
               <LocaleSwitcher />

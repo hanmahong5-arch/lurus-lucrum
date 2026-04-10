@@ -388,6 +388,109 @@ export const tenantMembers = pgTable(
 );
 
 /**
+ * Tenant invitations table - Pending team invitations
+ * 租户邀请表 - 待处理的团队邀请
+ */
+export const tenantInvitations = pgTable(
+  'tenant_invitations',
+  {
+    id: serial('id').primaryKey(),
+    /** Tenant reference / 租户引用 */
+    tenantId: integer('tenant_id')
+      .references(() => tenants.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** Invitee email / 被邀请人邮箱 */
+    email: varchar('email', { length: 255 }).notNull(),
+    /** Assigned role / 分配的角色 */
+    role: varchar('role', { length: 20 }).default('member').notNull(),
+    /** Unique invitation token / 唯一邀请令牌 */
+    token: varchar('token', { length: 64 }).unique().notNull(),
+    /** User who sent the invitation / 发送邀请的用户 */
+    invitedBy: uuid('invited_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Invitation status: pending, accepted, expired, cancelled / 邀请状态 */
+    status: varchar('status', { length: 20 }).default('pending').notNull(),
+    /** When the invitation expires / 邀请过期时间 */
+    expiresAt: timestamp('expires_at').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdx: index('idx_tenant_invitations_tenant').on(table.tenantId),
+    emailIdx: index('idx_tenant_invitations_email').on(table.email),
+    tokenIdx: index('idx_tenant_invitations_token').on(table.token),
+    statusIdx: index('idx_tenant_invitations_status').on(table.status),
+  })
+);
+
+/**
+ * Team activity table - Audit log of team actions
+ * 团队活动表 - 团队操作审计日志
+ */
+export const teamActivity = pgTable(
+  'team_activity',
+  {
+    id: serial('id').primaryKey(),
+    /** Tenant reference / 租户引用 */
+    tenantId: integer('tenant_id')
+      .references(() => tenants.id, { onDelete: 'cascade' })
+      .notNull(),
+    /** Acting user ID / 操作用户ID */
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Actor display name (snapshot) / 操作者显示名称（快照） */
+    actorName: varchar('actor_name', { length: 100 }).notNull(),
+    /** Action type: strategy_created, backtest_run, member_invited, etc. / 操作类型 */
+    actionType: varchar('action_type', { length: 50 }).notNull(),
+    /** Resource type: strategy, backtest, member, team / 资源类型 */
+    resourceType: varchar('resource_type', { length: 30 }).notNull(),
+    /** Resource identifier / 资源标识符 */
+    resourceId: varchar('resource_id', { length: 100 }),
+    /** Additional metadata / 额外元数据 */
+    metadata: jsonb('metadata'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantCreatedIdx: index('idx_team_activity_tenant_created').on(table.tenantId, table.createdAt),
+    userIdx: index('idx_team_activity_user').on(table.userId),
+  })
+);
+
+/**
+ * Notifications table - User notifications
+ * 通知表 - 用户通知
+ */
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: serial('id').primaryKey(),
+    /** Target user / 目标用户 */
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Optional tenant context / 可选租户上下文 */
+    tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
+    /** Notification type: invite, activity, system, review / 通知类型 */
+    type: varchar('type', { length: 30 }).notNull(),
+    /** Notification title / 通知标题 */
+    title: varchar('title', { length: 200 }).notNull(),
+    /** Notification body / 通知正文 */
+    body: text('body'),
+    /** Additional metadata (link, resourceId, etc.) / 额外元数据 */
+    metadata: jsonb('metadata'),
+    /** Whether the notification has been read / 是否已读 */
+    isRead: boolean('is_read').default(false).notNull(),
+    /** When the notification was read / 已读时间 */
+    readAt: timestamp('read_at'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    userReadIdx: index('idx_notifications_user_read').on(table.userId, table.isRead, table.createdAt),
+  })
+);
+
+/**
  * Strategy history table - Version-controlled strategy storage
  * 策略历史表 - 版本控制的策略存储
  */
@@ -1202,3 +1305,13 @@ export type NewStrategyComment = typeof strategyComments.$inferInsert;
 
 export type StrategyLike = typeof strategyLikes.$inferSelect;
 export type NewStrategyLike = typeof strategyLikes.$inferInsert;
+
+// Collaboration types
+export type TenantInvitation = typeof tenantInvitations.$inferSelect;
+export type NewTenantInvitation = typeof tenantInvitations.$inferInsert;
+
+export type TeamActivity = typeof teamActivity.$inferSelect;
+export type NewTeamActivity = typeof teamActivity.$inferInsert;
+
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;

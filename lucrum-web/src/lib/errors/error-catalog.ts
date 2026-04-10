@@ -403,4 +403,114 @@ export const ErrorCatalog = {
       ],
     );
   },
+  // === Team Collaboration ===
+  teamCreationFailed(slug: string): AppError {
+    return makeError(
+      'TEAM_CREATE_FAILED',
+      '团队创建失败',
+      `团队标识 "${slug}" 可能已被占用，请更换后重试`,
+      'error',
+      [
+        { type: 'retry', label: '重试' },
+        { type: 'custom', label: '更换标识' },
+      ],
+    );
+  },
+
+  teamNotFound(): AppError {
+    return makeError(
+      'TEAM_NOT_FOUND',
+      '团队不存在',
+      '该团队已被删除或您无权访问',
+      'error',
+      [
+        { type: 'navigate', href: '/dashboard/team', label: '返回团队列表' },
+      ],
+    );
+  },
+
+  teamAccessDenied(): AppError {
+    return makeError(
+      'TEAM_ACCESS_DENIED',
+      '权限不足',
+      '您没有执行此操作的权限，请联系团队管理员',
+      'warning',
+      [
+        { type: 'dismiss', label: '知道了' },
+      ],
+    );
+  },
+
+  teamMemberLimitReached(max: number): AppError {
+    return makeError(
+      'TEAM_MEMBER_LIMIT',
+      '团队成员已满',
+      `当前计划最多 ${max} 人，请升级以邀请更多成员`,
+      'warning',
+      [
+        { type: 'navigate', href: '/dashboard/settings?tab=account', label: '升级计划' },
+        { type: 'dismiss', label: '知道了' },
+      ],
+    );
+  },
+
+  invitationFailed(email: string, reason: string): AppError {
+    return makeError(
+      'INVITATION_FAILED',
+      '邀请发送失败',
+      `无法邀请 ${email}: ${reason}`,
+      'error',
+      [
+        { type: 'retry', label: '重试' },
+      ],
+    );
+  },
+
+  invitationExpired(): AppError {
+    return makeError(
+      'INVITATION_EXPIRED',
+      '邀请已过期',
+      '此邀请链接已过期，请联系团队管理员重新发送',
+      'warning',
+      [
+        { type: 'dismiss', label: '知道了' },
+      ],
+    );
+  },
+
+  invitationAlreadyUsed(): AppError {
+    return makeError(
+      'INVITATION_USED',
+      '邀请已使用',
+      '此邀请已被接受或已失效',
+      'info',
+      [
+        { type: 'navigate', href: '/dashboard/team', label: '查看团队' },
+      ],
+    );
+  },
+
+  memberRemovalFailed(reason: string): AppError {
+    return makeError(
+      'MEMBER_REMOVAL_FAILED',
+      '成员移除失败',
+      reason,
+      'error',
+      [
+        { type: 'retry', label: '重试' },
+      ],
+    );
+  },
+
+  notificationLoadFailed(): AppError {
+    return makeError(
+      'NOTIFICATION_LOAD_FAILED',
+      '通知加载失败',
+      '无法获取通知列表，请检查网络后重试',
+      'error',
+      [
+        { type: 'retry', label: '重试' },
+      ],
+    );
+  },
 } as const;

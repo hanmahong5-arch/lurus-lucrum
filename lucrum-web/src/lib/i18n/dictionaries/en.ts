@@ -95,6 +95,58 @@ const en: Record<TranslationKey, string> = {
   // Risk
   "risk.disclaimer": "Risk Disclaimer",
   "risk.disclaimerText": "Strategies generated are for educational purposes only and do not constitute investment advice.",
+
+  // Team
+  "nav.team": "Team",
+  "team.title": "Team Management",
+  "team.myTeams": "My Teams",
+  "team.members": "Members",
+  "team.activity": "Activity",
+  "team.create": "Create Team",
+  "team.createTitle": "Create New Team",
+  "team.name": "Team Name",
+  "team.slug": "Team Slug",
+  "team.slugHint": "Lowercase alphanumeric and hyphens only",
+  "team.memberCount": "{count} members",
+  "team.invite": "Invite Member",
+  "team.inviteTitle": "Invite New Member",
+  "team.inviteEmail": "Email Address",
+  "team.inviteRole": "Role",
+  "team.inviteSend": "Send Invitation",
+  "team.inviteSuccess": "Invitation sent",
+  "team.removeMember": "Remove Member",
+  "team.removeConfirm": "Are you sure you want to remove this member?",
+  "team.changeRole": "Change Role",
+  "team.leaveTeam": "Leave Team",
+  "team.deleteTeam": "Delete Team",
+  "team.deleteConfirm": "Are you sure you want to delete this team? This cannot be undone.",
+  "team.noTeams": "No teams yet",
+  "team.createFirst": "Create your first team to start collaborative trading",
+  "team.scope.personal": "Personal",
+  "team.scope.switch": "Switch Scope",
+  "team.role.owner": "Owner",
+  "team.role.admin": "Admin",
+  "team.role.member": "Member",
+  "team.role.viewer": "Viewer",
+
+  // Notifications
+  "notification.title": "Notifications",
+  "notification.empty": "No notifications",
+  "notification.markAllRead": "Mark all as read",
+  "notification.markRead": "Mark as read",
+  "notification.unread": "{count} unread",
+
+  // Activity
+  "activity.title": "Team Activity",
+  "activity.empty": "No activity yet",
+  "activity.strategy_created": "created a new strategy",
+  "activity.strategy_updated": "updated a strategy",
+  "activity.backtest_run": "ran a backtest",
+  "activity.member_invited": "invited a new member",
+  "activity.member_joined": "joined the team",
+  "activity.member_removed": "removed a member",
+  "activity.member_role_changed": "changed a member role",
+  "activity.team_updated": "updated team settings",
 };
 
 export default en;

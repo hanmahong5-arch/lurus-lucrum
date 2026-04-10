@@ -21,6 +21,13 @@ export {
   type AuthenticatedHandler,
 } from "./with-user";
 
+// Tenant role-based access control
+export {
+  withTenantRole,
+  type TenantContext,
+  type TenantAuthorizedHandler,
+} from "./with-tenant-role";
+
 // Client-safe utilities (no server dependencies)
 export { getUserScopedKey, parseUserScopedKey } from "./user-scoped-key";
 

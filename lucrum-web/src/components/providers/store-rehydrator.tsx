@@ -13,6 +13,7 @@ import { useTaskRegistryStore } from '@/lib/stores/task-registry-store';
 import { useStrategyVersionStore } from '@/lib/stores/strategy-version-store';
 import { useStrategyWorkspaceStore } from '@/lib/stores/strategy-workspace-store';
 import { useWatchlistStore } from '@/lib/stores/watchlist-store';
+import { useTeamScopeStore } from '@/lib/stores/team-scope-store';
 
 /**
  * Triggers rehydration of all persisted stores AFTER Next.js hydration.
@@ -40,6 +41,7 @@ export function StoreRehydrator() {
       { name: 'task-registry', rehydrate: useTaskRegistryStore.persist.rehydrate },
       { name: 'strategy-version', rehydrate: useStrategyVersionStore.persist.rehydrate },
       { name: 'strategy-workspace', rehydrate: useStrategyWorkspaceStore.persist.rehydrate },
+      { name: 'team-scope', rehydrate: useTeamScopeStore.persist.rehydrate },
     ];
 
     for (const store of stores) {
