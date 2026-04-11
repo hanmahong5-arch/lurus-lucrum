@@ -38,6 +38,13 @@ spec:
       nodeSelector:
         kubernetes.io/hostname: cloud-ubuntu-1-16c32g
 
+      # Route auth.lurus.cn through Traefik ClusterIP (kube-system)
+      # instead of public IP — avoids hairpin NAT failure from inside pod
+      hostAliases:
+        - ip: "10.43.175.138"
+          hostnames:
+            - "auth.lurus.cn"
+
       securityContext:
         runAsNonRoot: true
         runAsUser: 65534
