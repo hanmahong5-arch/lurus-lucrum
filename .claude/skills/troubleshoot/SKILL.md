@@ -304,6 +304,27 @@ ssh root@100.98.57.55 "kubectl get networkpolicy -n lucrum"
 # 如果新增了跨 namespace 的依赖，需要加 egress 规则
 ```
 
+## Path F: 用户创建失败（500 "Failed to create user account"）
+
+OIDC 回调到 `api.lurus.cn` 后 lurus-api 创建本地用户报错。
+
+```bash
+# 查看 lurus-api 日志
+ssh root@100.98.57.55 "kubectl -n lurus-system logs deploy/lurus-api --tail=50 | grep -i 'create user\|Zitadel claims'"
+```
+
+| 错误信息 | 原因 | 修复 |
+|---|---|---|
+| `null value in column "password" violates not-null constraint` | password 列 NOT NULL 无默认值，OIDC 用户没密码 | `ALTER TABLE users ALTER COLUMN password SET DEFAULT '';` |
+| `tenant has reached maximum user limit` | 租户用户数上限 | 管理后台调整 tenant quota |
+| `unique constraint "users_username_key"` | 用户名重复 | 代码已有 ensureUniqueUsername 逻辑，不应出现；检查并发竞争 |
+
+```bash
+# 修复 password 默认值（在 lurusapi 库）
+ssh root@100.98.57.55 "kubectl exec -n database lurus-pg-1 -- psql -U postgres -d lurusapi -c \
+  \"ALTER TABLE users ALTER COLUMN password SET DEFAULT '';\""
+```
+
 ## Zitadel 管理速查
 
 ```bash
