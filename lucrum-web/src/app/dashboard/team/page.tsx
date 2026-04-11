@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Activity, Sparkles, ArrowLeft, BarChart3 } from 'lucide-react';
+import { Users, UserPlus, Activity, Sparkles, ArrowLeft, BarChart3, GitPullRequest, Trophy } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { useCurrentUser } from '@/hooks/use-user-workspace';
 import { useSafeAction } from '@/hooks/use-safe-action';
@@ -9,6 +9,7 @@ import { TeamList } from '@/components/team/team-list';
 import { MemberList } from '@/components/team/member-list';
 import { ActivityFeed } from '@/components/team/activity-feed';
 import { SharedBacktestFeed } from '@/components/collaboration/shared-backtest-feed';
+import { ReviewList } from '@/components/collaboration/review-list';
 import { CreateTeamDialog } from '@/components/team/create-team-dialog';
 import { InviteMemberDialog } from '@/components/team/invite-member-dialog';
 import { useTeamScopeStore } from '@/lib/stores/team-scope-store';
@@ -186,6 +187,13 @@ export default function TeamPage() {
                 回测动态
               </TabsTrigger>
               <TabsTrigger
+                value="reviews"
+                className="flex items-center gap-1.5 data-[state=active]:text-accent"
+              >
+                <GitPullRequest className="w-3.5 h-3.5" />
+                评审
+              </TabsTrigger>
+              <TabsTrigger
                 value="activity"
                 className="flex items-center gap-1.5 data-[state=active]:text-accent"
               >
@@ -232,6 +240,17 @@ export default function TeamPage() {
           <TabsContent value="backtests" className="mt-0">
             <div className="glass-panel rounded-lg overflow-hidden">
               <SharedBacktestFeed teamId={selectedTeam.id} />
+            </div>
+          </TabsContent>
+
+          <TabsContent value="reviews" className="mt-0">
+            <div className="glass-panel rounded-lg overflow-hidden">
+              <ReviewList
+                teamId={selectedTeam.id}
+                onSelectReview={() => {}}
+                onCreateReview={() => {}}
+                canCreate={canInvite}
+              />
             </div>
           </TabsContent>
 

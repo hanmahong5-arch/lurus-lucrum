@@ -535,6 +535,142 @@ export const strategyHistory = pgTable(
 );
 
 /**
+ * Strategy reviews table - PR-like strategy review workflow
+ * 策略评审表 - 类 PR 的策略评审工作流
+ */
+export const strategyReviews = pgTable(
+  'strategy_reviews',
+  {
+    id: serial('id').primaryKey(),
+    tenantId: integer('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    /** Strategy being reviewed / 被评审的策略 */
+    strategyHistoryId: integer('strategy_history_id')
+      .notNull()
+      .references(() => strategyHistory.id, { onDelete: 'cascade' }),
+    /** User who submitted the review request / 提交评审的用户 */
+    authorId: uuid('author_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    authorName: varchar('author_name', { length: 100 }).notNull(),
+    /** Review title / 评审标题 */
+    title: varchar('title', { length: 200 }).notNull(),
+    /** Review description / 评审描述 */
+    description: text('description'),
+    /** Status: open, approved, rejected, withdrawn / 状态 */
+    status: varchar('status', { length: 20 }).default('open').notNull(),
+    /** Number of approvals needed / 需要的批准数 */
+    requiredApprovals: integer('required_approvals').default(1).notNull(),
+    /** Current approval count / 当前批准数 */
+    approvalCount: integer('approval_count').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+    closedAt: timestamp('closed_at'),
+  },
+  (table) => ({
+    tenantIdx: index('idx_strategy_reviews_tenant').on(table.tenantId),
+    statusIdx: index('idx_strategy_reviews_status').on(table.tenantId, table.status),
+    authorIdx: index('idx_strategy_reviews_author').on(table.authorId),
+  })
+);
+
+/**
+ * Review comments table - Comments on strategy reviews
+ * 评审评论表 - 策略评审的评论
+ */
+export const reviewComments = pgTable(
+  'review_comments',
+  {
+    id: serial('id').primaryKey(),
+    reviewId: integer('review_id')
+      .notNull()
+      .references(() => strategyReviews.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userName: varchar('user_name', { length: 100 }).notNull(),
+    /** Comment type: comment, approve, reject, request_changes / 评论类型 */
+    type: varchar('type', { length: 20 }).default('comment').notNull(),
+    content: text('content').notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    reviewIdx: index('idx_review_comments_review').on(table.reviewId),
+    userIdx: index('idx_review_comments_user').on(table.userId),
+  })
+);
+
+/**
+ * Shared portfolios table - Team shared investment portfolios
+ * 共享投资组合表 - 团队共享投资组合
+ */
+export const sharedPortfolios = pgTable(
+  'shared_portfolios',
+  {
+    id: serial('id').primaryKey(),
+    tenantId: integer('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    createdBy: uuid('created_by')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    name: varchar('name', { length: 100 }).notNull(),
+    description: text('description'),
+    /** Strategy IDs included / 包含的策略ID列表 */
+    strategies: jsonb('strategies').$type<number[]>(),
+    /** Stock symbols / 股票列表 */
+    symbols: jsonb('symbols').$type<string[]>(),
+    /** Portfolio configuration / 组合配置 */
+    config: jsonb('config').$type<{
+      initialCapital?: number;
+      startDate?: string;
+      endDate?: string;
+      rebalancePeriod?: string;
+    }>(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantIdx: index('idx_shared_portfolios_tenant').on(table.tenantId),
+    creatorIdx: index('idx_shared_portfolios_creator').on(table.createdBy),
+  })
+);
+
+/**
+ * Team leaderboard snapshots - Periodic ranking snapshots
+ * 团队排行榜快照 - 定期排名快照
+ */
+export const teamLeaderboardSnapshots = pgTable(
+  'team_leaderboard_snapshots',
+  {
+    id: serial('id').primaryKey(),
+    tenantId: integer('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    /** Period type: daily, weekly, monthly, all_time / 周期类型 */
+    period: varchar('period', { length: 20 }).notNull(),
+    /** Period key: "2026-04-11", "2026-W15", "2026-04" / 周期标识 */
+    periodKey: varchar('period_key', { length: 20 }).notNull(),
+    totalReturn: real('total_return').default(0).notNull(),
+    sharpeRatio: real('sharpe_ratio').default(0).notNull(),
+    /** Composite score / 综合评分 */
+    score: real('score').default(0).notNull(),
+    /** Rank within the period / 排名 */
+    rank: integer('rank').default(0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    tenantPeriodIdx: index('idx_leaderboard_tenant_period').on(table.tenantId, table.period, table.periodKey),
+    userIdx: index('idx_leaderboard_user').on(table.userId),
+    rankIdx: index('idx_leaderboard_rank').on(table.tenantId, table.periodKey, table.rank),
+  })
+);
+
+/**
  * Strategy annotations table - Line-level code review comments
  * 策略标注表 - 行级代码评审评论
  */
@@ -1352,3 +1488,15 @@ export type NewNotification = typeof notifications.$inferInsert;
 
 export type StrategyAnnotation = typeof strategyAnnotations.$inferSelect;
 export type NewStrategyAnnotation = typeof strategyAnnotations.$inferInsert;
+
+export type StrategyReview = typeof strategyReviews.$inferSelect;
+export type NewStrategyReview = typeof strategyReviews.$inferInsert;
+
+export type ReviewComment = typeof reviewComments.$inferSelect;
+export type NewReviewComment = typeof reviewComments.$inferInsert;
+
+export type SharedPortfolio = typeof sharedPortfolios.$inferSelect;
+export type NewSharedPortfolio = typeof sharedPortfolios.$inferInsert;
+
+export type TeamLeaderboardSnapshot = typeof teamLeaderboardSnapshots.$inferSelect;
+export type NewTeamLeaderboardSnapshot = typeof teamLeaderboardSnapshots.$inferInsert;
