@@ -1,13 +1,14 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Users, UserPlus, Activity, Sparkles, ArrowLeft } from 'lucide-react';
+import { Users, UserPlus, Activity, Sparkles, ArrowLeft, BarChart3 } from 'lucide-react';
 import { useI18n } from '@/lib/i18n/context';
 import { useCurrentUser } from '@/hooks/use-user-workspace';
 import { useSafeAction } from '@/hooks/use-safe-action';
 import { TeamList } from '@/components/team/team-list';
 import { MemberList } from '@/components/team/member-list';
 import { ActivityFeed } from '@/components/team/activity-feed';
+import { SharedBacktestFeed } from '@/components/collaboration/shared-backtest-feed';
 import { CreateTeamDialog } from '@/components/team/create-team-dialog';
 import { InviteMemberDialog } from '@/components/team/invite-member-dialog';
 import { useTeamScopeStore } from '@/lib/stores/team-scope-store';
@@ -178,6 +179,13 @@ export default function TeamPage() {
                 </span>
               </TabsTrigger>
               <TabsTrigger
+                value="backtests"
+                className="flex items-center gap-1.5 data-[state=active]:text-accent"
+              >
+                <BarChart3 className="w-3.5 h-3.5" />
+                回测动态
+              </TabsTrigger>
+              <TabsTrigger
                 value="activity"
                 className="flex items-center gap-1.5 data-[state=active]:text-accent"
               >
@@ -219,6 +227,12 @@ export default function TeamPage() {
                 />
               </div>
             )}
+          </TabsContent>
+
+          <TabsContent value="backtests" className="mt-0">
+            <div className="glass-panel rounded-lg overflow-hidden">
+              <SharedBacktestFeed teamId={selectedTeam.id} />
+            </div>
           </TabsContent>
 
           <TabsContent value="activity" className="mt-0">

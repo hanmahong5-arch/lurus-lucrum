@@ -535,6 +535,40 @@ export const strategyHistory = pgTable(
 );
 
 /**
+ * Strategy annotations table - Line-level code review comments
+ * 策略标注表 - 行级代码评审评论
+ */
+export const strategyAnnotations = pgTable(
+  'strategy_annotations',
+  {
+    id: serial('id').primaryKey(),
+    strategyHistoryId: integer('strategy_history_id')
+      .notNull()
+      .references(() => strategyHistory.id, { onDelete: 'cascade' }),
+    tenantId: integer('tenant_id')
+      .notNull()
+      .references(() => tenants.id, { onDelete: 'cascade' }),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    userName: varchar('user_name', { length: 100 }).notNull(),
+    lineNumber: integer('line_number'),
+    content: text('content').notNull(),
+    parentId: integer('parent_id'),
+    resolved: boolean('resolved').default(false).notNull(),
+    resolvedBy: uuid('resolved_by'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    strategyIdx: index('idx_strategy_annotations_strategy').on(table.strategyHistoryId),
+    tenantIdx: index('idx_strategy_annotations_tenant').on(table.tenantId),
+    lineIdx: index('idx_strategy_annotations_line').on(table.strategyHistoryId, table.lineNumber),
+    parentIdx: index('idx_strategy_annotations_parent').on(table.parentId),
+  })
+);
+
+/**
  * Backtest history table - Cached backtest results
  * 回测历史表 - 缓存的回测结果
  */
@@ -1315,3 +1349,6 @@ export type NewTeamActivity = typeof teamActivity.$inferInsert;
 
 export type Notification = typeof notifications.$inferSelect;
 export type NewNotification = typeof notifications.$inferInsert;
+
+export type StrategyAnnotation = typeof strategyAnnotations.$inferSelect;
+export type NewStrategyAnnotation = typeof strategyAnnotations.$inferInsert;
