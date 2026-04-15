@@ -10,7 +10,6 @@ import {
   tenants,
   tenantMembers,
   tenantInvitations,
-  users,
   type Tenant,
   type NewTenant,
   type TenantInvitation,
@@ -75,6 +74,8 @@ export class DrizzleTeamRepository implements ITeamRepository {
   }
 
   async getMembers(teamId: number): Promise<TeamMemberRow[]> {
+    // User name/email/avatar live in Zitadel (SSOT). Return null here;
+    // callers that need display info should resolve via identity client.
     const rows = await this.db
       .select({
         id: tenantMembers.id,
@@ -82,14 +83,10 @@ export class DrizzleTeamRepository implements ITeamRepository {
         role: tenantMembers.role,
         status: tenantMembers.status,
         joinedAt: tenantMembers.joinedAt,
-        name: users.name,
-        email: users.email,
-        avatar: users.avatar,
       })
       .from(tenantMembers)
-      .innerJoin(users, eq(users.id, tenantMembers.userId))
       .where(eq(tenantMembers.tenantId, teamId));
-    return rows;
+    return rows.map((r) => ({ ...r, name: null, email: '', avatar: null }));
   }
 
   async checkAccess(

@@ -39,32 +39,10 @@ import { sql } from 'drizzle-orm';
 // ============================================================================
 
 /**
- * Users table - Core user authentication and profile
- * 用户表 - 核心用户认证和档案
- *
- * This table stores user accounts for authentication and user data isolation
- * 此表存储用户账户，用于认证和用户数据隔离
+ * User identity is managed by Zitadel (SSO). User IDs are Zitadel `sub` claims
+ * (numeric snowflake strings, e.g. "359955593424799557"), stored as text.
+ * No local `users` table — Zitadel is the single source of truth.
  */
-export const users = pgTable(
-  'users',
-  {
-    id: uuid('id').primaryKey().defaultRandom(),
-    email: varchar('email', { length: 255 }).unique().notNull(),
-    name: varchar('name', { length: 100 }),
-    passwordHash: varchar('password_hash', { length: 255 }).notNull(),
-    role: varchar('role', { length: 20 }).default('free').notNull(), // free, standard, premium
-    avatar: text('avatar'),
-    emailVerified: boolean('email_verified').default(false).notNull(),
-    isActive: boolean('is_active').default(true).notNull(),
-    lastLoginAt: timestamp('last_login_at'),
-    createdAt: timestamp('created_at').defaultNow().notNull(),
-    updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  },
-  (table) => ({
-    emailIdx: index('idx_users_email').on(table.email),
-    roleIdx: index('idx_users_role').on(table.role),
-  })
-);
 
 /**
  * User preferences table - User-specific settings and preferences
@@ -73,9 +51,7 @@ export const users = pgTable(
 export const userPreferences = pgTable(
   'user_preferences',
   {
-    userId: uuid('user_id')
-      .primaryKey()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').primaryKey(),
     theme: varchar('theme', { length: 20 }).default('dark'),
     defaultTimeframe: varchar('default_timeframe', { length: 10 }).default('1d'),
     defaultCapital: decimal('default_capital', { precision: 15, scale: 2 }).default('100000'),
@@ -94,9 +70,7 @@ export const userDrafts = pgTable(
   'user_drafts',
   {
     id: uuid('id').primaryKey().defaultRandom(),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     draftType: varchar('draft_type', { length: 50 }).notNull(), // 'strategy', 'backtest', 'advisor'
     content: jsonb('content').notNull(),
     createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -338,9 +312,7 @@ export const tenants = pgTable(
     /** URL-friendly slug / URL友好的标识符 */
     slug: varchar('slug', { length: 50 }).unique().notNull(),
     /** Owner user ID / 所有者用户ID */
-    ownerId: uuid('owner_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    ownerId: text('owner_id').notNull(),
     /** Subscription plan / 订阅计划 */
     plan: varchar('plan', { length: 20 }).default('free').notNull(),
     /** Maximum members allowed / 最大成员数 */
@@ -369,15 +341,13 @@ export const tenantMembers = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' })
       .notNull(),
     /** User ID / 用户ID */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Member role: owner, admin, member, viewer / 成员角色 */
     role: varchar('role', { length: 20 }).default('member').notNull(),
     /** Invitation status: pending, accepted, rejected / 邀请状态 */
     status: varchar('status', { length: 20 }).default('accepted').notNull(),
     /** Invited by user ID / 邀请人用户ID */
-    invitedBy: uuid('invited_by').references(() => users.id, { onDelete: 'set null' }),
+    invitedBy: text('invited_by'),
     joinedAt: timestamp('joined_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -406,9 +376,7 @@ export const tenantInvitations = pgTable(
     /** Unique invitation token / 唯一邀请令牌 */
     token: varchar('token', { length: 64 }).unique().notNull(),
     /** User who sent the invitation / 发送邀请的用户 */
-    invitedBy: uuid('invited_by')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    invitedBy: text('invited_by').notNull(),
     /** Invitation status: pending, accepted, expired, cancelled / 邀请状态 */
     status: varchar('status', { length: 20 }).default('pending').notNull(),
     /** When the invitation expires / 邀请过期时间 */
@@ -436,9 +404,7 @@ export const teamActivity = pgTable(
       .references(() => tenants.id, { onDelete: 'cascade' })
       .notNull(),
     /** Acting user ID / 操作用户ID */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Actor display name (snapshot) / 操作者显示名称（快照） */
     actorName: varchar('actor_name', { length: 100 }).notNull(),
     /** Action type: strategy_created, backtest_run, member_invited, etc. / 操作类型 */
@@ -466,9 +432,7 @@ export const notifications = pgTable(
   {
     id: serial('id').primaryKey(),
     /** Target user / 目标用户 */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Optional tenant context / 可选租户上下文 */
     tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
     /** Notification type: invite, activity, system, review / 通知类型 */
@@ -499,9 +463,7 @@ export const strategyHistory = pgTable(
   {
     id: serial('id').primaryKey(),
     /** User who created this version / 创建此版本的用户 */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Optional tenant reference / 可选的租户引用 */
     tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
     /** Strategy display name / 策略显示名称 */
@@ -550,9 +512,7 @@ export const strategyReviews = pgTable(
       .notNull()
       .references(() => strategyHistory.id, { onDelete: 'cascade' }),
     /** User who submitted the review request / 提交评审的用户 */
-    authorId: uuid('author_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    authorId: text('author_id').notNull(),
     authorName: varchar('author_name', { length: 100 }).notNull(),
     /** Review title / 评审标题 */
     title: varchar('title', { length: 200 }).notNull(),
@@ -586,9 +546,7 @@ export const reviewComments = pgTable(
     reviewId: integer('review_id')
       .notNull()
       .references(() => strategyReviews.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     userName: varchar('user_name', { length: 100 }).notNull(),
     /** Comment type: comment, approve, reject, request_changes / 评论类型 */
     type: varchar('type', { length: 20 }).default('comment').notNull(),
@@ -612,9 +570,7 @@ export const sharedPortfolios = pgTable(
     tenantId: integer('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    createdBy: uuid('created_by')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    createdBy: text('created_by').notNull(),
     name: varchar('name', { length: 100 }).notNull(),
     description: text('description'),
     /** Strategy IDs included / 包含的策略ID列表 */
@@ -648,9 +604,7 @@ export const teamLeaderboardSnapshots = pgTable(
     tenantId: integer('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Period type: daily, weekly, monthly, all_time / 周期类型 */
     period: varchar('period', { length: 20 }).notNull(),
     /** Period key: "2026-04-11", "2026-W15", "2026-04" / 周期标识 */
@@ -684,15 +638,13 @@ export const strategyAnnotations = pgTable(
     tenantId: integer('tenant_id')
       .notNull()
       .references(() => tenants.id, { onDelete: 'cascade' }),
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     userName: varchar('user_name', { length: 100 }).notNull(),
     lineNumber: integer('line_number'),
     content: text('content').notNull(),
     parentId: integer('parent_id'),
     resolved: boolean('resolved').default(false).notNull(),
-    resolvedBy: uuid('resolved_by'),
+    resolvedBy: text('resolved_by'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
     updatedAt: timestamp('updated_at').defaultNow().notNull(),
   },
@@ -713,9 +665,7 @@ export const backtestHistory = pgTable(
   {
     id: serial('id').primaryKey(),
     /** User who ran the backtest / 运行回测的用户 */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Optional tenant reference / 可选的租户引用 */
     tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
     /** Reference to strategy version / 策略版本引用 */
@@ -769,9 +719,7 @@ export const tradingHistory = pgTable(
   {
     id: serial('id').primaryKey(),
     /** User who made the trade / 交易用户 */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Optional tenant reference / 可选的租户引用 */
     tenantId: integer('tenant_id').references(() => tenants.id, { onDelete: 'set null' }),
     /** Optional strategy reference / 可选的策略引用 */
@@ -887,7 +835,7 @@ export const popularStrategies = pgTable(
     /** MD5 cache key for deduplication / MD5缓存键用于去重 */
     cacheKey: varchar('cache_key', { length: 64 }).unique(),
     /** User who contributed this strategy to the pool / 贡献此策略的用户 */
-    authorId: uuid('author_id').references(() => users.id, { onDelete: 'set null' }),
+    authorId: text('author_id'),
     /** Average return across all usages / 所有使用次数的平均收益率 */
     avgReturn: decimal('avg_return', { precision: 10, scale: 4 }),
     /** How many times this cached strategy was used / 缓存策略被使用的次数 */
@@ -999,9 +947,7 @@ export const userWorkflowSessions = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     /** User ID / 用户ID */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Workflow type: strategy_dev, backtest_analysis, advisor_chat / 工作流类型 */
     workflowType: varchar('workflow_type', { length: 50 }).notNull(),
     /** Session status: active, completed, expired, cancelled / 会话状态 */
@@ -1090,9 +1036,7 @@ export const strategyVersions = pgTable(
   {
     id: uuid('id').primaryKey().defaultRandom(),
     /** User who created this version / 创建此版本的用户 */
-    userId: uuid('user_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
     /** Reference to parent strategy / 父策略引用 */
     strategyHistoryId: integer('strategy_history_id')
       .references(() => strategyHistory.id, { onDelete: 'cascade' }),
@@ -1251,7 +1195,7 @@ export const marketplaceStrategies = pgTable(
       .notNull()
       .references(() => strategyHistory.id),
     /** Publishing author */
-    authorUserId: uuid('author_user_id').references(() => users.id, { onDelete: 'set null' }),
+    authorUserId: text('author_user_id'),
     /** Display title for the marketplace listing */
     title: varchar('title', { length: 100 }).notNull(),
     /** Detailed description shown on listing page */
@@ -1407,10 +1351,7 @@ export type NewValidationCache = typeof validationCache.$inferInsert;
 export type ValidationPreset = typeof validationPresets.$inferSelect;
 export type NewValidationPreset = typeof validationPresets.$inferInsert;
 
-// User authentication types
-export type User = typeof users.$inferSelect;
-export type NewUser = typeof users.$inferInsert;
-
+// User authentication types (Zitadel is SSOT — no local users table)
 export type UserPreference = typeof userPreferences.$inferSelect;
 export type NewUserPreference = typeof userPreferences.$inferInsert;
 

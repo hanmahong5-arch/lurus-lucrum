@@ -11,7 +11,6 @@ import {
   teamLeaderboardSnapshots,
   backtestHistory,
   tenantMembers,
-  users,
   type TeamLeaderboardSnapshot,
 } from '@/lib/db/schema';
 import { eq, and, desc, sql, gte } from 'drizzle-orm';
@@ -176,24 +175,16 @@ async function enrichLeaderboard(
   period: string,
   periodKey: string
 ): Promise<LeaderboardResult> {
-  const userIds = snapshots.map((s) => s.userId);
-  if (userIds.length === 0) {
+  if (snapshots.length === 0) {
     return { entries: [], period, periodKey, updatedAt: new Date().toISOString() };
   }
 
-  const userRows = await db
-    .select({ id: users.id, name: users.name, avatar: users.avatar })
-    .from(users)
-    .where(sql`${users.id} = ANY(${userIds})`);
-
-  const userMap = new Map(userRows.map((u) => [u.id, u]));
-
+  // User display info lives in Zitadel — leave null here; callers can enrich.
   const entries: LeaderboardEntry[] = snapshots.map((s) => {
-    const user = userMap.get(s.userId);
     return {
       userId: s.userId,
-      userName: user?.name ?? null,
-      avatar: user?.avatar ?? null,
+      userName: null,
+      avatar: null,
       totalReturn: s.totalReturn,
       sharpeRatio: s.sharpeRatio,
       score: s.score,

@@ -22,6 +22,13 @@
       "when": 1772085759037,
       "tag": "0002_sour_toxin",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1775809505127,
+      "tag": "0003_colorful_leo",
+      "breakpoints": true
     }
   ]
 }

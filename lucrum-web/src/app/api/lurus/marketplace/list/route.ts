@@ -13,7 +13,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { marketplaceStrategies, strategyHistory, users } from "@/lib/db/schema";
+import { marketplaceStrategies, strategyHistory } from "@/lib/db/schema";
 import { eq, desc, asc, and, sql } from "drizzle-orm";
 
 const MAX_LIMIT = 50;
@@ -56,10 +56,9 @@ export async function GET(request: NextRequest) {
         totalRuns: marketplaceStrategies.totalRuns,
         totalSubscribers: marketplaceStrategies.totalSubscribers,
         publishedAt: marketplaceStrategies.publishedAt,
-        authorName: users.name,
+        authorUserId: marketplaceStrategies.authorUserId,
       })
       .from(marketplaceStrategies)
-      .leftJoin(users, eq(marketplaceStrategies.authorUserId, users.id))
       .where(and(...conditions))
       .orderBy(orderBy)
       .limit(limit)
