@@ -21,6 +21,10 @@ import type {
   StockSearchOptions,
   SectorStockFilter,
 } from '../interfaces';
+import {
+  getPitCalendarRepository,
+  getPitSectorSnapshotRepository,
+} from '@/lib/pit';
 
 export class DrizzleStockRepository implements IStockRepository {
   constructor(private readonly db: NodePgDatabase<typeof schema>) {}
@@ -138,5 +142,78 @@ export class DrizzleStockRepository implements IStockRepository {
       .where(conditions.length > 0 ? and(...conditions) : undefined);
 
     return result.length;
+  }
+
+  async findBySectorAt(
+    sectorCode: string,
+    asOfDate: string,
+    filters?: SectorStockFilter
+  ): Promise<Stock[]> {
+    const {
+      excludeST = false,
+      minMarketCap,
+      excludeNewStocks = false,
+      minListingDays = 60,
+      maxStocks = 100,
+    } = filters ?? {};
+
+    // Resolve historical membership via sector snapshots; fall back to current
+    // mapping if no snapshot exists (first-run guard before ETL backfill).
+    const snap = getPitSectorSnapshotRepository();
+    const symbols = await snap.getComponents(sectorCode, asOfDate);
+    if (symbols.length === 0) {
+      // Fallback to live mapping — flagged as degraded by the caller via logs.
+      return this.findBySector(sectorCode, filters);
+    }
+
+    const candidates = await this.db
+      .select()
+      .from(stocks)
+      .where(inArray(stocks.symbol, symbols));
+
+    const calendar = getPitCalendarRepository();
+    const filtered: Stock[] = [];
+    for (const s of candidates) {
+      const status = await calendar.getStatusAt(s.symbol, asOfDate);
+      if (status === 'delisted') continue;
+      if (excludeST && status === 'ST') continue;
+      if (
+        minMarketCap !== undefined &&
+        (s.marketCap === null || s.marketCap < minMarketCap)
+      ) {
+        continue;
+      }
+      if (excludeNewStocks && minListingDays && s.listingDate) {
+        const cutoff = new Date(asOfDate);
+        cutoff.setDate(cutoff.getDate() - minListingDays);
+        const cutoffStr = cutoff.toISOString().split('T')[0] ?? '';
+        if (s.listingDate > cutoffStr) continue;
+      }
+      filtered.push(s);
+      if (filtered.length >= maxStocks) break;
+    }
+    return filtered;
+  }
+
+  async filterActiveAsOf(
+    symbols: ReadonlyArray<string>,
+    asOfDate: string,
+    excludeStatuses: ReadonlyArray<'ST' | 'suspended' | 'delisted'> = ['delisted']
+  ): Promise<Stock[]> {
+    if (symbols.length === 0) return [];
+    const rows = await this.db
+      .select()
+      .from(stocks)
+      .where(inArray(stocks.symbol, symbols as string[]));
+
+    const calendar = getPitCalendarRepository();
+    const exclude = new Set<string>(excludeStatuses);
+    const kept: Stock[] = [];
+    for (const s of rows) {
+      const status = await calendar.getStatusAt(s.symbol, asOfDate);
+      if (exclude.has(status)) continue;
+      kept.push(s);
+    }
+    return kept;
   }
 }

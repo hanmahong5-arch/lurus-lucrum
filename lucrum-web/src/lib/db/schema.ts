@@ -1327,6 +1327,191 @@ export const strategyLikes = pgTable(
 );
 
 // ============================================================================
+// Point-in-Time Data Foundation (时间一致性数据底座)
+// ============================================================================
+// Purpose: enable queries like "what did the world look like on 2023-06-01?"
+// without leaking data that was announced later. Required for unbiased
+// backtests and survivor-bias-free factor research.
+
+/**
+ * Trading calendar - Which days are trading days and their session type
+ * 交易日历 - 哪些日子是交易日及交易时段类型
+ *
+ * Estimated rows: ~250/year. Covers A-share SH+SZ markets.
+ * session_type: normal | half_day | closed
+ */
+export const tradingCalendar = pgTable(
+  'trading_calendar',
+  {
+    date: varchar('date', { length: 10 }).primaryKey(), // "2024-01-15"
+    isTrading: boolean('is_trading').notNull(),
+    sessionType: varchar('session_type', { length: 20 }).default('normal').notNull(),
+    exchange: varchar('exchange', { length: 10 }).default('CN').notNull(), // CN covers SH+SZ together
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    tradingIdx: index('idx_trading_calendar_trading').on(table.isTrading, table.date),
+  })
+);
+
+/**
+ * Stock halt calendar - Historical halt/suspension windows per stock
+ * 个股停复牌日历 - 每只股票的停牌/复牌历史窗口
+ *
+ * Estimated rows: ~10k (historical halts across all A-share stocks)
+ * Used to mask halt periods in backtests (cannot transact on halted dates).
+ */
+export const stockHaltCalendar = pgTable(
+  'stock_halt_calendar',
+  {
+    id: serial('id').primaryKey(),
+    symbol: varchar('symbol', { length: 10 }).notNull(),
+    haltDate: varchar('halt_date', { length: 10 }).notNull(),
+    resumeDate: varchar('resume_date', { length: 10 }), // null if still halted
+    reason: varchar('reason', { length: 100 }),
+    announceDate: varchar('announce_date', { length: 10 }), // when the halt was publicly announced
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    symbolDateIdx: index('idx_halt_symbol_date').on(table.symbol, table.haltDate),
+    dateRangeIdx: index('idx_halt_date_range').on(table.haltDate, table.resumeDate),
+  })
+);
+
+/**
+ * Stock status history - Transition log for ST / suspended / delisted status
+ * 股票状态历史 - ST/停牌/退市状态变更记录
+ *
+ * Enables "was 600xxx ST as of 2022-06-15?" queries for hard-filter stage.
+ * Estimated rows: ~30k across all A-share history.
+ */
+export const stockStatusHistory = pgTable(
+  'stock_status_history',
+  {
+    id: serial('id').primaryKey(),
+    symbol: varchar('symbol', { length: 10 }).notNull(),
+    fromDate: varchar('from_date', { length: 10 }).notNull(), // inclusive
+    toDate: varchar('to_date', { length: 10 }), // null = still current
+    status: varchar('status', { length: 20 }).notNull(), // active | ST | suspended | delisted
+    reason: varchar('reason', { length: 200 }),
+    announceDate: varchar('announce_date', { length: 10 }),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    symbolFromIdx: index('idx_status_symbol_from').on(table.symbol, table.fromDate),
+    statusIdx: index('idx_status_status_from').on(table.status, table.fromDate),
+  })
+);
+
+/**
+ * Sector component snapshots - Daily snapshot of which stocks belong to which sector
+ * 板块成分日快照 - 每日哪些股票属于哪个板块/概念
+ *
+ * CRITICAL for avoiding lookahead bias: the "新能源" concept in 2020 contained
+ * very different stocks than today. Must query by date to reconstruct the
+ * historical universe.
+ *
+ * Estimated rows: ~300k/year (~200 sectors × ~40 stocks avg × 40 snapshot days)
+ * Snapshot frequency: weekly (Friday close) to balance storage vs fidelity.
+ */
+export const sectorComponentSnapshots = pgTable(
+  'sector_component_snapshots',
+  {
+    id: serial('id').primaryKey(),
+    asOfDate: varchar('as_of_date', { length: 10 }).notNull(), // snapshot date
+    sectorCode: varchar('sector_code', { length: 20 }).notNull(), // e.g. "BK0478"
+    symbol: varchar('symbol', { length: 10 }).notNull(),
+    weight: real('weight').default(1.0).notNull(),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    dateSectorIdx: index('idx_sector_snap_date_sector').on(table.asOfDate, table.sectorCode),
+    symbolDateIdx: index('idx_sector_snap_symbol_date').on(table.symbol, table.asOfDate),
+    uniqueTriple: uniqueIndex('unique_sector_snap').on(
+      table.asOfDate,
+      table.sectorCode,
+      table.symbol
+    ),
+  })
+);
+
+/**
+ * Financial disclosures calendar - Maps report period to actual announcement date
+ * 财务披露日历 - 将报告期映射到实际公告日
+ *
+ * PIT queries MUST filter by announceDate (not reportPeriod) to avoid
+ * look-ahead bias. Q1 report for 2024-03-31 is usually announced around 2024-04-28.
+ *
+ * Estimated rows: ~80k/year (5000 stocks × 4 quarters × ~4 report types).
+ * report_type: annual | interim | q1 | q3 | forecast | express
+ */
+export const financialDisclosures = pgTable(
+  'financial_disclosures',
+  {
+    id: serial('id').primaryKey(),
+    symbol: varchar('symbol', { length: 10 }).notNull(),
+    reportPeriod: varchar('report_period', { length: 10 }).notNull(), // e.g. "2024-03-31"
+    reportType: varchar('report_type', { length: 20 }).notNull(),
+    announceDate: varchar('announce_date', { length: 10 }).notNull(), // public availability date
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    symbolAnnounceIdx: index('idx_disclosure_symbol_announce').on(
+      table.symbol,
+      table.announceDate
+    ),
+    announceIdx: index('idx_disclosure_announce').on(table.announceDate),
+    uniqueDisclosure: uniqueIndex('unique_disclosure').on(
+      table.symbol,
+      table.reportPeriod,
+      table.reportType
+    ),
+  })
+);
+
+/**
+ * Financial facts PIT - Point-in-time fundamental data store
+ * 基本面 PIT 事实表 - 时点一致的基本面数据存储
+ *
+ * Stores (symbol, field, value) with both reportPeriod (economic meaning)
+ * and asOfDate (public availability). Query pattern:
+ *
+ *   SELECT value FROM financial_facts_pit
+ *   WHERE symbol = '600519' AND field = 'roe'
+ *     AND as_of_date <= '2023-06-01'
+ *   ORDER BY as_of_date DESC LIMIT 1;
+ *
+ * Handles restatements: same (symbol, field, reportPeriod) may have multiple
+ * asOfDate entries when data is revised.
+ *
+ * Estimated rows: ~500k/year (5000 × ~25 fields × 4 periods).
+ */
+export const financialFactsPit = pgTable(
+  'financial_facts_pit',
+  {
+    id: serial('id').primaryKey(),
+    symbol: varchar('symbol', { length: 10 }).notNull(),
+    field: varchar('field', { length: 50 }).notNull(), // e.g. "roe", "pe_ttm", "revenue"
+    value: decimal('value', { precision: 20, scale: 6 }),
+    reportPeriod: varchar('report_period', { length: 10 }).notNull(),
+    asOfDate: varchar('as_of_date', { length: 10 }).notNull(), // when this value became knowable
+    source: varchar('source', { length: 30 }), // e.g. "eastmoney", "tushare"
+    metadata: jsonb('metadata'), // unit, currency, footnotes
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    lookupIdx: index('idx_pit_facts_lookup').on(table.symbol, table.field, table.asOfDate),
+    periodIdx: index('idx_pit_facts_period').on(table.symbol, table.field, table.reportPeriod),
+    uniqueVersion: uniqueIndex('unique_pit_facts_version').on(
+      table.symbol,
+      table.field,
+      table.reportPeriod,
+      table.asOfDate
+    ),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -1441,3 +1626,22 @@ export type NewSharedPortfolio = typeof sharedPortfolios.$inferInsert;
 
 export type TeamLeaderboardSnapshot = typeof teamLeaderboardSnapshots.$inferSelect;
 export type NewTeamLeaderboardSnapshot = typeof teamLeaderboardSnapshots.$inferInsert;
+
+// Point-in-Time data foundation types
+export type TradingCalendar = typeof tradingCalendar.$inferSelect;
+export type NewTradingCalendar = typeof tradingCalendar.$inferInsert;
+
+export type StockHaltCalendar = typeof stockHaltCalendar.$inferSelect;
+export type NewStockHaltCalendar = typeof stockHaltCalendar.$inferInsert;
+
+export type StockStatusHistory = typeof stockStatusHistory.$inferSelect;
+export type NewStockStatusHistory = typeof stockStatusHistory.$inferInsert;
+
+export type SectorComponentSnapshot = typeof sectorComponentSnapshots.$inferSelect;
+export type NewSectorComponentSnapshot = typeof sectorComponentSnapshots.$inferInsert;
+
+export type FinancialDisclosure = typeof financialDisclosures.$inferSelect;
+export type NewFinancialDisclosure = typeof financialDisclosures.$inferInsert;
+
+export type FinancialFactPit = typeof financialFactsPit.$inferSelect;
+export type NewFinancialFactPit = typeof financialFactsPit.$inferInsert;

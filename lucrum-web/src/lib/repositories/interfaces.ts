@@ -139,6 +139,10 @@ export interface MarketplaceFilter {
  * Stock data access interface
  *
  * Abstracts all stock-related database queries.
+ *
+ * Methods without an `asOfDate` parameter return the **current** view
+ * (survivor-biased, reflects today's sector mapping). Methods with
+ * `asOfDate` reconstruct the historical universe using PIT snapshots.
  */
 export interface IStockRepository {
   /** Find a single stock by its symbol code */
@@ -155,6 +159,27 @@ export interface IStockRepository {
 
   /** Count stocks matching optional filters */
   count(options?: StockSearchOptions): Promise<number>;
+
+  /**
+   * PIT variant of findBySector: resolve membership from sector snapshots at
+   * `asOfDate` (falls back to current mapping if no snapshot exists).
+   */
+  findBySectorAt(
+    sectorCode: string,
+    asOfDate: string,
+    filters?: SectorStockFilter
+  ): Promise<Stock[]>;
+
+  /**
+   * PIT filter: from a candidate list, keep only symbols whose status on
+   * `asOfDate` is not in the exclusion set (default: exclude delisted).
+   * Used by the hard-filter stage of the selection funnel.
+   */
+  filterActiveAsOf(
+    symbols: ReadonlyArray<string>,
+    asOfDate: string,
+    excludeStatuses?: ReadonlyArray<'ST' | 'suspended' | 'delisted'>
+  ): Promise<Stock[]>;
 }
 
 /**
