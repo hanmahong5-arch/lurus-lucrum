@@ -24,8 +24,15 @@ export {
   EVENT_DRIVEN,
 } from './packs';
 
-export { runPack } from './pack-runner';
-export type { PackRunOutput, RunPackOptions } from './pack-runner';
+export { runPack, runPackDirect } from './pack-runner';
+export type {
+  PackRunOutput,
+  RunPackOptions,
+  RunPackDirectOptions,
+} from './pack-runner';
+
+export { synthesizePack, validateDial, DEFAULT_DIAL } from './style-dial';
+export type { StyleDial } from './style-dial';
 
 export { recommendPacks } from './pack-recommender';
 export type { PackRecommendation } from './pack-recommender';

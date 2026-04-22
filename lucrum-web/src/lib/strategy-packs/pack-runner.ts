@@ -44,46 +44,73 @@ export interface RunPackOptions {
   readonly onEvent?: FunnelEventListener;
 }
 
+export interface RunPackDirectOptions {
+  readonly pack: StrategyPack;
+  readonly universe: PackRunRequest['universe'];
+  readonly asOfDate?: string;
+  readonly topN?: number;
+  readonly userId?: string;
+  readonly onEvent?: FunnelEventListener;
+  readonly runIdPrefix?: string;
+}
+
 export async function runPack(options: RunPackOptions): Promise<PackRunOutput> {
   const { request } = options;
   const pack = getPack(request.packId);
   if (!pack) {
     throw new Error(`unknown pack: ${request.packId}`);
   }
+  return runPackDirect({
+    pack,
+    universe: request.universe,
+    asOfDate: request.asOfDate,
+    topN: request.topN,
+    userId: request.userId,
+    onEvent: options.onEvent,
+    runIdPrefix: `pack-${pack.id}`,
+  });
+}
 
-  if (
-    request.universe.kind === 'sector' &&
-    !request.universe.sectorCode
-  ) {
+export async function runPackDirect(
+  options: RunPackDirectOptions
+): Promise<PackRunOutput> {
+  const { pack } = options;
+  const universe = options.universe;
+
+  if (universe.kind === 'sector' && !universe.sectorCode) {
     throw new Error('universe.sectorCode required for kind=sector');
   }
   if (
-    request.universe.kind === 'symbols' &&
-    (!request.universe.symbols || request.universe.symbols.length === 0)
+    universe.kind === 'symbols' &&
+    (!universe.symbols || universe.symbols.length === 0)
   ) {
     throw new Error('universe.symbols must be non-empty for kind=symbols');
   }
 
   const context = createFunnelContext({
-    asOfDate: request.asOfDate,
-    options: { ...request, packName: pack.name },
-    userId: request.userId,
-    runIdPrefix: `pack-${pack.id}`,
+    asOfDate: options.asOfDate,
+    options: {
+      packId: pack.id,
+      packName: pack.name,
+      universe,
+      asOfDate: options.asOfDate,
+      topN: options.topN,
+    },
+    userId: options.userId,
+    runIdPrefix: options.runIdPrefix ?? `pack-${pack.id}`,
   });
 
   const portfolio = {
     ...pack.portfolio,
-    topN: request.topN ?? pack.portfolio.topN ?? 10,
+    topN: options.topN ?? pack.portfolio.topN ?? 10,
   };
 
   const stages = buildPipeline([
     makeUniverseStage({
       spec: {
-        kind: request.universe.kind,
-        sectorCode: request.universe.sectorCode,
-        symbols: request.universe.symbols
-          ? [...request.universe.symbols]
-          : undefined,
+        kind: universe.kind,
+        sectorCode: universe.sectorCode,
+        symbols: universe.symbols ? [...universe.symbols] : undefined,
       },
     }),
     makeHardFilterStage(pack.hardFilter),

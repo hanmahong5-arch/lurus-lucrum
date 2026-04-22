@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { FunnelEvent, FunnelResult, StageEval } from '@/lib/funnel';
-import type { StrategyPackId } from '@/lib/strategy-packs';
+import type { StrategyPackId, StyleDial } from '@/lib/strategy-packs';
 
 export interface PackMeta {
   readonly id: StrategyPackId;
@@ -51,6 +51,7 @@ type FunnelStatus = 'idle' | 'running' | 'done' | 'error';
 interface FunnelStreamState {
   readonly status: FunnelStatus;
   readonly packMeta: PackMeta | null;
+  readonly synthesis: DialSynthesis | null;
   readonly events: ReadonlyArray<FunnelEvent>;
   readonly stageEvals: ReadonlyArray<StageEval>;
   readonly candidates: ReadonlyArray<FunnelCandidateView>;
@@ -61,6 +62,7 @@ interface FunnelStreamState {
 const INITIAL_STATE: FunnelStreamState = {
   status: 'idle',
   packMeta: null,
+  synthesis: null,
   events: [],
   stageEvals: [],
   candidates: [],
@@ -68,15 +70,32 @@ const INITIAL_STATE: FunnelStreamState = {
   error: null,
 };
 
+interface UniverseRequest {
+  readonly kind: 'sector' | 'symbols';
+  readonly sectorCode?: string;
+  readonly symbols?: ReadonlyArray<string>;
+}
+
 export interface RunPackRequest {
   readonly packId: StrategyPackId;
-  readonly universe: {
-    readonly kind: 'sector' | 'symbols';
-    readonly sectorCode?: string;
-    readonly symbols?: ReadonlyArray<string>;
-  };
+  readonly universe: UniverseRequest;
   readonly asOfDate?: string;
   readonly topN?: number;
+}
+
+export interface RunDialRequest {
+  readonly dial: StyleDial;
+  readonly universe: UniverseRequest;
+  readonly asOfDate?: string;
+  readonly topN?: number;
+}
+
+export interface DialSynthesis {
+  readonly factorWeights: ReadonlyArray<{ factorId: string; weight: number }>;
+  readonly leaderWeight: number;
+  readonly topN: number;
+  readonly klineWindow: number;
+  readonly hardFilter: Record<string, unknown>;
 }
 
 export function useFunnelStream() {
@@ -90,18 +109,18 @@ export function useFunnelStream() {
 
   useEffect(() => abort, [abort]);
 
-  const run = useCallback(
-    async (request: RunPackRequest) => {
+  const streamFrom = useCallback(
+    async (endpoint: string, body: unknown) => {
       abort();
       const controller = new AbortController();
       abortRef.current = controller;
       setState({ ...INITIAL_STATE, status: 'running' });
 
       try {
-        const response = await fetch('/api/strategy-packs/run', {
+        const response = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(request),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
 
@@ -160,7 +179,17 @@ export function useFunnelStream() {
     [abort]
   );
 
-  return { ...state, run, abort };
+  const run = useCallback(
+    (request: RunPackRequest) => streamFrom('/api/strategy-packs/run', request),
+    [streamFrom]
+  );
+
+  const runDial = useCallback(
+    (request: RunDialRequest) => streamFrom('/api/strategy-packs/dial', request),
+    [streamFrom]
+  );
+
+  return { ...state, run, runDial, abort };
 }
 
 function applyEvent(
@@ -171,8 +200,14 @@ function applyEvent(
   const kind = (payload as { kind?: string }).kind;
 
   if (kind === 'pack-meta') {
-    const pack = (payload as { pack?: PackMeta }).pack;
-    if (pack) setState((s) => ({ ...s, packMeta: pack }));
+    const p = payload as {
+      pack?: PackMeta;
+      synthesized?: DialSynthesis;
+    };
+    if (p.pack) {
+      const synthesis = p.synthesized ?? null;
+      setState((s) => ({ ...s, packMeta: p.pack ?? null, synthesis }));
+    }
     return;
   }
 
