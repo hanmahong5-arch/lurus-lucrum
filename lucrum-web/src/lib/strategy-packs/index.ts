@@ -34,5 +34,8 @@ export type {
 export { synthesizePack, validateDial, DEFAULT_DIAL } from './style-dial';
 export type { StyleDial } from './style-dial';
 
+export { applyOverride, validateOverride } from './pack-override';
+export type { PackOverride } from './pack-override';
+
 export { recommendPacks } from './pack-recommender';
 export type { PackRecommendation } from './pack-recommender';

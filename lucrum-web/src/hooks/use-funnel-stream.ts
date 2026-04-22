@@ -90,6 +90,23 @@ export interface RunDialRequest {
   readonly topN?: number;
 }
 
+export interface RunCustomRequest {
+  readonly basePackId: StrategyPackId;
+  readonly override: {
+    readonly factorWeights?: ReadonlyArray<{
+      readonly factorId: string;
+      readonly weight: number;
+    }>;
+    readonly leaderWeight?: number;
+    readonly klineWindow?: number;
+    readonly topN?: number;
+    readonly minListingDays?: number;
+    readonly minMarketCap?: number;
+  };
+  readonly universe: UniverseRequest;
+  readonly asOfDate?: string;
+}
+
 export interface DialSynthesis {
   readonly factorWeights: ReadonlyArray<{ factorId: string; weight: number }>;
   readonly leaderWeight: number;
@@ -189,7 +206,13 @@ export function useFunnelStream() {
     [streamFrom]
   );
 
-  return { ...state, run, runDial, abort };
+  const runCustom = useCallback(
+    (request: RunCustomRequest) =>
+      streamFrom('/api/strategy-packs/custom', request),
+    [streamFrom]
+  );
+
+  return { ...state, run, runDial, runCustom, abort };
 }
 
 function applyEvent(
