@@ -1512,6 +1512,66 @@ export const financialFactsPit = pgTable(
 );
 
 // ============================================================================
+// Pack / Funnel Run Persistence (Phase 7.1)
+// Captures every funnel pipeline execution for alpha-decay / drift / slippage.
+// ============================================================================
+
+export const packRuns = pgTable(
+  'pack_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    runId: varchar('run_id', { length: 100 }).notNull(),
+    userId: text('user_id'),
+    packId: varchar('pack_id', { length: 50 }),
+    packName: varchar('pack_name', { length: 100 }),
+    asOfDate: varchar('as_of_date', { length: 10 }).notNull(),
+    universeKind: varchar('universe_kind', { length: 10 }).notNull(), // 'sector' | 'symbols' | 'all'
+    universeSectorCode: varchar('universe_sector_code', { length: 20 }),
+    universeSymbols: jsonb('universe_symbols'), // string[] when kind='symbols'
+    topN: integer('top_n'),
+    durationMs: integer('duration_ms').notNull(),
+    status: varchar('status', { length: 10 }).notNull(), // 'success' | 'error'
+    errorStage: varchar('error_stage', { length: 100 }),
+    errorCode: varchar('error_code', { length: 50 }),
+    errorMessage: text('error_message'),
+    candidateCount: integer('candidate_count').default(0).notNull(),
+    topCandidates: jsonb('top_candidates'), // capped list of final picks
+    flags: jsonb('flags'),
+    options: jsonb('options'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueRunId: uniqueIndex('unique_pack_runs_run_id').on(table.runId),
+    userCreatedIdx: index('idx_pack_runs_user_created').on(table.userId, table.createdAt),
+    packAsOfIdx: index('idx_pack_runs_pack_asof').on(table.packId, table.asOfDate),
+    asOfIdx: index('idx_pack_runs_asof').on(table.asOfDate),
+    statusIdx: index('idx_pack_runs_status').on(table.status, table.createdAt),
+  })
+);
+
+export const packRunStages = pgTable(
+  'pack_run_stages',
+  {
+    id: serial('id').primaryKey(),
+    runId: varchar('run_id', { length: 100 }).notNull(),
+    stageIndex: integer('stage_index').notNull(),
+    stageName: varchar('stage_name', { length: 100 }).notNull(),
+    inputSize: integer('input_size').notNull(),
+    outputSize: integer('output_size').notNull(),
+    keepRatio: real('keep_ratio').notNull(),
+    durationMs: integer('duration_ms').notNull(),
+    metrics: jsonb('metrics'),
+    warnings: jsonb('warnings'), // string[]
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    runIdx: index('idx_pack_run_stages_run').on(table.runId, table.stageIndex),
+    nameIdx: index('idx_pack_run_stages_name').on(table.stageName, table.createdAt),
+    uniqueStage: uniqueIndex('unique_pack_run_stage').on(table.runId, table.stageIndex),
+  })
+);
+
+// ============================================================================
 // Type Exports
 // ============================================================================
 
@@ -1645,3 +1705,10 @@ export type NewFinancialDisclosure = typeof financialDisclosures.$inferInsert;
 
 export type FinancialFactPit = typeof financialFactsPit.$inferSelect;
 export type NewFinancialFactPit = typeof financialFactsPit.$inferInsert;
+
+// Pack / Funnel run persistence types
+export type PackRun = typeof packRuns.$inferSelect;
+export type NewPackRun = typeof packRuns.$inferInsert;
+
+export type PackRunStage = typeof packRunStages.$inferSelect;
+export type NewPackRunStage = typeof packRunStages.$inferInsert;

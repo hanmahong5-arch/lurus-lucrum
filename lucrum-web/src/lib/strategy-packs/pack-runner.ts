@@ -33,6 +33,7 @@ import {
 } from '@/lib/funnel/stages';
 import type { PackRunRequest, StrategyPack } from './types';
 import { getPack } from './packs';
+import { persistPackRun } from './pack-run-repository';
 
 export interface PackRunOutput {
   readonly pack: StrategyPack;
@@ -131,6 +132,18 @@ export async function runPackDirect(
     stages,
     context,
     onEvent: options.onEvent,
+  });
+
+  await persistPackRun({
+    context,
+    result,
+    universe: {
+      kind: universe.kind,
+      sectorCode: universe.sectorCode,
+      symbols: universe.symbols,
+    },
+    pack: { id: pack.id, name: pack.name },
+    topN: options.topN ?? pack.portfolio.topN,
   });
 
   return { pack, result };

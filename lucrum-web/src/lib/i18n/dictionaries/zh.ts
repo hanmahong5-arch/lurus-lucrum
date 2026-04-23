@@ -30,6 +30,11 @@ const zh = {
   "nav.advisor": "AI 顾问",
   "nav.history": "历史中心",
   "nav.leaderboard": "排行榜",
+  // Navigation — progressive selection (L1/L2/L3)
+  "nav.quickPick": "一键选股",
+  "nav.styleDial": "风格调谐",
+  "nav.stepper": "自定义选股",
+  "nav.monitoring": "回测监控",
   // Navigation — legacy (kept for backward compat)
   "nav.scanner": "扫描选板",
   "nav.agents": "分析任务",

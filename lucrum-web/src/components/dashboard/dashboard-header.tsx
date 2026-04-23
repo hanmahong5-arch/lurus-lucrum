@@ -50,6 +50,10 @@ import {
   Settings,
   Star,
   Users,
+  Zap,
+  SlidersHorizontal,
+  ListChecks,
+  Activity,
 } from 'lucide-react';
 import { useWatchlistStore, selectIsPanelOpen, selectTotalStockCount } from '@/lib/stores/watchlist-store';
 import { cn } from '@/lib/utils';
@@ -69,11 +73,15 @@ interface NavItem {
 const NAV_ITEMS: NavItem[] = [
   { href: '/dashboard', key: 'nav.strategyEditor', icon: PenTool },
   { href: '/dashboard/marketplace', key: 'nav.marketplace', icon: Store },
+  { href: '/dashboard/quick-pick', key: 'nav.quickPick', icon: Zap },
+  { href: '/dashboard/style-dial', key: 'nav.styleDial', icon: SlidersHorizontal },
+  { href: '/dashboard/stepper', key: 'nav.stepper', icon: ListChecks },
   { href: '/dashboard/validation', key: 'nav.validation', icon: FlaskConical },
   { href: '/dashboard/trading', key: 'nav.trading', icon: TrendingUp },
   { href: '/dashboard/analysis', key: 'nav.analysis', icon: Radar },
   { href: '/dashboard/advisor', key: 'nav.advisor', icon: Bot },
   { href: '/dashboard/history', key: 'nav.history', icon: History },
+  { href: '/dashboard/monitoring', key: 'nav.monitoring', icon: Activity },
   { href: '/dashboard/leaderboard', key: 'nav.leaderboard', icon: Trophy },
   { href: '/dashboard/team', key: 'nav.team', icon: Users },
 ];

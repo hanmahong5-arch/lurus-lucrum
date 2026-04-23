@@ -32,6 +32,11 @@ const en: Record<TranslationKey, string> = {
   "nav.advisor": "AI Advisor",
   "nav.history": "History",
   "nav.leaderboard": "Leaderboard",
+  // Navigation — progressive selection (L1/L2/L3)
+  "nav.quickPick": "Quick Pick",
+  "nav.styleDial": "Style Dial",
+  "nav.stepper": "Custom Wizard",
+  "nav.monitoring": "Health",
   // Navigation — legacy (kept for backward compat)
   "nav.scanner": "Scanner",
   "nav.agents": "Agents",

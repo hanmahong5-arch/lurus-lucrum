@@ -30,6 +30,7 @@ import {
   makeDefaultFunnel,
   type DefaultFunnelOptions,
 } from '@/lib/funnel/stages';
+import { persistPackRun } from '@/lib/strategy-packs/pack-run-repository';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -133,10 +134,21 @@ export async function POST(request: NextRequest): Promise<Response> {
           portfolio: parsed.portfolio,
         });
 
-        await runPipeline({
+        const result = await runPipeline({
           stages,
           context,
           onEvent: send,
+        });
+
+        await persistPackRun({
+          context,
+          result,
+          universe: {
+            kind: parsed.universe.kind,
+            sectorCode: parsed.universe.sectorCode,
+            symbols: parsed.universe.symbols,
+          },
+          topN: parsed.portfolio?.topN,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

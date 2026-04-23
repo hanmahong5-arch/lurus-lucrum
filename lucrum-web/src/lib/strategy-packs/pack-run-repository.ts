@@ -1,0 +1,255 @@
+/**
+ * Pack run repository — best-effort persistence of funnel pipeline results.
+ *
+ * Writes a single header row into `pack_runs` plus one row per stage into
+ * `pack_run_stages`. Downstream jobs (alpha-decay tracker, drift monitor,
+ * slippage attribution) read from these tables.
+ *
+ * Design:
+ *   - Best-effort: persistence failure MUST NOT break the user's pipeline run.
+ *     All errors are caught and logged, nothing is thrown back to the caller.
+ *   - Conflict-safe: `run_id` has a unique index, so re-persisting the same
+ *     run is a no-op (ON CONFLICT DO NOTHING on both tables).
+ *   - Bounded payloads: `top_candidates` is capped at
+ *     MAX_TOP_CANDIDATES to keep row size reasonable.
+ *
+ * @module lib/strategy-packs/pack-run-repository
+ */
+
+import { and, desc, eq } from 'drizzle-orm';
+import { db } from '@/lib/db';
+import {
+  packRuns,
+  packRunStages,
+  type NewPackRun,
+  type NewPackRunStage,
+} from '@/lib/db/schema';
+import type {
+  Candidate,
+  FunnelContext,
+  FunnelResult,
+  StageEval,
+} from '@/lib/funnel';
+import type { StrategyPack } from './types';
+
+const DEFAULT_LIST_LIMIT = 20;
+const MAX_LIST_LIMIT = 100;
+
+const MAX_TOP_CANDIDATES = 50;
+const MAX_ERROR_MESSAGE_LENGTH = 2000;
+
+export interface UniverseSpec {
+  readonly kind: 'sector' | 'symbols' | 'all';
+  readonly sectorCode?: string;
+  readonly symbols?: ReadonlyArray<string>;
+}
+
+export interface PersistPackRunInput {
+  readonly context: FunnelContext;
+  readonly result: FunnelResult;
+  readonly universe: UniverseSpec;
+  readonly pack?: Pick<StrategyPack, 'id' | 'name'>;
+  readonly topN?: number;
+}
+
+function truncate(input: string, max: number): string {
+  if (input.length <= max) return input;
+  return `${input.slice(0, max)}…`;
+}
+
+function trimCandidates(candidates: ReadonlyArray<Candidate>): Array<Candidate> {
+  if (candidates.length <= MAX_TOP_CANDIDATES) return [...candidates];
+  return candidates.slice(0, MAX_TOP_CANDIDATES);
+}
+
+function buildHeaderRow(input: PersistPackRunInput): NewPackRun {
+  const { context, result, universe, pack, topN } = input;
+
+  return {
+    runId: context.runId,
+    userId: context.userId ?? null,
+    packId: pack?.id ?? null,
+    packName: pack?.name ?? null,
+    asOfDate: context.asOfDate,
+    universeKind: universe.kind,
+    universeSectorCode: universe.sectorCode ?? null,
+    universeSymbols: universe.symbols ? [...universe.symbols] : null,
+    topN: topN ?? null,
+    durationMs: result.durationMs,
+    status: result.error ? 'error' : 'success',
+    errorStage: result.error?.stageName ?? null,
+    errorCode: result.error?.code ?? null,
+    errorMessage: result.error
+      ? truncate(result.error.message, MAX_ERROR_MESSAGE_LENGTH)
+      : null,
+    candidateCount: result.candidates.length,
+    topCandidates: trimCandidates(result.candidates),
+    flags: context.flags,
+    options: context.options,
+  };
+}
+
+function buildStageRows(
+  runId: string,
+  evals: ReadonlyArray<StageEval>,
+): Array<NewPackRunStage> {
+  return evals.map((ev) => ({
+    runId,
+    stageIndex: ev.stageIndex,
+    stageName: ev.stageName,
+    inputSize: ev.inputSize,
+    outputSize: ev.outputSize,
+    keepRatio: ev.keepRatio,
+    durationMs: ev.durationMs,
+    metrics: ev.metrics,
+    warnings: [...ev.warnings],
+  }));
+}
+
+/**
+ * Persist a completed pipeline run. Safe to await or fire-and-forget —
+ * never throws back to the caller.
+ */
+export async function persistPackRun(input: PersistPackRunInput): Promise<void> {
+  try {
+    const header = buildHeaderRow(input);
+    await db.insert(packRuns).values(header).onConflictDoNothing({
+      target: packRuns.runId,
+    });
+
+    const stageRows = buildStageRows(input.context.runId, input.result.evals);
+    if (stageRows.length > 0) {
+      await db.insert(packRunStages).values(stageRows).onConflictDoNothing();
+    }
+  } catch (err) {
+    // Best-effort: never let persistence failures break user flows.
+    // eslint-disable-next-line no-console
+    console.error('[pack-run-repository] persist failed', {
+      runId: input.context.runId,
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Read-side queries for the monitoring dashboard.
+// ---------------------------------------------------------------------------
+
+export interface PackRunListItem {
+  readonly runId: string;
+  readonly packId: string | null;
+  readonly packName: string | null;
+  readonly asOfDate: string;
+  readonly universeKind: string;
+  readonly universeSectorCode: string | null;
+  readonly status: 'success' | 'error';
+  readonly errorStage: string | null;
+  readonly errorMessage: string | null;
+  readonly durationMs: number;
+  readonly candidateCount: number;
+  readonly createdAt: string;
+}
+
+function clampLimit(requested: number | undefined): number {
+  if (!Number.isFinite(requested)) return DEFAULT_LIST_LIMIT;
+  const n = Math.round(requested as number);
+  if (n < 1) return 1;
+  if (n > MAX_LIST_LIMIT) return MAX_LIST_LIMIT;
+  return n;
+}
+
+/**
+ * List recent pack runs for a user, newest first. Returns a trimmed row
+ * suitable for list rendering; detail payloads (top_candidates, stage
+ * metrics) are fetched separately.
+ */
+export async function getRecentPackRuns(
+  userId: string,
+  limitRaw?: number,
+): Promise<ReadonlyArray<PackRunListItem>> {
+  const limit = clampLimit(limitRaw);
+  const rows = await db
+    .select({
+      runId: packRuns.runId,
+      packId: packRuns.packId,
+      packName: packRuns.packName,
+      asOfDate: packRuns.asOfDate,
+      universeKind: packRuns.universeKind,
+      universeSectorCode: packRuns.universeSectorCode,
+      status: packRuns.status,
+      errorStage: packRuns.errorStage,
+      errorMessage: packRuns.errorMessage,
+      durationMs: packRuns.durationMs,
+      candidateCount: packRuns.candidateCount,
+      createdAt: packRuns.createdAt,
+    })
+    .from(packRuns)
+    .where(eq(packRuns.userId, userId))
+    .orderBy(desc(packRuns.createdAt))
+    .limit(limit);
+
+  return rows.map((r) => ({
+    runId: r.runId,
+    packId: r.packId,
+    packName: r.packName,
+    asOfDate: r.asOfDate,
+    universeKind: r.universeKind,
+    universeSectorCode: r.universeSectorCode,
+    status: r.status === 'error' ? 'error' : 'success',
+    errorStage: r.errorStage,
+    errorMessage: r.errorMessage,
+    durationMs: r.durationMs,
+    candidateCount: r.candidateCount,
+    createdAt: r.createdAt.toISOString(),
+  }));
+}
+
+export interface PackRunStageRow {
+  readonly stageIndex: number;
+  readonly stageName: string;
+  readonly inputSize: number;
+  readonly outputSize: number;
+  readonly keepRatio: number;
+  readonly durationMs: number;
+  readonly warnings: ReadonlyArray<string>;
+}
+
+/**
+ * Fetch per-stage evaluations for a given run (owner-scoped via userId).
+ * Returns an empty array if the run isn't found or isn't owned by userId.
+ */
+export async function getPackRunStages(
+  userId: string,
+  runId: string,
+): Promise<ReadonlyArray<PackRunStageRow>> {
+  const ownerRow = await db
+    .select({ runId: packRuns.runId })
+    .from(packRuns)
+    .where(and(eq(packRuns.runId, runId), eq(packRuns.userId, userId)))
+    .limit(1);
+  if (ownerRow.length === 0) return [];
+
+  const rows = await db
+    .select({
+      stageIndex: packRunStages.stageIndex,
+      stageName: packRunStages.stageName,
+      inputSize: packRunStages.inputSize,
+      outputSize: packRunStages.outputSize,
+      keepRatio: packRunStages.keepRatio,
+      durationMs: packRunStages.durationMs,
+      warnings: packRunStages.warnings,
+    })
+    .from(packRunStages)
+    .where(eq(packRunStages.runId, runId))
+    .orderBy(packRunStages.stageIndex);
+
+  return rows.map((r) => ({
+    stageIndex: r.stageIndex,
+    stageName: r.stageName,
+    inputSize: r.inputSize,
+    outputSize: r.outputSize,
+    keepRatio: r.keepRatio,
+    durationMs: r.durationMs,
+    warnings: Array.isArray(r.warnings) ? (r.warnings as string[]) : [],
+  }));
+}
