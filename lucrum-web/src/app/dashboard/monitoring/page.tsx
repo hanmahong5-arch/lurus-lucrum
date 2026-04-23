@@ -10,7 +10,7 @@
  * @module app/dashboard/monitoring/page
  */
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { DashboardHeader } from '@/components/dashboard/dashboard-header';
 
 interface DailyPoint {
@@ -65,6 +65,22 @@ interface PackRunAggregate {
   readonly lastRunAt: string;
 }
 
+interface PackRunStageRow {
+  readonly stageIndex: number;
+  readonly stageName: string;
+  readonly inputSize: number;
+  readonly outputSize: number;
+  readonly keepRatio: number;
+  readonly durationMs: number;
+  readonly warnings: ReadonlyArray<string>;
+}
+
+interface StagesState {
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly items: ReadonlyArray<PackRunStageRow>;
+}
+
 const WINDOW_PRESETS: ReadonlyArray<{ days: number; label: string }> = [
   { days: 7, label: '7 天' },
   { days: 30, label: '30 天' },
@@ -106,6 +122,10 @@ export default function MonitoringPage() {
   );
   const [aggregatesLoading, setAggregatesLoading] = useState(false);
   const [aggregatesError, setAggregatesError] = useState<string | null>(null);
+  const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
+  const [stagesByRun, setStagesByRun] = useState<Record<string, StagesState>>(
+    {},
+  );
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
@@ -180,6 +200,48 @@ export default function MonitoringPage() {
   useEffect(() => {
     loadAggregates();
   }, [loadAggregates]);
+
+  const toggleRun = useCallback(
+    async (runId: string) => {
+      if (expandedRunId === runId) {
+        setExpandedRunId(null);
+        return;
+      }
+      setExpandedRunId(runId);
+      if (stagesByRun[runId]) return;
+      setStagesByRun((prev) => ({
+        ...prev,
+        [runId]: { loading: true, error: null, items: [] },
+      }));
+      try {
+        const res = await fetch(
+          `/api/monitoring/pack-runs/${encodeURIComponent(runId)}/stages`,
+          { cache: 'no-store' },
+        );
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+        }
+        const data = (await res.json()) as {
+          items: ReadonlyArray<PackRunStageRow>;
+        };
+        setStagesByRun((prev) => ({
+          ...prev,
+          [runId]: { loading: false, error: null, items: data.items },
+        }));
+      } catch (err) {
+        setStagesByRun((prev) => ({
+          ...prev,
+          [runId]: {
+            loading: false,
+            error: err instanceof Error ? err.message : String(err),
+            items: [],
+          },
+        }));
+      }
+    },
+    [expandedRunId, stagesByRun],
+  );
 
   const maxDaily = snapshot?.runsByDay.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
   const maxSymbol = snapshot?.topSymbols.reduce((m, s) => Math.max(m, s.count), 0) ?? 0;
@@ -452,6 +514,7 @@ export default function MonitoringPage() {
               <table className="w-full text-xs">
                 <thead className="text-left text-neutral-500">
                   <tr className="border-b border-border">
+                    <th className="py-2 pl-1 pr-2 font-normal w-6" aria-label="展开" />
                     <th className="py-2 pr-3 font-normal">时间</th>
                     <th className="py-2 pr-3 font-normal">Pack</th>
                     <th className="py-2 pr-3 font-normal">Universe</th>
@@ -462,40 +525,66 @@ export default function MonitoringPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {packRuns.map((r) => (
-                    <tr key={r.runId} className="border-b border-border/40 hover:bg-white/[0.02]">
-                      <td className="py-2 pr-3 font-mono tabular-nums text-white/70">
-                        {formatRelativeTime(r.createdAt)}
-                      </td>
-                      <td className="py-2 pr-3 text-white/80">
-                        {r.packName ?? r.packId ?? <span className="text-white/40">—</span>}
-                      </td>
-                      <td className="py-2 pr-3 text-white/70">
-                        <span className="font-mono">{r.universeKind}</span>
-                        {r.universeSectorCode && (
-                          <span className="ml-1 text-white/40">· {r.universeSectorCode}</span>
+                  {packRuns.map((r) => {
+                    const isExpanded = expandedRunId === r.runId;
+                    const stages = stagesByRun[r.runId];
+                    return (
+                      <Fragment key={r.runId}>
+                        <tr
+                          onClick={() => toggleRun(r.runId)}
+                          className="border-b border-border/40 hover:bg-white/[0.02] cursor-pointer"
+                        >
+                          <td className="py-2 pl-1 pr-2 text-white/40 select-none">
+                            {isExpanded ? '▾' : '▸'}
+                          </td>
+                          <td className="py-2 pr-3 font-mono tabular-nums text-white/70">
+                            {formatRelativeTime(r.createdAt)}
+                          </td>
+                          <td className="py-2 pr-3 text-white/80">
+                            {r.packName ?? r.packId ?? (
+                              <span className="text-white/40">—</span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 text-white/70">
+                            <span className="font-mono">{r.universeKind}</span>
+                            {r.universeSectorCode && (
+                              <span className="ml-1 text-white/40">
+                                · {r.universeSectorCode}
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 pr-3 font-mono tabular-nums text-white/60">
+                            {r.asOfDate}
+                          </td>
+                          <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/80">
+                            {r.candidateCount}
+                          </td>
+                          <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/60">
+                            {formatMs(r.durationMs)}
+                          </td>
+                          <td className="py-2">
+                            {r.status === 'success' ? (
+                              <span className="text-profit">成功</span>
+                            ) : (
+                              <span
+                                className="text-loss"
+                                title={r.errorMessage ?? undefined}
+                              >
+                                失败{r.errorStage ? ` · ${r.errorStage}` : ''}
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="border-b border-border/40 bg-void/40">
+                            <td colSpan={8} className="px-3 py-3">
+                              <StageDetail state={stages} />
+                            </td>
+                          </tr>
                         )}
-                      </td>
-                      <td className="py-2 pr-3 font-mono tabular-nums text-white/60">
-                        {r.asOfDate}
-                      </td>
-                      <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/80">
-                        {r.candidateCount}
-                      </td>
-                      <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/60">
-                        {formatMs(r.durationMs)}
-                      </td>
-                      <td className="py-2">
-                        {r.status === 'success' ? (
-                          <span className="text-profit">成功</span>
-                        ) : (
-                          <span className="text-loss" title={r.errorMessage ?? undefined}>
-                            失败{r.errorStage ? ` · ${r.errorStage}` : ''}
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -519,6 +608,84 @@ function formatRelativeTime(iso: string): string {
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day}d 前`;
   return iso.slice(0, 10);
+}
+
+function StageDetail({ state }: { state: StagesState | undefined }) {
+  if (!state || state.loading) {
+    return <div className="text-xs text-white/50">加载阶段明细…</div>;
+  }
+  if (state.error) {
+    return (
+      <div className="rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-xs text-loss">
+        {state.error}
+      </div>
+    );
+  }
+  if (state.items.length === 0) {
+    return <div className="text-xs text-white/40">无阶段数据。</div>;
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-[11px]">
+        <thead className="text-left text-white/40">
+          <tr className="border-b border-border/60">
+            <th className="py-1.5 pr-3 font-normal w-8">#</th>
+            <th className="py-1.5 pr-3 font-normal">阶段</th>
+            <th className="py-1.5 pr-3 font-normal text-right">输入</th>
+            <th className="py-1.5 pr-3 font-normal text-right">输出</th>
+            <th className="py-1.5 pr-3 font-normal text-right">保留率</th>
+            <th className="py-1.5 pr-3 font-normal text-right">耗时</th>
+            <th className="py-1.5 font-normal">警告</th>
+          </tr>
+        </thead>
+        <tbody>
+          {state.items.map((s) => {
+            const ratioPct = s.keepRatio * 100;
+            const ratioTone =
+              ratioPct >= 50
+                ? 'text-profit/80'
+                : ratioPct >= 10
+                  ? 'text-white/70'
+                  : 'text-loss/80';
+            return (
+              <tr key={s.stageIndex} className="border-b border-border/30 last:border-0">
+                <td className="py-1.5 pr-3 font-mono tabular-nums text-white/50">
+                  {s.stageIndex}
+                </td>
+                <td className="py-1.5 pr-3 text-white/80">{s.stageName}</td>
+                <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/60">
+                  {s.inputSize}
+                </td>
+                <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/80">
+                  {s.outputSize}
+                </td>
+                <td
+                  className={`py-1.5 pr-3 font-mono tabular-nums text-right ${ratioTone}`}
+                >
+                  {ratioPct.toFixed(1)}%
+                </td>
+                <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/60">
+                  {formatMs(s.durationMs)}
+                </td>
+                <td className="py-1.5 text-white/70">
+                  {s.warnings.length === 0 ? (
+                    <span className="text-white/30">—</span>
+                  ) : (
+                    <span
+                      className="text-amber-400 cursor-help"
+                      title={s.warnings.join('\n')}
+                    >
+                      {s.warnings.length} 条
+                    </span>
+                  )}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
 }
 
 function Kpi({
