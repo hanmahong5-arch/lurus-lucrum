@@ -16,7 +16,7 @@
  * @module lib/strategy-packs/pack-run-repository
  */
 
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import {
   packRuns,
@@ -252,4 +252,87 @@ export async function getPackRunStages(
     durationMs: r.durationMs,
     warnings: Array.isArray(r.warnings) ? (r.warnings as string[]) : [],
   }));
+}
+
+// ---------------------------------------------------------------------------
+// Pack-level aggregation for the monitoring dashboard.
+// ---------------------------------------------------------------------------
+
+export interface PackRunAggregate {
+  readonly packId: string | null;
+  readonly packName: string | null;
+  readonly totalRuns: number;
+  readonly successCount: number;
+  readonly errorCount: number;
+  readonly successRate: number | null;
+  readonly avgDurationMs: number | null;
+  readonly avgCandidateCount: number | null;
+  readonly lastRunAt: string;
+}
+
+type AggRow = {
+  pack_id: string | null;
+  pack_name: string | null;
+  total_runs: string | number;
+  success_count: string | number;
+  error_count: string | number;
+  avg_duration_ms: string | number | null;
+  avg_candidate_count: string | number | null;
+  last_run_at: Date | string;
+};
+
+function unwrapRows<T>(raw: unknown): T[] {
+  const maybeRowsWrapper = raw as { rows?: T[] } | T[];
+  if (Array.isArray(maybeRowsWrapper)) return maybeRowsWrapper;
+  return maybeRowsWrapper.rows ?? [];
+}
+
+function toNumberOrNull(v: string | number | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  const n = typeof v === 'number' ? v : Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Aggregate recent pack runs for a user, grouped by (pack_id, pack_name).
+ * Null pack_id groups together as "freeform funnel runs" (no preset pack).
+ * Rows ordered by most-recent run DESC so active packs surface first.
+ */
+export async function getPackRunAggregates(
+  userId: string,
+): Promise<ReadonlyArray<PackRunAggregate>> {
+  const raw = await db.execute<AggRow>(sql`
+    SELECT
+      pack_id,
+      pack_name,
+      COUNT(*)::bigint                                      AS total_runs,
+      COUNT(*) FILTER (WHERE status = 'success')::bigint    AS success_count,
+      COUNT(*) FILTER (WHERE status = 'error')::bigint      AS error_count,
+      AVG(duration_ms)                                      AS avg_duration_ms,
+      AVG(candidate_count)                                  AS avg_candidate_count,
+      MAX(created_at)                                       AS last_run_at
+    FROM pack_runs
+    WHERE user_id = ${userId}
+    GROUP BY pack_id, pack_name
+    ORDER BY last_run_at DESC
+  `);
+
+  return unwrapRows<AggRow>(raw).map((r) => {
+    const total = Number(r.total_runs ?? 0);
+    const success = Number(r.success_count ?? 0);
+    return {
+      packId: r.pack_id,
+      packName: r.pack_name,
+      totalRuns: total,
+      successCount: success,
+      errorCount: Number(r.error_count ?? 0),
+      successRate: total > 0 ? success / total : null,
+      avgDurationMs: toNumberOrNull(r.avg_duration_ms),
+      avgCandidateCount: toNumberOrNull(r.avg_candidate_count),
+      lastRunAt:
+        r.last_run_at instanceof Date
+          ? r.last_run_at.toISOString()
+          : String(r.last_run_at),
+    };
+  });
 }

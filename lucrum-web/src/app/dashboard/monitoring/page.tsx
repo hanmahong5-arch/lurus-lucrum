@@ -53,6 +53,18 @@ interface PackRunListItem {
   readonly createdAt: string;
 }
 
+interface PackRunAggregate {
+  readonly packId: string | null;
+  readonly packName: string | null;
+  readonly totalRuns: number;
+  readonly successCount: number;
+  readonly errorCount: number;
+  readonly successRate: number | null;
+  readonly avgDurationMs: number | null;
+  readonly avgCandidateCount: number | null;
+  readonly lastRunAt: string;
+}
+
 const WINDOW_PRESETS: ReadonlyArray<{ days: number; label: string }> = [
   { days: 7, label: '7 天' },
   { days: 30, label: '30 天' },
@@ -89,6 +101,11 @@ export default function MonitoringPage() {
   const [packRuns, setPackRuns] = useState<ReadonlyArray<PackRunListItem>>([]);
   const [packRunsLoading, setPackRunsLoading] = useState(false);
   const [packRunsError, setPackRunsError] = useState<string | null>(null);
+  const [aggregates, setAggregates] = useState<ReadonlyArray<PackRunAggregate>>(
+    [],
+  );
+  const [aggregatesLoading, setAggregatesLoading] = useState(false);
+  const [aggregatesError, setAggregatesError] = useState<string | null>(null);
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
@@ -130,6 +147,28 @@ export default function MonitoringPage() {
     }
   }, []);
 
+  const loadAggregates = useCallback(async () => {
+    setAggregatesLoading(true);
+    setAggregatesError(null);
+    try {
+      const res = await fetch('/api/monitoring/pack-aggregates', {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        items: ReadonlyArray<PackRunAggregate>;
+      };
+      setAggregates(data.items);
+    } catch (err) {
+      setAggregatesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAggregatesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load(windowDays);
   }, [load, windowDays]);
@@ -137,6 +176,10 @@ export default function MonitoringPage() {
   useEffect(() => {
     loadPackRuns();
   }, [loadPackRuns]);
+
+  useEffect(() => {
+    loadAggregates();
+  }, [loadAggregates]);
 
   const maxDaily = snapshot?.runsByDay.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
   const maxSymbol = snapshot?.topSymbols.reduce((m, s) => Math.max(m, s.count), 0) ?? 0;
@@ -280,6 +323,103 @@ export default function MonitoringPage() {
             无数据。
           </div>
         )}
+
+        <section className="rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">按 Pack 聚合</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                每个 Pack 的累计成功率 / 平均耗时 / 平均候选数。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadAggregates}
+              disabled={aggregatesLoading}
+              className="text-xs rounded px-3 py-1 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-50"
+            >
+              {aggregatesLoading ? '加载中…' : '刷新'}
+            </button>
+          </div>
+
+          {aggregatesError && (
+            <div className="rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-xs text-loss mb-3">
+              {aggregatesError}
+            </div>
+          )}
+
+          {aggregates.length === 0 && !aggregatesLoading && !aggregatesError ? (
+            <p className="text-sm text-neutral-500">暂无聚合数据。</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-neutral-500">
+                  <tr className="border-b border-border">
+                    <th className="py-2 pr-3 font-normal">Pack</th>
+                    <th className="py-2 pr-3 font-normal text-right">运行数</th>
+                    <th className="py-2 pr-3 font-normal text-right">成功率</th>
+                    <th className="py-2 pr-3 font-normal text-right">失败</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均耗时</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均候选</th>
+                    <th className="py-2 font-normal">最后运行</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {aggregates.map((a) => {
+                    const key = a.packId ?? '__freeform__';
+                    const rate = a.successRate;
+                    const rateTone =
+                      rate === null
+                        ? 'text-white/40'
+                        : rate >= 0.9
+                          ? 'text-profit'
+                          : rate >= 0.7
+                            ? 'text-white/80'
+                            : 'text-loss';
+                    return (
+                      <tr
+                        key={key}
+                        className="border-b border-border/40 hover:bg-white/[0.02]"
+                      >
+                        <td className="py-2 pr-3 text-white/80">
+                          {a.packName ?? a.packId ?? (
+                            <span className="text-white/40">(无 Pack)</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/80">
+                          {a.totalRuns}
+                        </td>
+                        <td
+                          className={`py-2 pr-3 font-mono tabular-nums text-right ${rateTone}`}
+                        >
+                          {rate === null ? '—' : `${(rate * 100).toFixed(1)}%`}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/60">
+                          {a.errorCount > 0 ? (
+                            <span className="text-loss">{a.errorCount}</span>
+                          ) : (
+                            <span className="text-white/40">0</span>
+                          )}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/70">
+                          {formatMs(a.avgDurationMs)}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/70">
+                          {a.avgCandidateCount === null
+                            ? '—'
+                            : a.avgCandidateCount.toFixed(1)}
+                        </td>
+                        <td className="py-2 font-mono tabular-nums text-white/60">
+                          {formatRelativeTime(a.lastRunAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
 
         <section className="rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
