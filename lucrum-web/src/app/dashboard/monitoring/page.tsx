@@ -75,6 +75,17 @@ interface PackRunStageRow {
   readonly warnings: ReadonlyArray<string>;
 }
 
+interface StageAggregate {
+  readonly stageName: string;
+  readonly totalEvals: number;
+  readonly avgInputSize: number | null;
+  readonly avgOutputSize: number | null;
+  readonly avgKeepRatio: number | null;
+  readonly avgDurationMs: number | null;
+  readonly warnCount: number;
+  readonly warnRate: number | null;
+}
+
 interface StagesState {
   readonly loading: boolean;
   readonly error: string | null;
@@ -122,6 +133,13 @@ export default function MonitoringPage() {
   );
   const [aggregatesLoading, setAggregatesLoading] = useState(false);
   const [aggregatesError, setAggregatesError] = useState<string | null>(null);
+  const [stageAggregates, setStageAggregates] = useState<
+    ReadonlyArray<StageAggregate>
+  >([]);
+  const [stageAggregatesLoading, setStageAggregatesLoading] = useState(false);
+  const [stageAggregatesError, setStageAggregatesError] = useState<
+    string | null
+  >(null);
   const [expandedRunId, setExpandedRunId] = useState<string | null>(null);
   const [stagesByRun, setStagesByRun] = useState<Record<string, StagesState>>(
     {},
@@ -189,6 +207,28 @@ export default function MonitoringPage() {
     }
   }, []);
 
+  const loadStageAggregates = useCallback(async () => {
+    setStageAggregatesLoading(true);
+    setStageAggregatesError(null);
+    try {
+      const res = await fetch('/api/monitoring/stage-aggregates', {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        items: ReadonlyArray<StageAggregate>;
+      };
+      setStageAggregates(data.items);
+    } catch (err) {
+      setStageAggregatesError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setStageAggregatesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     load(windowDays);
   }, [load, windowDays]);
@@ -200,6 +240,10 @@ export default function MonitoringPage() {
   useEffect(() => {
     loadAggregates();
   }, [loadAggregates]);
+
+  useEffect(() => {
+    loadStageAggregates();
+  }, [loadStageAggregates]);
 
   const toggleRun = useCallback(
     async (runId: string) => {
@@ -473,6 +517,114 @@ export default function MonitoringPage() {
                         </td>
                         <td className="py-2 font-mono tabular-nums text-white/60">
                           {formatRelativeTime(a.lastRunAt)}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-lg border border-border bg-surface p-4">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div>
+              <h2 className="text-sm font-semibold text-white">按阶段聚合</h2>
+              <p className="text-xs text-neutral-500 mt-0.5">
+                按 stage_name 汇总所有运行 —— 看哪个阶段最耗时、最容易报警。
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={loadStageAggregates}
+              disabled={stageAggregatesLoading}
+              className="text-xs rounded px-3 py-1 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-50"
+            >
+              {stageAggregatesLoading ? '加载中…' : '刷新'}
+            </button>
+          </div>
+
+          {stageAggregatesError && (
+            <div className="rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-xs text-loss mb-3">
+              {stageAggregatesError}
+            </div>
+          )}
+
+          {stageAggregates.length === 0 &&
+          !stageAggregatesLoading &&
+          !stageAggregatesError ? (
+            <p className="text-sm text-neutral-500">暂无阶段数据。</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="text-left text-neutral-500">
+                  <tr className="border-b border-border">
+                    <th className="py-2 pr-3 font-normal">阶段</th>
+                    <th className="py-2 pr-3 font-normal text-right">评估次数</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均输入</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均输出</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均保留率</th>
+                    <th className="py-2 pr-3 font-normal text-right">平均耗时</th>
+                    <th className="py-2 font-normal text-right">警告率</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stageAggregates.map((s) => {
+                    const keepPct =
+                      s.avgKeepRatio === null ? null : s.avgKeepRatio * 100;
+                    const keepTone =
+                      keepPct === null
+                        ? 'text-white/40'
+                        : keepPct >= 50
+                          ? 'text-profit/80'
+                          : keepPct >= 10
+                            ? 'text-white/70'
+                            : 'text-loss/80';
+                    const warnPct =
+                      s.warnRate === null ? null : s.warnRate * 100;
+                    const warnTone =
+                      warnPct === null
+                        ? 'text-white/40'
+                        : warnPct === 0
+                          ? 'text-white/40'
+                          : warnPct < 5
+                            ? 'text-amber-400/70'
+                            : 'text-loss';
+                    return (
+                      <tr
+                        key={s.stageName}
+                        className="border-b border-border/40 hover:bg-white/[0.02]"
+                      >
+                        <td className="py-2 pr-3 text-white/80">
+                          {s.stageName}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/80">
+                          {s.totalEvals}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/60">
+                          {s.avgInputSize === null
+                            ? '—'
+                            : s.avgInputSize.toFixed(1)}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/60">
+                          {s.avgOutputSize === null
+                            ? '—'
+                            : s.avgOutputSize.toFixed(1)}
+                        </td>
+                        <td
+                          className={`py-2 pr-3 font-mono tabular-nums text-right ${keepTone}`}
+                        >
+                          {keepPct === null ? '—' : `${keepPct.toFixed(1)}%`}
+                        </td>
+                        <td className="py-2 pr-3 font-mono tabular-nums text-right text-white/70">
+                          {formatMs(s.avgDurationMs)}
+                        </td>
+                        <td
+                          className={`py-2 font-mono tabular-nums text-right ${warnTone}`}
+                          title={`${s.warnCount} / ${s.totalEvals}`}
+                        >
+                          {warnPct === null ? '—' : `${warnPct.toFixed(1)}%`}
                         </td>
                       </tr>
                     );

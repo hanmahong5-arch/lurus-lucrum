@@ -336,3 +336,69 @@ export async function getPackRunAggregates(
     };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Stage-level aggregation — surfaces funnel bottlenecks across all runs.
+// ---------------------------------------------------------------------------
+
+export interface StageAggregate {
+  readonly stageName: string;
+  readonly totalEvals: number;
+  readonly avgInputSize: number | null;
+  readonly avgOutputSize: number | null;
+  readonly avgKeepRatio: number | null;
+  readonly avgDurationMs: number | null;
+  readonly warnCount: number;
+  readonly warnRate: number | null;
+}
+
+type StageAggRow = {
+  stage_name: string;
+  total_evals: string | number;
+  avg_input_size: string | number | null;
+  avg_output_size: string | number | null;
+  avg_keep_ratio: string | number | null;
+  avg_duration_ms: string | number | null;
+  warn_count: string | number;
+};
+
+/**
+ * Aggregate stage evaluations across all of the caller's pack runs, grouped by
+ * stage_name. Joins pack_run_stages → pack_runs for owner scoping (stages
+ * table has no user_id column of its own). Ordered by total_evals DESC so the
+ * most-exercised stages surface first.
+ */
+export async function getStageAggregates(
+  userId: string,
+): Promise<ReadonlyArray<StageAggregate>> {
+  const raw = await db.execute<StageAggRow>(sql`
+    SELECT
+      s.stage_name,
+      COUNT(*)::bigint                                                            AS total_evals,
+      AVG(s.input_size)                                                           AS avg_input_size,
+      AVG(s.output_size)                                                          AS avg_output_size,
+      AVG(s.keep_ratio)                                                           AS avg_keep_ratio,
+      AVG(s.duration_ms)                                                          AS avg_duration_ms,
+      COUNT(*) FILTER (WHERE jsonb_array_length(s.warnings) > 0)::bigint          AS warn_count
+    FROM pack_run_stages s
+    INNER JOIN pack_runs r ON r.run_id = s.run_id
+    WHERE r.user_id = ${userId}
+    GROUP BY s.stage_name
+    ORDER BY total_evals DESC
+  `);
+
+  return unwrapRows<StageAggRow>(raw).map((r) => {
+    const total = Number(r.total_evals ?? 0);
+    const warn = Number(r.warn_count ?? 0);
+    return {
+      stageName: r.stage_name,
+      totalEvals: total,
+      avgInputSize: toNumberOrNull(r.avg_input_size),
+      avgOutputSize: toNumberOrNull(r.avg_output_size),
+      avgKeepRatio: toNumberOrNull(r.avg_keep_ratio),
+      avgDurationMs: toNumberOrNull(r.avg_duration_ms),
+      warnCount: warn,
+      warnRate: total > 0 ? warn / total : null,
+    };
+  });
+}
