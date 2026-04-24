@@ -1571,6 +1571,35 @@ export const packRunStages = pgTable(
   })
 );
 
+// Alpha-decay tracker — forward-return rollup per (run, horizon, topN).
+// Computed on-demand from klineDaily using equal-weight returns.
+export const packRunPerformance = pgTable(
+  'pack_run_performance',
+  {
+    id: serial('id').primaryKey(),
+    runId: varchar('run_id', { length: 100 }).notNull(),
+    horizonDays: integer('horizon_days').notNull(),
+    topN: integer('top_n').notNull(),
+    requestedCount: integer('requested_count').notNull(),
+    evaluatedCount: integer('evaluated_count').notNull(),
+    missingCount: integer('missing_count').notNull(),
+    meanReturn: real('mean_return'),
+    medianReturn: real('median_return'),
+    hitRate: real('hit_rate'),
+    bestReturn: real('best_return'),
+    worstReturn: real('worst_return'),
+    computedAt: timestamp('computed_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    runIdx: index('idx_pack_run_perf_run').on(table.runId),
+    uniqueTriple: uniqueIndex('unique_pack_run_perf_triple').on(
+      table.runId,
+      table.horizonDays,
+      table.topN,
+    ),
+  }),
+);
+
 // ============================================================================
 // Type Exports
 // ============================================================================
@@ -1712,3 +1741,6 @@ export type NewPackRun = typeof packRuns.$inferInsert;
 
 export type PackRunStage = typeof packRunStages.$inferSelect;
 export type NewPackRunStage = typeof packRunStages.$inferInsert;
+
+export type PackRunPerformance = typeof packRunPerformance.$inferSelect;
+export type NewPackRunPerformance = typeof packRunPerformance.$inferInsert;

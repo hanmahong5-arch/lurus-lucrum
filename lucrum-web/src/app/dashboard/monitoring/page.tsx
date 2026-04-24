@@ -92,6 +92,27 @@ interface StagesState {
   readonly items: ReadonlyArray<PackRunStageRow>;
 }
 
+interface PerformanceRow {
+  readonly horizonDays: number;
+  readonly topN: number;
+  readonly requestedCount: number;
+  readonly evaluatedCount: number;
+  readonly missingCount: number;
+  readonly meanReturn: number | null;
+  readonly medianReturn: number | null;
+  readonly hitRate: number | null;
+  readonly bestReturn: number | null;
+  readonly worstReturn: number | null;
+  readonly computedAt: string;
+}
+
+interface PerfState {
+  readonly loading: boolean;
+  readonly computing: boolean;
+  readonly error: string | null;
+  readonly items: ReadonlyArray<PerformanceRow>;
+}
+
 const WINDOW_PRESETS: ReadonlyArray<{ days: number; label: string }> = [
   { days: 7, label: '7 天' },
   { days: 30, label: '30 天' },
@@ -144,6 +165,7 @@ export default function MonitoringPage() {
   const [stagesByRun, setStagesByRun] = useState<Record<string, StagesState>>(
     {},
   );
+  const [perfByRun, setPerfByRun] = useState<Record<string, PerfState>>({});
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
@@ -245,6 +267,99 @@ export default function MonitoringPage() {
     loadStageAggregates();
   }, [loadStageAggregates]);
 
+  const loadPerf = useCallback(async (runId: string) => {
+    setPerfByRun((prev) => ({
+      ...prev,
+      [runId]: {
+        loading: true,
+        computing: false,
+        error: null,
+        items: prev[runId]?.items ?? [],
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/monitoring/pack-runs/${encodeURIComponent(runId)}/performance`,
+        { cache: 'no-store' },
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        items: ReadonlyArray<PerformanceRow>;
+      };
+      setPerfByRun((prev) => ({
+        ...prev,
+        [runId]: {
+          loading: false,
+          computing: false,
+          error: null,
+          items: data.items,
+        },
+      }));
+    } catch (err) {
+      setPerfByRun((prev) => ({
+        ...prev,
+        [runId]: {
+          loading: false,
+          computing: false,
+          error: err instanceof Error ? err.message : String(err),
+          items: prev[runId]?.items ?? [],
+        },
+      }));
+    }
+  }, []);
+
+  const computePerf = useCallback(async (runId: string) => {
+    setPerfByRun((prev) => ({
+      ...prev,
+      [runId]: {
+        loading: false,
+        computing: true,
+        error: null,
+        items: prev[runId]?.items ?? [],
+      },
+    }));
+    try {
+      const res = await fetch(
+        `/api/monitoring/pack-runs/${encodeURIComponent(runId)}/performance`,
+        {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ horizons: [1, 5, 20], topN: 10 }),
+          cache: 'no-store',
+        },
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        items: ReadonlyArray<PerformanceRow>;
+      };
+      setPerfByRun((prev) => ({
+        ...prev,
+        [runId]: {
+          loading: false,
+          computing: false,
+          error: null,
+          items: data.items,
+        },
+      }));
+    } catch (err) {
+      setPerfByRun((prev) => ({
+        ...prev,
+        [runId]: {
+          loading: false,
+          computing: false,
+          error: err instanceof Error ? err.message : String(err),
+          items: prev[runId]?.items ?? [],
+        },
+      }));
+    }
+  }, []);
+
   const toggleRun = useCallback(
     async (runId: string) => {
       if (expandedRunId === runId) {
@@ -252,6 +367,9 @@ export default function MonitoringPage() {
         return;
       }
       setExpandedRunId(runId);
+      if (!perfByRun[runId]) {
+        void loadPerf(runId);
+      }
       if (stagesByRun[runId]) return;
       setStagesByRun((prev) => ({
         ...prev,
@@ -284,7 +402,7 @@ export default function MonitoringPage() {
         }));
       }
     },
-    [expandedRunId, stagesByRun],
+    [expandedRunId, stagesByRun, perfByRun, loadPerf],
   );
 
   const maxDaily = snapshot?.runsByDay.reduce((m, d) => Math.max(m, d.count), 0) ?? 0;
@@ -729,8 +847,13 @@ export default function MonitoringPage() {
                         </tr>
                         {isExpanded && (
                           <tr className="border-b border-border/40 bg-void/40">
-                            <td colSpan={8} className="px-3 py-3">
+                            <td colSpan={8} className="px-3 py-3 space-y-4">
                               <StageDetail state={stages} />
+                              <PerformanceDetail
+                                runId={r.runId}
+                                state={perfByRun[r.runId]}
+                                onCompute={() => computePerf(r.runId)}
+                              />
                             </td>
                           </tr>
                         )}
@@ -836,6 +959,160 @@ function StageDetail({ state }: { state: StagesState | undefined }) {
           })}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function formatReturnPct(r: number | null): string {
+  if (r === null || !Number.isFinite(r)) return '—';
+  const pct = r * 100;
+  const sign = pct > 0 ? '+' : '';
+  return `${sign}${pct.toFixed(2)}%`;
+}
+
+function returnTone(r: number | null): string {
+  if (r === null || !Number.isFinite(r)) return 'text-white/40';
+  if (r > 0) return 'text-profit';
+  if (r < 0) return 'text-loss';
+  return 'text-white/60';
+}
+
+function PerformanceDetail({
+  runId,
+  state,
+  onCompute,
+}: {
+  runId: string;
+  state: PerfState | undefined;
+  onCompute: () => void;
+}) {
+  void runId;
+  const items = state?.items ?? [];
+  const hasData = items.length > 0;
+  const computing = state?.computing ?? false;
+  const loading = state?.loading ?? false;
+  const error = state?.error ?? null;
+  const latestComputedAt = hasData
+    ? items.reduce((acc, r) =>
+        Date.parse(r.computedAt) > Date.parse(acc.computedAt) ? r : acc,
+      ).computedAt
+    : null;
+
+  return (
+    <div className="rounded border border-border/60 bg-void/60 p-3">
+      <div className="flex items-center justify-between gap-3 mb-2">
+        <div>
+          <h3 className="text-xs font-semibold text-white">前向表现</h3>
+          <p className="text-[10px] text-white/40 mt-0.5">
+            等权 top10 · 以 as_of 当日为锚 · 下文均为前向收益（未年化）
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {latestComputedAt && (
+            <span className="text-[10px] text-white/40 font-mono">
+              {formatRelativeTime(latestComputedAt)} 计算
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={onCompute}
+            disabled={computing || loading}
+            className="text-[11px] rounded px-2 py-1 bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-50"
+          >
+            {computing ? '计算中…' : hasData ? '重新计算' : '计算前向表现'}
+          </button>
+        </div>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-xs text-loss mb-2">
+          {error}
+        </div>
+      )}
+
+      {!hasData && !loading && !computing && !error && (
+        <p className="text-[11px] text-white/40">
+          尚未计算。点击右侧按钮触发 1/5/20 日前向收益估算。
+        </p>
+      )}
+
+      {loading && !hasData && (
+        <p className="text-[11px] text-white/40">加载缓存…</p>
+      )}
+
+      {hasData && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-[11px]">
+            <thead className="text-left text-white/40">
+              <tr className="border-b border-border/60">
+                <th className="py-1.5 pr-3 font-normal">Horizon</th>
+                <th className="py-1.5 pr-3 font-normal text-right">评估/请求</th>
+                <th className="py-1.5 pr-3 font-normal text-right">平均</th>
+                <th className="py-1.5 pr-3 font-normal text-right">中位数</th>
+                <th className="py-1.5 pr-3 font-normal text-right">胜率</th>
+                <th className="py-1.5 pr-3 font-normal text-right">最佳</th>
+                <th className="py-1.5 font-normal text-right">最差</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((r) => (
+                <tr
+                  key={`${r.horizonDays}-${r.topN}`}
+                  className="border-b border-border/30 last:border-0"
+                >
+                  <td className="py-1.5 pr-3 text-white/80 font-mono">
+                    {r.horizonDays}d · top{r.topN}
+                  </td>
+                  <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/60">
+                    {r.evaluatedCount}/{r.requestedCount}
+                    {r.missingCount > 0 && (
+                      <span
+                        className="ml-1 text-amber-400/70"
+                        title={`${r.missingCount} 个标的无前向数据`}
+                      >
+                        (-{r.missingCount})
+                      </span>
+                    )}
+                  </td>
+                  <td
+                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.meanReturn)}`}
+                  >
+                    {formatReturnPct(r.meanReturn)}
+                  </td>
+                  <td
+                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.medianReturn)}`}
+                  >
+                    {formatReturnPct(r.medianReturn)}
+                  </td>
+                  <td
+                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${
+                      r.hitRate === null
+                        ? 'text-white/40'
+                        : r.hitRate >= 0.5
+                          ? 'text-profit/80'
+                          : 'text-loss/80'
+                    }`}
+                  >
+                    {r.hitRate === null
+                      ? '—'
+                      : `${(r.hitRate * 100).toFixed(0)}%`}
+                  </td>
+                  <td
+                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.bestReturn)}`}
+                  >
+                    {formatReturnPct(r.bestReturn)}
+                  </td>
+                  <td
+                    className={`py-1.5 font-mono tabular-nums text-right ${returnTone(r.worstReturn)}`}
+                  >
+                    {formatReturnPct(r.worstReturn)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
