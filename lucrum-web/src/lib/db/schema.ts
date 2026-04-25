@@ -1573,6 +1573,8 @@ export const packRunStages = pgTable(
 
 // Alpha-decay tracker — forward-return rollup per (run, horizon, topN).
 // Computed on-demand from klineDaily using equal-weight returns.
+// FK on run_id → pack_runs(run_id) ON DELETE CASCADE is added in migration
+// 0008 (drizzle-kit can't express FK to non-PK unique columns cleanly).
 export const packRunPerformance = pgTable(
   'pack_run_performance',
   {
@@ -1588,6 +1590,9 @@ export const packRunPerformance = pgTable(
     hitRate: real('hit_rate'),
     bestReturn: real('best_return'),
     worstReturn: real('worst_return'),
+    benchmarkSymbol: varchar('benchmark_symbol', { length: 20 }),
+    benchmarkReturn: real('benchmark_return'),
+    excessMeanReturn: real('excess_mean_return'),
     computedAt: timestamp('computed_at').defaultNow().notNull(),
   },
   (table) => ({

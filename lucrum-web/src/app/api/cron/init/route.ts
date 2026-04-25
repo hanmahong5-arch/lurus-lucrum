@@ -8,6 +8,7 @@
 
 import { NextResponse } from 'next/server';
 import { initializeDailyUpdater } from '@/lib/cron/daily-updater';
+import { initializePackRunPerformanceScheduler } from '@/lib/cron/pack-run-performance-scheduler';
 
 // ============================================================================
 // GET Handler - Initialize Cron Jobs
@@ -17,6 +18,8 @@ export async function GET() {
   try {
     // Initialize daily updater
     initializeDailyUpdater();
+    // Initialize alpha-decay refresh scheduler (forward-return rollups)
+    initializePackRunPerformanceScheduler();
 
     return NextResponse.json({
       success: true,
@@ -30,6 +33,11 @@ export async function GET() {
           enabled: process.env.NODE_ENV === 'production',
           schedule: '18:00 CST (Mon-Fri)',
           description: 'Incremental K-line data update for all active stocks',
+        },
+        packRunPerformanceScheduler: {
+          enabled: process.env.NODE_ENV === 'production',
+          schedule: '07:00 CST (Mon-Fri)',
+          description: 'Refresh forward-return + alpha rollups for recent pack runs',
         },
       },
       timestamp: new Date().toISOString(),

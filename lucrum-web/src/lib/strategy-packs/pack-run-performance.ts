@@ -15,7 +15,15 @@
  *     horizon H = the H-th row after the anchor (row_number offset H).
  *   - Equal-weight, long-only: forward_return = close(T+H)/close(T) - 1, then
  *     arithmetic mean across candidates with both endpoints present.
- *   - Missing data is dropped from aggregation and counted as missing_count.
+ *   - Adjusted prices: close × adj_factor handles splits/dividends so a 1-for-2
+ *     split day doesn't appear as -50%.
+ *   - Survivorship: filter stocks.status = 'active' so already-delisted symbols
+ *     don't poison the basket with stale endpoints.
+ *   - Benchmark-relative: CSI 300 (symbol 000300, ingested as a pseudo-stock)
+ *     is fetched in parallel; excess_mean_return = mean - benchmark_return.
+ *     If the benchmark is not in kline_daily, those columns degrade to NULL
+ *     and the UI shows a dash, never a misleading absolute number labelled
+ *     "alpha".
  *
  * @module lib/strategy-packs/pack-run-performance
  */
@@ -29,6 +37,12 @@ const DEFAULT_TOP_N = 10;
 const MAX_HORIZON_DAYS = 120;
 const MAX_TOP_N = 50;
 const MAX_HORIZONS_PER_REQUEST = 6;
+
+// CSI 300 — ingested into kline_daily as a pseudo-stock (symbol = '000300').
+// Single benchmark per platform for now; revisit if/when sector funds (CSI500,
+// CNI Wind All A) are added. Override via env so we can test alternates without
+// touching code.
+const BENCHMARK_SYMBOL = process.env.PACK_RUN_BENCHMARK_SYMBOL ?? '000300';
 
 export interface ComputePerformanceInput {
   readonly horizons?: ReadonlyArray<number>;
@@ -46,11 +60,36 @@ export interface PackRunPerformanceRow {
   readonly hitRate: number | null;
   readonly bestReturn: number | null;
   readonly worstReturn: number | null;
+  readonly benchmarkSymbol: string | null;
+  readonly benchmarkReturn: number | null;
+  readonly excessMeanReturn: number | null;
   readonly computedAt: string;
+}
+
+interface UpsertPayload {
+  readonly runId: string;
+  readonly horizonDays: number;
+  readonly topN: number;
+  readonly requestedCount: number;
+  readonly evaluatedCount: number;
+  readonly missingCount: number;
+  readonly meanReturn: number | null;
+  readonly medianReturn: number | null;
+  readonly hitRate: number | null;
+  readonly bestReturn: number | null;
+  readonly worstReturn: number | null;
+  readonly benchmarkSymbol: string | null;
+  readonly benchmarkReturn: number | null;
+  readonly excessMeanReturn: number | null;
 }
 
 type PriceRow = {
   symbol: string;
+  day_offset: string | number;
+  close: string | number;
+};
+
+type BenchmarkRow = {
   day_offset: string | number;
   close: string | number;
 };
@@ -136,10 +175,14 @@ async function loadOwnedRunHeader(
 }
 
 /**
- * Single batched query: for the given symbols, return their close price on
- * the anchor day (first kline_daily row with date >= asOfDate) and on each
- * horizon offset (day_offset = horizon). Offsets use 1-based counting so
- * that day_offset=0 is the anchor itself.
+ * Single batched query: for the given symbols, return their adjusted close
+ * price on the anchor day (first kline_daily row with date >= asOfDate) and
+ * on each horizon offset. Already-delisted symbols are dropped via
+ * stocks.status filter so they don't poison the basket.
+ *
+ * Halt days do NOT need explicit exclusion: kline_daily only ingests rows on
+ * trading days (daily-updater skips when EastMoney returns no kline), so
+ * row_number() naturally counts trading days for that symbol.
  */
 async function fetchPriceGrid(
   symbols: ReadonlyArray<string>,
@@ -154,11 +197,12 @@ async function fetchPriceGrid(
     WITH ranked AS (
       SELECT
         s.symbol,
-        k.close,
+        k.close * COALESCE(k.adj_factor, 1.0) AS close,
         ROW_NUMBER() OVER (PARTITION BY k.stock_id ORDER BY k.date ASC) - 1 AS day_offset
       FROM kline_daily k
       INNER JOIN stocks s ON s.id = k.stock_id
       WHERE s.symbol = ANY(${sql.raw(`ARRAY[${symbols.map((s) => `'${s.replace(/'/g, "''")}'`).join(',')}]::text[]`)})
+        AND s.status = 'active'
         AND k.date >= ${asOfDate}
     )
     SELECT symbol, day_offset, close
@@ -181,6 +225,48 @@ async function fetchPriceGrid(
     inner.set(off, close);
   }
   return grid;
+}
+
+/**
+ * Fetch the benchmark price series at the anchor + each horizon. Bypasses
+ * the stocks.status='active' filter (an index is neither active nor
+ * delisted) but still applies adj_factor in case a future split adjustment
+ * is recorded.
+ *
+ * Returns an empty map if the benchmark hasn't been ingested yet — callers
+ * MUST treat this as "no benchmark data" and return null excess return,
+ * never zero (which would imply +5% absolute = +5% alpha, a lie).
+ */
+async function fetchBenchmarkSeries(
+  asOfDate: string,
+  horizons: ReadonlyArray<number>,
+): Promise<Map<number, number>> {
+  const offsets = [0, ...horizons];
+  const maxOffset = offsets.reduce((m, n) => Math.max(m, n), 0);
+
+  const raw = await db.execute<BenchmarkRow>(sql`
+    WITH ranked AS (
+      SELECT
+        k.close * COALESCE(k.adj_factor, 1.0) AS close,
+        ROW_NUMBER() OVER (PARTITION BY k.stock_id ORDER BY k.date ASC) - 1 AS day_offset
+      FROM kline_daily k
+      INNER JOIN stocks s ON s.id = k.stock_id
+      WHERE s.symbol = ${BENCHMARK_SYMBOL}
+        AND k.date >= ${asOfDate}
+    )
+    SELECT day_offset, close
+    FROM ranked
+    WHERE day_offset <= ${maxOffset}
+      AND day_offset = ANY(${sql.raw(`ARRAY[${offsets.join(',')}]::int[]`)})
+  `);
+
+  const series = new Map<number, number>();
+  for (const row of unwrapRows<BenchmarkRow>(raw)) {
+    const off = Number(row.day_offset);
+    const close = Number(row.close);
+    if (Number.isFinite(off) && Number.isFinite(close)) series.set(off, close);
+  }
+  return series;
 }
 
 function aggregateReturns(returns: ReadonlyArray<number>): {
@@ -212,6 +298,24 @@ function aggregateReturns(returns: ReadonlyArray<number>): {
   };
 }
 
+function computeBenchmarkReturn(
+  series: Map<number, number>,
+  horizon: number,
+): number | null {
+  const anchor = series.get(0);
+  const future = series.get(horizon);
+  if (
+    anchor === undefined ||
+    future === undefined ||
+    !Number.isFinite(anchor) ||
+    !Number.isFinite(future) ||
+    anchor <= 0
+  ) {
+    return null;
+  }
+  return future / anchor - 1;
+}
+
 /**
  * Compute and upsert forward-return rollups for a run. Owner-scoped.
  * Returns the upserted rows sorted by horizonDays ASC.
@@ -229,43 +333,42 @@ export async function computePackRunPerformance(
   const symbols = extractSymbols(header.topCandidates, topN);
   const requestedCount = symbols.length;
 
+  // Benchmark fetched in parallel with basket — both queries hit kline_daily
+  // and are bounded by a small offset list, so this is cheap.
+  const [grid, bench] = await Promise.all([
+    fetchPriceGrid(symbols, header.asOfDate, horizons),
+    fetchBenchmarkSeries(header.asOfDate, horizons),
+  ]);
+
   if (requestedCount === 0) {
     // Nothing to compute; still upsert zero-count rows so the UI can render
     // "no candidates" instead of an empty pane indefinitely.
-    const rows = horizons.map((h) => ({
-      runId,
-      horizonDays: h,
-      topN,
-      requestedCount: 0,
-      evaluatedCount: 0,
-      missingCount: 0,
-      meanReturn: null,
-      medianReturn: null,
-      hitRate: null,
-      bestReturn: null,
-      worstReturn: null,
-    }));
+    const rows: UpsertPayload[] = horizons.map((h) => {
+      const benchReturn = computeBenchmarkReturn(bench, h);
+      return {
+        runId,
+        horizonDays: h,
+        topN,
+        requestedCount: 0,
+        evaluatedCount: 0,
+        missingCount: 0,
+        meanReturn: null,
+        medianReturn: null,
+        hitRate: null,
+        bestReturn: null,
+        worstReturn: null,
+        benchmarkSymbol: benchReturn !== null ? BENCHMARK_SYMBOL : null,
+        benchmarkReturn: benchReturn,
+        excessMeanReturn: null,
+      };
+    });
     await upsertRows(rows);
     return (await getPackRunPerformance(userId, runId)).filter(
       (r) => r.topN === topN && horizons.includes(r.horizonDays),
     );
   }
 
-  const grid = await fetchPriceGrid(symbols, header.asOfDate, horizons);
-
-  const outputs: Array<{
-    runId: string;
-    horizonDays: number;
-    topN: number;
-    requestedCount: number;
-    evaluatedCount: number;
-    missingCount: number;
-    meanReturn: number | null;
-    medianReturn: number | null;
-    hitRate: number | null;
-    bestReturn: number | null;
-    worstReturn: number | null;
-  }> = [];
+  const outputs: UpsertPayload[] = [];
 
   for (const h of horizons) {
     const returns: number[] = [];
@@ -287,6 +390,9 @@ export async function computePackRunPerformance(
       returns.push(future / anchor - 1);
     }
     const { mean, med, hit, best, worst } = aggregateReturns(returns);
+    const benchReturn = computeBenchmarkReturn(bench, h);
+    const excessMean =
+      mean !== null && benchReturn !== null ? mean - benchReturn : null;
     outputs.push({
       runId,
       horizonDays: h,
@@ -299,6 +405,9 @@ export async function computePackRunPerformance(
       hitRate: hit,
       bestReturn: best,
       worstReturn: worst,
+      benchmarkSymbol: benchReturn !== null ? BENCHMARK_SYMBOL : null,
+      benchmarkReturn: benchReturn,
+      excessMeanReturn: excessMean,
     });
   }
 
@@ -310,21 +419,7 @@ export async function computePackRunPerformance(
   );
 }
 
-async function upsertRows(
-  rows: ReadonlyArray<{
-    runId: string;
-    horizonDays: number;
-    topN: number;
-    requestedCount: number;
-    evaluatedCount: number;
-    missingCount: number;
-    meanReturn: number | null;
-    medianReturn: number | null;
-    hitRate: number | null;
-    bestReturn: number | null;
-    worstReturn: number | null;
-  }>,
-): Promise<void> {
+async function upsertRows(rows: ReadonlyArray<UpsertPayload>): Promise<void> {
   if (rows.length === 0) return;
   await db
     .insert(packRunPerformance)
@@ -344,6 +439,9 @@ async function upsertRows(
         hitRate: sql`excluded.hit_rate`,
         bestReturn: sql`excluded.best_return`,
         worstReturn: sql`excluded.worst_return`,
+        benchmarkSymbol: sql`excluded.benchmark_symbol`,
+        benchmarkReturn: sql`excluded.benchmark_return`,
+        excessMeanReturn: sql`excluded.excess_mean_return`,
         computedAt: sql`excluded.computed_at`,
       },
     });
@@ -372,6 +470,9 @@ export async function getPackRunPerformance(
       hitRate: packRunPerformance.hitRate,
       bestReturn: packRunPerformance.bestReturn,
       worstReturn: packRunPerformance.worstReturn,
+      benchmarkSymbol: packRunPerformance.benchmarkSymbol,
+      benchmarkReturn: packRunPerformance.benchmarkReturn,
+      excessMeanReturn: packRunPerformance.excessMeanReturn,
       computedAt: packRunPerformance.computedAt,
     })
     .from(packRunPerformance)
@@ -389,6 +490,9 @@ export async function getPackRunPerformance(
     hitRate: r.hitRate,
     bestReturn: r.bestReturn,
     worstReturn: r.worstReturn,
+    benchmarkSymbol: r.benchmarkSymbol,
+    benchmarkReturn: r.benchmarkReturn,
+    excessMeanReturn: r.excessMeanReturn,
     computedAt: r.computedAt.toISOString(),
   }));
 }

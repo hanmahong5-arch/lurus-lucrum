@@ -103,8 +103,37 @@ interface PerformanceRow {
   readonly hitRate: number | null;
   readonly bestReturn: number | null;
   readonly worstReturn: number | null;
+  readonly benchmarkSymbol: string | null;
+  readonly benchmarkReturn: number | null;
+  readonly excessMeanReturn: number | null;
   readonly computedAt: string;
 }
+
+// Below this evaluated_count, hit_rate / mean are too noisy to act on. UI
+// renders a neutral badge; product copy explicitly avoids implying signal.
+const MIN_SAMPLE_FOR_SIGNAL = 10;
+
+interface AlphaTrendPoint {
+  readonly runId: string;
+  readonly asOfDate: string;
+  readonly packId: string | null;
+  readonly packName: string | null;
+  readonly evaluatedCount: number;
+  readonly meanReturn: number | null;
+  readonly benchmarkReturn: number | null;
+  readonly excessMeanReturn: number | null;
+  readonly computedAt: string;
+}
+
+interface AlphaTrendState {
+  readonly loading: boolean;
+  readonly error: string | null;
+  readonly items: ReadonlyArray<AlphaTrendPoint>;
+}
+
+const ALPHA_TREND_HORIZON = 20;
+const ALPHA_TREND_TOPN = 10;
+const ALPHA_TREND_LIMIT = 20;
 
 interface PerfState {
   readonly loading: boolean;
@@ -166,6 +195,11 @@ export default function MonitoringPage() {
     {},
   );
   const [perfByRun, setPerfByRun] = useState<Record<string, PerfState>>({});
+  const [alphaTrend, setAlphaTrend] = useState<AlphaTrendState>({
+    loading: false,
+    error: null,
+    items: [],
+  });
 
   const load = useCallback(async (days: number) => {
     setLoading(true);
@@ -229,6 +263,34 @@ export default function MonitoringPage() {
     }
   }, []);
 
+  const loadAlphaTrend = useCallback(async () => {
+    setAlphaTrend((prev) => ({ ...prev, loading: true, error: null }));
+    try {
+      const qs = new URLSearchParams({
+        horizon: String(ALPHA_TREND_HORIZON),
+        topN: String(ALPHA_TREND_TOPN),
+        limit: String(ALPHA_TREND_LIMIT),
+      });
+      const res = await fetch(`/api/monitoring/alpha-trend?${qs.toString()}`, {
+        cache: 'no-store',
+      });
+      if (!res.ok) {
+        const text = await res.text().catch(() => '');
+        throw new Error(`HTTP ${res.status}: ${text.slice(0, 200)}`);
+      }
+      const data = (await res.json()) as {
+        items: ReadonlyArray<AlphaTrendPoint>;
+      };
+      setAlphaTrend({ loading: false, error: null, items: data.items });
+    } catch (err) {
+      setAlphaTrend((prev) => ({
+        ...prev,
+        loading: false,
+        error: err instanceof Error ? err.message : String(err),
+      }));
+    }
+  }, []);
+
   const loadStageAggregates = useCallback(async () => {
     setStageAggregatesLoading(true);
     setStageAggregatesError(null);
@@ -266,6 +328,10 @@ export default function MonitoringPage() {
   useEffect(() => {
     loadStageAggregates();
   }, [loadStageAggregates]);
+
+  useEffect(() => {
+    loadAlphaTrend();
+  }, [loadAlphaTrend]);
 
   const loadPerf = useCallback(async (runId: string) => {
     setPerfByRun((prev) => ({
@@ -547,6 +613,8 @@ export default function MonitoringPage() {
             无数据。
           </div>
         )}
+
+        <AlphaTrendPanel state={alphaTrend} onRefresh={loadAlphaTrend} />
 
         <section className="rounded-lg border border-border bg-surface p-4">
           <div className="flex items-center justify-between gap-3 mb-3">
@@ -977,6 +1045,180 @@ function returnTone(r: number | null): string {
   return 'text-white/60';
 }
 
+function AlphaTrendPanel({
+  state,
+  onRefresh,
+}: {
+  state: AlphaTrendState;
+  onRefresh: () => void;
+}) {
+  const { loading, error, items } = state;
+  const points = items.filter((p) => p.excessMeanReturn !== null);
+  const hasSignal = points.length >= 3;
+
+  // Build sparkline path. Range fixed to [-15%, +15%] excess so visual
+  // magnitude is comparable across refreshes; clamp outliers but mark them.
+  const W = 320;
+  const H = 64;
+  const PAD_X = 2;
+  const PAD_Y = 4;
+  const RANGE = 0.15;
+  const xStep =
+    points.length > 1 ? (W - 2 * PAD_X) / (points.length - 1) : 0;
+  const yFor = (v: number) => {
+    const clamped = Math.max(-RANGE, Math.min(RANGE, v));
+    const norm = (clamped + RANGE) / (2 * RANGE); // 0..1
+    return H - PAD_Y - norm * (H - 2 * PAD_Y);
+  };
+  const path = points
+    .map((p, i) => {
+      const x = PAD_X + i * xStep;
+      const y = yFor(p.excessMeanReturn ?? 0);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+
+  const last = points[points.length - 1];
+  const lastValue = last?.excessMeanReturn ?? null;
+
+  // Mean of all observed alpha — quick "are we positive on average?" read.
+  const avg =
+    points.length > 0
+      ? points.reduce((s, p) => s + (p.excessMeanReturn ?? 0), 0) /
+        points.length
+      : null;
+  const positiveCount = points.filter(
+    (p) => (p.excessMeanReturn ?? 0) > 0,
+  ).length;
+  const positiveRate =
+    points.length > 0 ? positiveCount / points.length : null;
+
+  return (
+    <section className="rounded-lg border border-border bg-surface p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <div>
+          <h2 className="text-sm font-semibold text-white">Alpha 趋势</h2>
+          <p className="text-xs text-neutral-500 mt-0.5">
+            最近 {ALPHA_TREND_LIMIT} 次 funnel 运行的 {ALPHA_TREND_HORIZON} 日超额收益（vs CSI300，等权 top{ALPHA_TREND_TOPN}）。
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          disabled={loading}
+          className="text-xs rounded px-3 py-1 text-white/60 hover:text-white hover:bg-white/5 disabled:opacity-50"
+        >
+          {loading ? '加载中…' : '刷新'}
+        </button>
+      </div>
+
+      {error && (
+        <div className="rounded-md border border-loss/40 bg-loss/10 px-3 py-2 text-xs text-loss mb-3">
+          {error}
+        </div>
+      )}
+
+      {!hasSignal ? (
+        <p className="text-xs text-neutral-500">
+          暂无足够数据点（已就绪 {points.length} 个，至少需要 3 个 horizon=
+          {ALPHA_TREND_HORIZON}d 已结算的运行）。
+        </p>
+      ) : (
+        <div className="space-y-2">
+          <div className="flex items-baseline gap-4">
+            <div>
+              <div className="text-[10px] text-neutral-500">最近 α</div>
+              <div
+                className={`font-mono tabular-nums text-lg font-semibold ${returnTone(lastValue)}`}
+              >
+                {formatReturnPct(lastValue)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-neutral-500">均值 α</div>
+              <div
+                className={`font-mono tabular-nums text-sm ${returnTone(avg)}`}
+              >
+                {formatReturnPct(avg)}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] text-neutral-500">正 α 比例</div>
+              <div className="font-mono tabular-nums text-sm text-white/80">
+                {positiveRate === null
+                  ? '—'
+                  : `${(positiveRate * 100).toFixed(0)}% (${positiveCount}/${points.length})`}
+              </div>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <svg
+              width={W}
+              height={H}
+              viewBox={`0 0 ${W} ${H}`}
+              className="text-accent"
+              role="img"
+              aria-label="Alpha sparkline"
+            >
+              {/* zero baseline */}
+              <line
+                x1={PAD_X}
+                y1={yFor(0)}
+                x2={W - PAD_X}
+                y2={yFor(0)}
+                stroke="currentColor"
+                strokeOpacity="0.2"
+                strokeDasharray="2,2"
+              />
+              <path
+                d={path}
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+              />
+              {points.map((p, i) => {
+                const x = PAD_X + i * xStep;
+                const v = p.excessMeanReturn ?? 0;
+                const y = yFor(v);
+                const fill =
+                  v > 0
+                    ? 'var(--profit)'
+                    : v < 0
+                      ? 'var(--loss)'
+                      : 'currentColor';
+                return (
+                  <circle
+                    key={p.runId}
+                    cx={x}
+                    cy={y}
+                    r={2}
+                    fill={fill}
+                  >
+                    <title>
+                      {p.asOfDate} · α {formatReturnPct(p.excessMeanReturn)}
+                      {p.benchmarkReturn !== null
+                        ? ` · 基准 ${formatReturnPct(p.benchmarkReturn)}`
+                        : ''}
+                      {p.evaluatedCount < MIN_SAMPLE_FOR_SIGNAL
+                        ? ` · 样本不足 (n=${p.evaluatedCount})`
+                        : ''}
+                    </title>
+                  </circle>
+                );
+              })}
+            </svg>
+          </div>
+
+          <p className="text-[10px] text-neutral-500">
+            灰色虚线 = 0；点高度 = α；±15% 之外被压在边界。
+          </p>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function PerformanceDetail({
   runId,
   state,
@@ -1004,7 +1246,7 @@ function PerformanceDetail({
         <div>
           <h3 className="text-xs font-semibold text-white">前向表现</h3>
           <p className="text-[10px] text-white/40 mt-0.5">
-            等权 top10 · 以 as_of 当日为锚 · 下文均为前向收益（未年化）
+            等权 top10 · 以 as_of 当日为锚 · 复权后收益 · α 相对 CSI300
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -1048,6 +1290,8 @@ function PerformanceDetail({
                 <th className="py-1.5 pr-3 font-normal">Horizon</th>
                 <th className="py-1.5 pr-3 font-normal text-right">评估/请求</th>
                 <th className="py-1.5 pr-3 font-normal text-right">平均</th>
+                <th className="py-1.5 pr-3 font-normal text-right">基准</th>
+                <th className="py-1.5 pr-3 font-normal text-right">α (超额)</th>
                 <th className="py-1.5 pr-3 font-normal text-right">中位数</th>
                 <th className="py-1.5 pr-3 font-normal text-right">胜率</th>
                 <th className="py-1.5 pr-3 font-normal text-right">最佳</th>
@@ -1055,60 +1299,89 @@ function PerformanceDetail({
               </tr>
             </thead>
             <tbody>
-              {items.map((r) => (
-                <tr
-                  key={`${r.horizonDays}-${r.topN}`}
-                  className="border-b border-border/30 last:border-0"
-                >
-                  <td className="py-1.5 pr-3 text-white/80 font-mono">
-                    {r.horizonDays}d · top{r.topN}
-                  </td>
-                  <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/60">
-                    {r.evaluatedCount}/{r.requestedCount}
-                    {r.missingCount > 0 && (
-                      <span
-                        className="ml-1 text-amber-400/70"
-                        title={`${r.missingCount} 个标的无前向数据`}
-                      >
-                        (-{r.missingCount})
-                      </span>
-                    )}
-                  </td>
-                  <td
-                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.meanReturn)}`}
+              {items.map((r) => {
+                const lowSample =
+                  r.evaluatedCount > 0 &&
+                  r.evaluatedCount < MIN_SAMPLE_FOR_SIGNAL;
+                return (
+                  <tr
+                    key={`${r.horizonDays}-${r.topN}`}
+                    className={`border-b border-border/30 last:border-0 ${lowSample ? 'opacity-60' : ''}`}
                   >
-                    {formatReturnPct(r.meanReturn)}
-                  </td>
-                  <td
-                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.medianReturn)}`}
-                  >
-                    {formatReturnPct(r.medianReturn)}
-                  </td>
-                  <td
-                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${
-                      r.hitRate === null
-                        ? 'text-white/40'
-                        : r.hitRate >= 0.5
-                          ? 'text-profit/80'
-                          : 'text-loss/80'
-                    }`}
-                  >
-                    {r.hitRate === null
-                      ? '—'
-                      : `${(r.hitRate * 100).toFixed(0)}%`}
-                  </td>
-                  <td
-                    className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.bestReturn)}`}
-                  >
-                    {formatReturnPct(r.bestReturn)}
-                  </td>
-                  <td
-                    className={`py-1.5 font-mono tabular-nums text-right ${returnTone(r.worstReturn)}`}
-                  >
-                    {formatReturnPct(r.worstReturn)}
-                  </td>
-                </tr>
-              ))}
+                    <td className="py-1.5 pr-3 text-white/80 font-mono">
+                      {r.horizonDays}d · top{r.topN}
+                    </td>
+                    <td className="py-1.5 pr-3 font-mono tabular-nums text-right text-white/60">
+                      {r.evaluatedCount}/{r.requestedCount}
+                      {r.missingCount > 0 && (
+                        <span
+                          className="ml-1 text-amber-400/70"
+                          title={`${r.missingCount} 个标的无前向数据`}
+                        >
+                          (-{r.missingCount})
+                        </span>
+                      )}
+                      {lowSample && (
+                        <span
+                          className="ml-1 inline-block rounded bg-white/5 px-1 text-white/50 font-sans text-[9px]"
+                          title="样本不足，统计意义弱，不建议据此决策"
+                        >
+                          n&lt;{MIN_SAMPLE_FOR_SIGNAL}
+                        </span>
+                      )}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.meanReturn)}`}
+                    >
+                      {formatReturnPct(r.meanReturn)}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.benchmarkReturn)}`}
+                      title={
+                        r.benchmarkSymbol
+                          ? `基准 ${r.benchmarkSymbol} 同 horizon 收益`
+                          : '基准未就绪'
+                      }
+                    >
+                      {formatReturnPct(r.benchmarkReturn)}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.excessMeanReturn)}`}
+                      title="超额收益 = 平均 - 基准；为负代表跑输大盘"
+                    >
+                      {formatReturnPct(r.excessMeanReturn)}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.medianReturn)}`}
+                    >
+                      {formatReturnPct(r.medianReturn)}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${
+                        r.hitRate === null
+                          ? 'text-white/40'
+                          : r.hitRate >= 0.5
+                            ? 'text-profit/80'
+                            : 'text-loss/80'
+                      }`}
+                    >
+                      {r.hitRate === null
+                        ? '—'
+                        : `${(r.hitRate * 100).toFixed(0)}%`}
+                    </td>
+                    <td
+                      className={`py-1.5 pr-3 font-mono tabular-nums text-right ${returnTone(r.bestReturn)}`}
+                    >
+                      {formatReturnPct(r.bestReturn)}
+                    </td>
+                    <td
+                      className={`py-1.5 font-mono tabular-nums text-right ${returnTone(r.worstReturn)}`}
+                    >
+                      {formatReturnPct(r.worstReturn)}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

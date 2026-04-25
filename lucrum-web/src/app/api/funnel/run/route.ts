@@ -21,6 +21,9 @@
  */
 
 import { NextRequest } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { verifyZitadelJWT } from '@/lib/auth/jwt-verify';
 import {
   runPipeline,
   createFunnelContext,
@@ -45,7 +48,22 @@ interface FunnelRunRequest {
   hardFilter?: DefaultFunnelOptions['hardFilter'];
   portfolio?: DefaultFunnelOptions['portfolio'];
   maxUniverseSize?: number;
-  userId?: string;
+}
+
+/**
+ * Resolve the calling user from session or Bearer JWT. Returns the Zitadel
+ * `sub`, never accepting userId from the request body — callers MUST NOT be
+ * able to attribute funnel runs to arbitrary users.
+ */
+async function resolveUserId(request: NextRequest): Promise<string | null> {
+  const session = await getServerSession(authOptions);
+  if (session?.user?.id) return session.user.id;
+  const auth = request.headers.get('authorization');
+  if (auth?.startsWith('Bearer ')) {
+    const claims = await verifyZitadelJWT(auth.slice(7));
+    if (claims?.sub) return claims.sub;
+  }
+  return null;
 }
 
 function sseFrame(event: FunnelEvent): string {
@@ -84,6 +102,14 @@ function validate(body: unknown): FunnelRunRequest | string {
 }
 
 export async function POST(request: NextRequest): Promise<Response> {
+  const userId = await resolveUserId(request);
+  if (!userId) {
+    return new Response(errorFrame('login required', 'AUTH_NO_SESSION'), {
+      status: 401,
+      headers: SSE_HEADERS,
+    });
+  }
+
   let body: unknown;
   try {
     body = await request.json();
@@ -117,7 +143,7 @@ export async function POST(request: NextRequest): Promise<Response> {
         const context = createFunnelContext({
           asOfDate: parsed.asOfDate,
           options: { ...parsed },
-          userId: parsed.userId,
+          userId,
           runIdPrefix: 'funnel-v2',
         });
 
