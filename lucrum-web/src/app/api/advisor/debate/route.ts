@@ -18,10 +18,7 @@ import {
   generateDebatePrompts,
   parseModeratorConclusion,
 } from "@/lib/advisor/reaction/debate-engine";
-
-// lurus-api configuration
-const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const LURUS_API_KEY = process.env.LURUS_API_KEY ?? "";
+import { chatComplete, loadGatewayConfig } from "@/lib/llm";
 
 // Request interfaces
 interface DebateStartRequest {
@@ -75,31 +72,17 @@ async function callLLM(
   userMessage: string,
   temperature: number = 0.5,
 ): Promise<string> {
-  const response = await fetch(`${LURUS_API_URL}/v1/chat/completions`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${LURUS_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model: "deepseek-chat",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature,
-      max_tokens: 2000,
-    }),
-    cache: "no-store",
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text().catch(() => "Unknown error");
-    throw new Error(`LLM error: ${response.status} - ${errorText}`);
-  }
-
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  // Debate is multi-turn analytic prose; use the analytic tier (falls back to
+  // routine if pro is degraded).
+  const result = await chatComplete(
+    'analytic',
+    [
+      { role: "system", content: systemPrompt },
+      { role: "user", content: userMessage },
+    ],
+    { temperature, maxTokens: 2000 },
+  );
+  return result.content;
 }
 
 /**
@@ -108,7 +91,7 @@ async function callLLM(
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!LURUS_API_KEY) {
+    if (!loadGatewayConfig().hasKey) {
       return NextResponse.json(
         { error: 'Server misconfigured: missing API key' },
         { status: 500 },

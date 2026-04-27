@@ -7,7 +7,8 @@
  */
 
 import { Annotation, StateGraph, END, START } from "@langchain/langgraph";
-import { ChatOpenAI } from "@langchain/openai";
+import type { ChatOpenAI } from "@langchain/openai";
+import { getChatModel } from "@/lib/llm";
 import { HumanMessage, AIMessage, SystemMessage, BaseMessage } from "@langchain/core/messages";
 import type { RunnableConfig } from "@langchain/core/runnables";
 import type {
@@ -124,19 +125,10 @@ type AdvisorState = typeof AdvisorStateAnnotation.State;
 // ============================================================================
 
 /**
- * Create LLM instance with DeepSeek configuration
- * 创建使用 DeepSeek 配置的 LLM 实例
+ * Create LLM instance via the central router (newapi gateway).
  */
 function createLLM(temperature: number = 0.7): ChatOpenAI {
-  return new ChatOpenAI({
-    modelName: "deepseek-chat",
-    temperature,
-    maxTokens: 2000,
-    configuration: {
-      baseURL: process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com/v1",
-      apiKey: process.env.DEEPSEEK_API_KEY,
-    },
-  });
+  return getChatModel('analytic', { temperature, maxTokens: 2000 });
 }
 
 // ============================================================================

@@ -9,7 +9,8 @@
  */
 
 import { Annotation, StateGraph, END, START } from "@langchain/langgraph";
-import { ChatOpenAI } from "@langchain/openai";
+import type { ChatOpenAI } from "@langchain/openai";
+import { getChatModel } from "@/lib/llm";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import {
   getSectorStocks,
@@ -107,15 +108,7 @@ export type ScannerState = typeof ScannerStateAnnotation.State;
 // =============================================================================
 
 function createLLM(temperature = 0.4): ChatOpenAI {
-  return new ChatOpenAI({
-    modelName: "deepseek-chat",
-    temperature,
-    maxTokens: 2000,
-    configuration: {
-      baseURL: process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com/v1",
-      apiKey: process.env.DEEPSEEK_API_KEY,
-    },
-  });
+  return getChatModel('analytic', { temperature, maxTokens: 2000 });
 }
 
 // =============================================================================

@@ -122,6 +122,20 @@ spec:
                   key: MEMORUS_API_KEY
                   optional: true
 
+            # LLM gateway — all model calls funnel through Lurus newapi
+            # (https://newapi.lurus.cn/v1). Token is the lucrum-router entry
+            # in newapi.tokens (user_id=1, unlimited_quota=true). Old vars
+            # DEEPSEEK_API_BASE / LURUS_API_URL are intentionally omitted —
+            # the router falls back to them only if LLM_API_* are unset, and
+            # we want hard cutover.
+            - name: LLM_API_BASE
+              value: "https://newapi.lurus.cn/v1"
+            - name: LLM_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: lucrum-secrets
+                  key: LLM_API_KEY
+
             # Redis configuration
             - name: REDIS_ENABLED
               value: "true"

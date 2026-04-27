@@ -11,7 +11,8 @@
  * @module lib/agent/custom-agent
  */
 
-import { ChatOpenAI } from "@langchain/openai";
+import type { ChatOpenAI } from "@langchain/openai";
+import { getChatModel } from "@/lib/llm";
 import { SystemMessage, HumanMessage } from "@langchain/core/messages";
 import { getSectorStocks } from "@/lib/data-service/sources/eastmoney-sector";
 import { db } from "@/lib/db";
@@ -51,15 +52,7 @@ const MAX_STOCKS_ALL_MARKET = 100;
 // =============================================================================
 
 function createLLM(temperature = 0.4, maxTokens = 2000): ChatOpenAI {
-  return new ChatOpenAI({
-    modelName: "deepseek-chat",
-    temperature,
-    maxTokens,
-    configuration: {
-      baseURL: process.env.DEEPSEEK_API_BASE || "https://api.deepseek.com/v1",
-      apiKey: process.env.DEEPSEEK_API_KEY,
-    },
-  });
+  return getChatModel('analytic', { temperature, maxTokens });
 }
 
 // =============================================================================

@@ -13,10 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth';
 import { checkUsage, incrementUsage } from '@/lib/middleware/usage-tracker';
 import { findPopularStrategyByKey, upsertPopularStrategy } from '@/lib/db/queries';
-
-// lurus-api configuration
-const LURUS_API_URL = process.env.LURUS_API_URL || 'https://api.lurus.cn';
-const LURUS_API_KEY = process.env.LURUS_API_KEY ?? '';
+import { chatComplete, loadGatewayConfig } from '@/lib/llm';
 
 // Approximate tokens per character (rough estimate for cache savings display)
 const TOKENS_PER_CHAR = 0.4;
@@ -64,7 +61,7 @@ function extractCode(raw: string): string {
 
 export async function POST(request: NextRequest) {
   try {
-    if (!LURUS_API_KEY) {
+    if (!loadGatewayConfig().hasKey) {
       return NextResponse.json(
         {
           error: {
@@ -160,46 +157,33 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Cache miss — call lurus-api (DeepSeek) for strategy generation
-    console.log('[strategy/generate] Cache MISS — calling lurus-api...');
+    // Cache miss — generate via the central router. Strategy generation is
+    // structured code output: an analytic-class task (not reasoning) — code
+    // length and structure are well-bounded, so v4-pro is the right tier.
+    console.log('[strategy/generate] Cache MISS — calling LLM router...');
     const startTime = Date.now();
 
-    const response = await fetch(`${LURUS_API_URL}/v1/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${LURUS_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'deepseek-chat',
-        messages: [
+    let completion;
+    try {
+      completion = await chatComplete(
+        'analytic',
+        [
           { role: 'system', content: SYSTEM_PROMPT },
           {
             role: 'user',
             content: `请根据以下策略描述生成 VeighNa CTA 策略代码：\n\n${prompt}`,
           },
         ],
-        temperature: 0.3,
-        max_tokens: 2000,
-      }),
-      cache: 'no-store',
-    });
-
-    console.log(
-      `[strategy/generate] Response in ${Date.now() - startTime}ms, status: ${response.status}`
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => 'Unknown error');
-      console.error('[strategy/generate] LLM API error:', response.status, errorText);
+        { temperature: 0.3, maxTokens: 2000 },
+      );
+    } catch (err) {
+      console.error('[strategy/generate] LLM error:', err);
       return NextResponse.json(
         {
           error: {
             code: 'STRATEGY_LLM_FAILED',
             title: 'AI 策略生成失败',
-            description: response.status === 429
-              ? 'AI 服务繁忙，请稍后重试'
-              : 'AI 服务暂时不可用，可使用内置模板生成策略',
+            description: 'AI 服务暂时不可用，可使用内置模板生成策略',
             severity: 'error',
             recoveryActions: [
               { type: 'retry', label: '重试' },
@@ -207,16 +191,18 @@ export async function POST(request: NextRequest) {
               { type: 'custom', label: '修改描述' },
             ],
           },
-          details: errorText,
+          details: err instanceof Error ? err.message : String(err),
         },
-        { status: response.status }
+        { status: 502 }
       );
     }
 
-    const data = await response.json();
-    const generatedCode = (data.choices?.[0]?.message?.content as string) || '';
-    const code = extractCode(generatedCode).trim();
-    const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? 0;
+    console.log(
+      `[strategy/generate] Response in ${Date.now() - startTime}ms, model=${completion.model}, fallback=${completion.fallbackUsed}`
+    );
+
+    const code = extractCode(completion.content).trim();
+    const actualTokens: number = completion.totalTokens ?? 0;
 
     // Write to public pool asynchronously (do not block response)
     void upsertPopularStrategy({
@@ -233,7 +219,15 @@ export async function POST(request: NextRequest) {
       cached: false,
       savedTokens: 0,
       cacheKey,
-      usage: data.usage,
+      usage: {
+        prompt_tokens: completion.promptTokens,
+        completion_tokens: completion.completionTokens,
+        total_tokens: actualTokens,
+      },
+      metadata: {
+        model: completion.model,
+        fallbackUsed: completion.fallbackUsed,
+      },
     });
   } catch (error) {
     console.error('[strategy/generate] Error:', error);

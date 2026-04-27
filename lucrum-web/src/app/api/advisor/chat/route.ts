@@ -30,11 +30,17 @@ import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/midd
 import { recordUserEvent } from "@/lib/db/queries";
 import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
 import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memorus-client";
+import { streamChat, chatComplete, loadGatewayConfig, type TaskClass } from "@/lib/llm";
 
-// lurus-api configuration
-// 在集群内部通过 Service 访问，外部通过 api.lurus.cn 访问
-const LURUS_API_URL = process.env.LURUS_API_URL || "https://api.lurus.cn";
-const LURUS_API_KEY = process.env.LURUS_API_KEY ?? "";
+// Pick a task class per advisor mode. quick = cheap fast model; deep / debate
+// = analytic tier; diagnose involves multi-hop fault reasoning so it gets the
+// reasoner. See `lib/llm/types.ts` for class semantics.
+const MODE_TASK_CLASS: Record<ChatMode, TaskClass> = {
+  quick: 'routine',
+  deep: 'analytic',
+  debate: 'analytic',
+  diagnose: 'reasoning',
+};
 
 // Message interface for chat history
 // 聊天历史的消息接口
@@ -191,7 +197,7 @@ function getModeConfig(mode: ChatMode): {
  */
 export async function POST(request: NextRequest) {
   try {
-    if (!LURUS_API_KEY) {
+    if (!loadGatewayConfig().hasKey) {
       return NextResponse.json(
         { error: { code: 'SERVER_MISCONFIGURED', title: 'Server misconfigured: missing API key', severity: 'error' } },
         { status: 500 },
@@ -324,51 +330,36 @@ export async function POST(request: NextRequest) {
     );
     const startTime = Date.now();
 
-    // Call lurus-api (DeepSeek) for investment advice
-    // 调用 lurus-api (DeepSeek) 获取投资建议
-    const response = await fetch(`${LURUS_API_URL}/v1/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LURUS_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: "deepseek-chat",
-        messages,
-        temperature,
-        max_tokens: maxTokens,
-        stream,
-      }),
-      cache: "no-store",
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text().catch(() => "Unknown error");
-      console.error("[Advisor API] LLM error:", response.status, errorText);
-      return NextResponse.json(
-        {
-          error: {
-            code: 'ADVISOR_LLM',
-            title: 'AI 顾问响应失败',
-            description: response.status === 429
-              ? 'AI 服务繁忙，请稍后再试'
-              : `AI 服务暂时不可用 (${response.status})，请稍后重试`,
-            severity: 'error',
-            recoveryActions: [
-              { type: 'retry', label: '重试' },
-              { type: 'custom', label: '简化问题' },
-            ],
-          },
-        },
-        { status: response.status },
-      );
-    }
+    // Route LLM call through the central gateway (newapi). Mode-specific task
+    // class drives model + timeout selection; see MODE_TASK_CLASS above.
+    const taskClass = MODE_TASK_CLASS[mode] ?? 'analytic';
 
     // Handle streaming response
-    // 处理流式响应
     if (stream) {
+      const response = await streamChat(taskClass, messages, { temperature, maxTokens });
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "Unknown error");
+        console.error("[Advisor API] LLM error:", response.status, errorText);
+        return NextResponse.json(
+          {
+            error: {
+              code: 'ADVISOR_LLM',
+              title: 'AI 顾问响应失败',
+              description: response.status === 429
+                ? 'AI 服务繁忙，请稍后再试'
+                : `AI 服务暂时不可用 (${response.status})，请稍后重试`,
+              severity: 'error',
+              recoveryActions: [
+                { type: 'retry', label: '重试' },
+                { type: 'custom', label: '简化问题' },
+              ],
+            },
+          },
+          { status: response.status },
+        );
+      }
       const responseTime = Date.now() - startTime;
-      console.log(`[Advisor API] Streaming started in ${responseTime}ms`);
+      console.log(`[Advisor API] Streaming started in ${responseTime}ms (task=${taskClass})`);
 
       // Create a TransformStream to process SSE data
       // 创建 TransformStream 处理 SSE 数据
@@ -424,15 +415,34 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Handle non-streaming response
-    // 处理非流式响应
+    // Handle non-streaming response via the central router.
+    let completion;
+    try {
+      completion = await chatComplete(taskClass, messages, { temperature, maxTokens });
+    } catch (err) {
+      console.error("[Advisor API] LLM error:", err);
+      return NextResponse.json(
+        {
+          error: {
+            code: 'ADVISOR_LLM',
+            title: 'AI 顾问响应失败',
+            description: 'AI 服务暂时不可用，请稍后重试',
+            severity: 'error',
+            recoveryActions: [
+              { type: 'retry', label: '重试' },
+              { type: 'custom', label: '简化问题' },
+            ],
+          },
+        },
+        { status: 502 },
+      );
+    }
     const responseTime = Date.now() - startTime;
     console.log(
-      `[Advisor API] Response received in ${responseTime}ms, status: ${response.status}`,
+      `[Advisor API] Response received in ${responseTime}ms, model=${completion.model}, fallback=${completion.fallbackUsed}`,
     );
 
-    const data = await response.json();
-    let advisorResponse: string = data.choices?.[0]?.message?.content || "";
+    let advisorResponse: string = completion.content;
 
     if (!advisorResponse) {
       return NextResponse.json(
@@ -474,7 +484,7 @@ export async function POST(request: NextRequest) {
       advisorResponse = advisorResponse.replace(/\s*<!--QUESTIONS:[\s\S]*?-->\s*/, "").trim();
     }
 
-    const actualTokens: number = (data.usage?.total_tokens as number | undefined) ?? maxTokens;
+    const actualTokens: number = completion.totalTokens ?? maxTokens;
 
     // Store this exchange in memorus for future context recall (fire-and-forget)
     // Cap response at 600 chars so stored bullets stay concise
@@ -507,11 +517,17 @@ export async function POST(request: NextRequest) {
       success: true,
       response: advisorResponse,
       suggestedQuestions,
-      usage: data.usage,
+      usage: {
+        prompt_tokens: completion.promptTokens,
+        completion_tokens: completion.completionTokens,
+        total_tokens: completion.totalTokens,
+      },
       metadata: {
         mode,
         responseTime,
-        model: data.model,
+        model: completion.model,
+        taskClass,
+        fallbackUsed: completion.fallbackUsed,
         contextType: institutionRole ? "institution" : advisorContext ? "agentic" : "legacy",
         philosophy: advisorContext?.corePhilosophy,
         masterAgent: advisorContext?.masterAgent,
