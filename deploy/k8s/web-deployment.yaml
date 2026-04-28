@@ -33,13 +33,15 @@ spec:
         app.kubernetes.io/managed-by: argocd
         app.kubernetes.io/part-of: lurus
     spec:
-      # Pin to master node — cross-node overlay (flannel/WireGuard) is broken,
-      # Traefik on master cannot reach pods on worker nodes via ClusterIP.
-      nodeSelector:
-        kubernetes.io/hostname: cloud-ubuntu-1-16c32g
+      # Lucrum prod moved off R1 to R6 single-node K3s on 2026-04-25 — there
+      # is no longer a cross-node overlay to pin around, so no nodeSelector.
+      # If we ever multi-node R6 or migrate back to R1, restore the master
+      # affinity here (see git history for the R1 hostname).
 
-      # Route auth.lurus.cn through Traefik ClusterIP (kube-system)
-      # instead of public IP — avoids hairpin NAT failure from inside pod
+      # Route auth.lurus.cn through Traefik ClusterIP (kube-system) instead
+      # of the public IP — avoids hairpin NAT failure from inside the pod.
+      # ClusterIP differs by cluster; verify on apply with:
+      #   kubectl get svc -n kube-system traefik -o jsonpath='{.spec.clusterIP}'
       hostAliases:
         - ip: "10.43.175.138"
           hostnames:
@@ -199,7 +201,10 @@ spec:
         - name: nextjs-cache
           emptyDir: {}
 ---
-# Web Service (ClusterIP for internal access)
+# Web Service — NodePort 30300 because the R6 host's nginx vhost
+# (/etc/nginx/sites-enabled/lurus-stage on cloud-ubuntu-5-32c32g) forwards
+# `lucrum.lurus.cn` → `127.0.0.1:30300`. Changing this nodePort requires a
+# matching nginx config update.
 apiVersion: v1
 kind: Service
 metadata:
@@ -209,11 +214,12 @@ metadata:
     app: lucrum-web
     component: frontend
 spec:
-  type: ClusterIP
+  type: NodePort
   ports:
     - name: http
       port: 3000
       targetPort: 3000
+      nodePort: 30300
       protocol: TCP
   selector:
     app: lucrum-web
