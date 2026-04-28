@@ -38,14 +38,12 @@ spec:
       # If we ever multi-node R6 or migrate back to R1, restore the master
       # affinity here (see git history for the R1 hostname).
 
-      # Route auth.lurus.cn through Traefik ClusterIP (kube-system) instead
-      # of the public IP — avoids hairpin NAT failure from inside the pod.
-      # ClusterIP differs by cluster; verify on apply with:
-      #   kubectl get svc -n kube-system traefik -o jsonpath='{.spec.clusterIP}'
-      hostAliases:
-        - ip: "10.43.175.138"
-          hostnames:
-            - "auth.lurus.cn"
+      # NOTE: previous deploy had a hostAliases entry rewriting auth.lurus.cn
+      # to the R1 Traefik ClusterIP (10.43.175.138) for hairpin-NAT bypass on
+      # R1. R6 has no Traefik, so that override blackholed OIDC callbacks
+      # (pod resolved auth.lurus.cn → unreachable IP). Removed; the pod now
+      # resolves auth.lurus.cn via public DNS → R1 public IP, which works
+      # because R6 has internet egress.
 
       securityContext:
         runAsNonRoot: true
