@@ -134,66 +134,63 @@ lucrum-web/src/lib/cron/pack-run-performance-scheduler.ts
 **手动 backfill**:
 ```bash
 # 强制立刻刷一轮（响应里看 refreshedRuns / errors）
+# ⚠️ 必须 127.0.0.1（busybox wget 把 localhost 解析成 ::1，server 只 bind IPv4）
 ssh root@100.122.83.20 "kubectl -n lucrum exec deploy/lucrum-web -- \
-  wget -q -O- --timeout=120 http://localhost:3000/api/cron/init"
+  wget -q -O- --timeout=120 http://127.0.0.1:3000/api/cron/init"
 ```
 
 ---
 
-## 5. CSI300 Ingest Playbook（**当前未做的关键 follow-up**）
+## 5. CSI300 Ingest Playbook（**已产品化 2026-04-29**）
 
 **为什么重要**: CSI300 不入库 → benchmark_return / excess_mean_return 永远 NULL → 监控的"alpha 衰减"图退化为"绝对收益"图。
 
-**步骤**（在 R6 lucrum DB 内）:
+**已产品化的工具**（`lucrum-web/scripts/`）:
+- `ingest-csi300.ts` — bun + pg only（生产 standalone 镜像里没 drizzle，这里也不依赖）。upsert 000300 stock + 3 年日 K，幂等。
+- `ingest-csi300.sh` — wrapper：通过 stdin pipe 把 .ts 推进 pod 的 /tmp（pod 是 readOnlyRootFS，只有 /tmp 可写），然后 `bun /tmp/ingest-csi300.ts` 执行。
 
-### 5.1 注册 000300 为伪 stock 行
-
-```sql
--- 通过 R6 peer-auth 执行
-INSERT INTO stocks (symbol, name, exchange, status, listed_at)
-VALUES ('000300', '沪深300', 'SH', 'active', '2005-04-08')
-ON CONFLICT (symbol) DO UPDATE
-  SET name = EXCLUDED.name,
-      exchange = EXCLUDED.exchange,
-      status = EXCLUDED.status;
-```
-
-### 5.2 拉取并写入 kline_daily
-
-复用 `lucrum-web/scripts/import-initial-data.ts` 的 EastMoney fetch 模式，传入 `symbol='000300', exchange='SH', code='1.000300'`（EastMoney secid 格式：交易所代码 1=SH 0=SZ）。回填范围建议 **3 年**（覆盖最长 horizon 120 + 缓冲）。
-
-最小化产品化命令（拟）：
+**一键命令**:
 ```bash
 cd lucrum-web
-bun run scripts/import-initial-data.ts --symbol 000300 --years 3
+YEARS=3 ./scripts/ingest-csi300.sh        # → R6（默认）
+CLUSTER=r1 ./scripts/ingest-csi300.sh     # → R1（如有）
 ```
-（如该参数化未实现，需要先扩 `import-initial-data.ts` 接受 symbol/years 参数。）
 
-### 5.3 验证 + 触发计算
+**关键 env**:
+- `YEARS` 1..25（默认 3）
+- `CLUSTER` r1|r6（默认 r6）
+- 内部强制 `HOME=/tmp XDG_CACHE_HOME=/tmp` 因为 bun 在 readOnly root + nobody user 下默认 HOME 是只读的
+
+### 5.x 触发刷新（注意 IP）
 
 ```bash
-# 行数检查
-ssh root@100.122.83.20 "kubectl exec -n database lurus-pg-0 -- psql -U postgres -d lucrum -c \
-  \"SELECT count(*), min(trade_date), max(trade_date) FROM kline_daily WHERE symbol='000300';\""
-# 期望: count > 700, max ≈ 今天
-
-# 触发刷新
+# ⚠️ 必须 127.0.0.1，不要用 localhost：
+# pod 的 busybox wget 把 localhost 解析成 ::1，但 Next.js server.js 只 bind
+# 0.0.0.0/IPv4，结果 `Connection refused`。
 ssh root@100.122.83.20 "kubectl -n lucrum exec deploy/lucrum-web -- \
-  wget -q -O- --timeout=120 http://localhost:3000/api/cron/init"
-
-# 验 alpha 写入
-ssh root@100.122.83.20 "kubectl exec -n database lurus-pg-0 -- psql -U postgres -d lucrum -c \
-  \"SELECT count(*) FILTER (WHERE benchmark_return IS NOT NULL) AS with_alpha, \
-           count(*) AS total \
-    FROM pack_run_performance;\""
-# 期望: with_alpha > 0
+  wget -q -O- --timeout=120 http://127.0.0.1:3000/api/cron/init"
 ```
 
-### 5.4 切换基准（如需）
+### 5.x 验 alpha
+
+```bash
+ssh root@100.122.83.20 "kubectl exec -n database lurus-pg-0 -- psql -U postgres -d lucrum -c \
+  \"SELECT s.symbol, count(k.id) AS klines, min(k.date), max(k.date) \
+    FROM stocks s LEFT JOIN kline_daily k ON k.stock_id=s.id \
+    WHERE s.symbol='000300' GROUP BY s.id;\""
+# 期望: klines ≈ 250 × YEARS（~750 条 3 年），max 是最近交易日
+
+ssh root@100.122.83.20 "kubectl exec -n database lurus-pg-0 -- psql -U postgres -d lucrum -c \
+  \"SELECT count(*) FILTER (WHERE benchmark_return IS NOT NULL) AS with_alpha, count(*) AS total \
+    FROM pack_run_performance;\""
+# 注意: pack_run_performance 仅在有 pack_runs 后才会有行。空 DB 上 with_alpha=0=total 不代表 bug。
+```
+
+### 5.x 切换基准（如需）
 
 如果将来要用 CSI500 / 中证全指：
 - 部署设 `PACK_RUN_BENCHMARK_SYMBOL=000905`
-- 入库对应 symbol
+- 入库对应 symbol（改 ingest-csi300.ts 的 SYMBOL/SECID 常量另存为新脚本）
 - 既有行不会回填 — 需手动 truncate 重算或写迁移
 
 ---

@@ -249,7 +249,7 @@ ssh root@100.98.57.55 "kubectl -n lucrum exec deploy/lucrum-web -- sh -c 'echo \
 ```bash
 # 从 Pod 内部测试 API
 ssh root@100.98.57.55 "kubectl -n lucrum exec deploy/lucrum-web -- \
-  wget -q -O- --timeout=5 http://localhost:3000/api/team 2>&1"
+  wget -q -O- --timeout=5 http://127.0.0.1:3000/api/team 2>&1"
 # 预期: {"error":"Unauthorized",...} (401 = API 正常，只是没认证)
 
 # 看最近错误日志
@@ -434,7 +434,7 @@ ssh root@100.122.83.20 "kubectl exec -n database lurus-pg-0 -- psql -U postgres 
 
 # 3) 触发一次手动重算（让 scheduler 立刻跑）
 ssh root@100.122.83.20 "kubectl -n lucrum exec deploy/lucrum-web -- \
-  wget -q -O- --timeout=30 http://localhost:3000/api/cron/init"
+  wget -q -O- --timeout=30 http://127.0.0.1:3000/api/cron/init"
 # 等几分钟，再看 pack_run_performance.benchmark_return 是否填上
 ```
 
@@ -449,7 +449,7 @@ ssh root@100.122.83.20 "kubectl -n lucrum exec deploy/lucrum-web -- \
 ```bash
 # 1) 看 cron init 是否调用过（重启后必须 GET 一次）
 ssh root@100.122.83.20 "kubectl -n lucrum exec deploy/lucrum-web -- \
-  wget -q -O- --timeout=10 http://localhost:3000/api/cron/init 2>&1 | grep -oE 'packRunPerformanceScheduler.{0,80}'"
+  wget -q -O- --timeout=10 http://127.0.0.1:3000/api/cron/init 2>&1 | grep -oE 'packRunPerformanceScheduler.{0,80}'"
 # 期望: "packRunPerformanceScheduler":{"enabled":true,"schedule":"07:00 CST (Mon-Fri)",...}
 
 # 2) 看进程内调度器的日志（singleton 启动时打 [Scheduler] 字样）
@@ -459,7 +459,8 @@ ssh root@100.122.83.20 "kubectl -n lucrum logs deploy/lucrum-web --tail=200 | gr
 | 现象 | 原因 | 修复 |
 |------|------|------|
 | `enabled:false` | `NODE_ENV != 'production'` | 检查 deployment env，确保 `NODE_ENV=production` |
-| 日志无 Scheduler 痕迹 | Pod 启动后没人调过 `/api/cron/init` | `wget http://localhost:3000/api/cron/init` 主动触发；考虑加 readinessProbe 或 startup hook |
+| 日志无 Scheduler 痕迹 | Pod 启动后没人调过 `/api/cron/init` | `wget http://127.0.0.1:3000/api/cron/init` 主动触发；考虑加 readinessProbe 或 startup hook |
+| Pod 内 `wget http://localhost:3000/...` 返回 `Connection refused`，但 `ss -tln` 显示在监听 0.0.0.0:3000 | busybox wget 把 `localhost` 解析成 `::1`（IPv6），但 Next.js standalone server 只 bind IPv4 0.0.0.0 | 改用 `http://127.0.0.1:3000/...` |
 | 日志显示 cron tick 但没写 DB | computePackRunPerformance 报错 | grep `pack-run-performance` 错误日志 |
 | 多个 replica 各跑一份 | singleton 是进程内的；副本数 > 1 时会重复跑（幂等 upsert 不影响正确性，浪费 CPU） | 改 cron 为单 leader 选举 / 改用 K8s CronJob |
 
