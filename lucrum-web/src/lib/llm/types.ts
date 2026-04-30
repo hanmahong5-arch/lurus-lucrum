@@ -36,4 +36,22 @@ export interface LlmCallTelemetry {
   readonly success: boolean;
   readonly error: string | null;
   readonly fallbackUsed: boolean;
+  // True iff the call was aborted by the *caller* (e.g. user closed tab,
+  // request.signal fired) — distinguished from server-side errors so that
+  // monitoring can compute error rate as `success=false AND cancelled=false`.
+  readonly cancelled: boolean;
+}
+
+/**
+ * Thrown when a chatComplete / streamChat call is aborted via the caller's
+ * AbortSignal (browser tab closed, upstream Next.js request cancelled).
+ * Distinct from a generic fetch error so the router can:
+ *   1. skip the fallback chain (a cancel is intentional, not a model failure),
+ *   2. tag telemetry `cancelled:true` instead of inflating error rate.
+ */
+export class LlmCancelledError extends Error {
+  constructor(reason?: string) {
+    super(reason ?? 'LLM call cancelled by caller');
+    this.name = 'LlmCancelledError';
+  }
 }

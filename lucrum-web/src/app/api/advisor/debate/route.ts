@@ -18,7 +18,7 @@ import {
   generateDebatePrompts,
   parseModeratorConclusion,
 } from "@/lib/advisor/reaction/debate-engine";
-import { chatComplete, loadGatewayConfig } from "@/lib/llm";
+import { chatComplete, loadGatewayConfig, LlmCancelledError } from "@/lib/llm";
 
 // Request interfaces
 interface DebateStartRequest {
@@ -71,16 +71,18 @@ async function callLLM(
   systemPrompt: string,
   userMessage: string,
   temperature: number = 0.5,
+  signal?: AbortSignal,
 ): Promise<string> {
   // Debate is multi-turn analytic prose; use the analytic tier (falls back to
-  // routine if pro is degraded).
+  // routine if pro is degraded). Caller can pass `request.signal` to abort
+  // when the client disconnects mid-debate.
   const result = await chatComplete(
     'analytic',
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-    { temperature, maxTokens: 2000 },
+    { temperature, maxTokens: 2000, signal },
   );
   return result.content;
 }
@@ -104,13 +106,16 @@ export async function POST(request: NextRequest) {
       case "start":
         return handleDebateStart(body);
       case "argument":
-        return handleDebateArgument(body);
+        return handleDebateArgument(body, request.signal);
       case "conclusion":
-        return handleDebateConclusion(body);
+        return handleDebateConclusion(body, request.signal);
       default:
         return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
   } catch (error) {
+    if (error instanceof LlmCancelledError) {
+      return new NextResponse(null, { status: 499 });
+    }
     console.error("[Debate API] Error:", error);
     return NextResponse.json(
       { error: "Internal server error", message: String(error) },
@@ -161,7 +166,7 @@ async function handleDebateStart(body: DebateStartRequest) {
  * Handle debate argument generation
  * 处理辩论论点生成
  */
-async function handleDebateArgument(body: DebateArgumentRequest) {
+async function handleDebateArgument(body: DebateArgumentRequest, signal?: AbortSignal) {
   const {
     sessionId,
     stance,
@@ -213,7 +218,7 @@ async function handleDebateArgument(body: DebateArgumentRequest) {
     `[Debate API] Generating ${stance} argument for round ${currentRound}`,
   );
 
-  const argument = await callLLM(systemPrompt, userMessage, 0.5);
+  const argument = await callLLM(systemPrompt, userMessage, 0.5, signal);
 
   const responseTime = Date.now() - startTime;
   console.log(`[Debate API] ${stance} argument generated in ${responseTime}ms`);
@@ -241,7 +246,7 @@ async function handleDebateArgument(body: DebateArgumentRequest) {
  * Handle debate conclusion generation
  * 处理辩论结论生成
  */
-async function handleDebateConclusion(body: DebateConclusionRequest) {
+async function handleDebateConclusion(body: DebateConclusionRequest, signal?: AbortSignal) {
   const {
     sessionId,
     bullArguments,
@@ -287,6 +292,7 @@ async function handleDebateConclusion(body: DebateConclusionRequest) {
     prompts.moderatorPrompt,
     userMessage,
     0.3,
+    signal,
   );
 
   const responseTime = Date.now() - startTime;

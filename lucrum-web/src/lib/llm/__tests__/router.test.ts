@@ -170,3 +170,74 @@ describe('chatComplete', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // routine has no fallback
   });
 });
+
+describe('chatComplete cancellation', () => {
+  it('throws LlmCancelledError without calling fetch when signal is pre-aborted', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete, LlmCancelledError } = await loadRouter();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      chatComplete('analytic', [{ role: 'user', content: 'q' }], { signal: ctrl.signal }),
+    ).rejects.toBeInstanceOf(LlmCancelledError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('does NOT trigger fallback when caller aborts mid-flight', async () => {
+    // fetch hangs forever until the signal aborts; mirrors a real upstream
+    // that's still generating when the user closes the browser tab.
+    const fetchMock = vi.fn((_url: string, init?: RequestInit) => {
+      return new Promise<Response>((_, reject) => {
+        const sig = init?.signal;
+        if (!sig) return; // shouldn't happen — router always passes a signal
+        sig.addEventListener('abort', () => {
+          reject(new DOMException('aborted', 'AbortError'));
+        });
+      });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete, LlmCancelledError } = await loadRouter();
+
+    const ctrl = new AbortController();
+    const promise = chatComplete(
+      'analytic', // analytic has fallback=routine — must NOT be tried
+      [{ role: 'user', content: 'q' }],
+      { signal: ctrl.signal },
+    );
+    // Abort after a tick so fetch is in-flight
+    queueMicrotask(() => ctrl.abort());
+
+    await expect(promise).rejects.toBeInstanceOf(LlmCancelledError);
+    // Exactly one fetch call: the primary. No fallback.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('streamChat cancellation', () => {
+  it('forwards the caller signal into fetch so upstream gets disconnected', async () => {
+    let receivedSignal: AbortSignal | null = null;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      receivedSignal = init?.signal ?? null;
+      return new Response('ok', { status: 200 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { streamChat } = await loadRouter();
+
+    const ctrl = new AbortController();
+    await streamChat('routine', [{ role: 'user', content: 'q' }], { signal: ctrl.signal });
+    expect(receivedSignal).toBe(ctrl.signal);
+  });
+
+  it('throws LlmCancelledError when signal is pre-aborted', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { streamChat, LlmCancelledError } = await loadRouter();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      streamChat('routine', [{ role: 'user', content: 'q' }], { signal: ctrl.signal }),
+    ).rejects.toBeInstanceOf(LlmCancelledError);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

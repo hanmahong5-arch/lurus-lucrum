@@ -18,6 +18,7 @@ export {
   getChatModel,
   loadGatewayConfig,
   TASK_PROFILES,
+  LlmCancelledError,
 } from './router';
 export type {
   ChatMessage,

@@ -13,7 +13,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth/auth';
 import { checkUsage, incrementUsage } from '@/lib/middleware/usage-tracker';
 import { findPopularStrategyByKey, upsertPopularStrategy } from '@/lib/db/queries';
-import { chatComplete, loadGatewayConfig } from '@/lib/llm';
+import { chatComplete, loadGatewayConfig, LlmCancelledError } from '@/lib/llm';
 
 // Approximate tokens per character (rough estimate for cache savings display)
 const TOKENS_PER_CHAR = 0.4;
@@ -174,9 +174,12 @@ export async function POST(request: NextRequest) {
             content: `请根据以下策略描述生成 VeighNa CTA 策略代码：\n\n${prompt}`,
           },
         ],
-        { temperature: 0.3, maxTokens: 2000 },
+        { temperature: 0.3, maxTokens: 2000, signal: request.signal },
       );
     } catch (err) {
+      if (err instanceof LlmCancelledError) {
+        return new NextResponse(null, { status: 499 });
+      }
       console.error('[strategy/generate] LLM error:', err);
       return NextResponse.json(
         {

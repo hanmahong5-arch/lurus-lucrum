@@ -16,12 +16,20 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { loadGatewayConfig, TASK_PROFILES } from './config';
 import { makeTelemetryRecorder } from './observability';
-import type { TaskClass, TaskProfile } from './types';
+import { LlmCancelledError, type TaskClass, type TaskProfile } from './types';
 
 export interface ModelOverrides {
   readonly temperature?: number;
   readonly maxTokens?: number;
   readonly streaming?: boolean;
+  /**
+   * Caller-owned AbortSignal. When it aborts, the upstream gateway request is
+   * cancelled and the call rejects with `LlmCancelledError` — *without* trying
+   * the fallback chain (a user-cancel is not a model failure). For Next.js
+   * App Router callers this should be `request.signal` so closing the tab
+   * stops burning tokens upstream.
+   */
+  readonly signal?: AbortSignal;
 }
 
 function resolveProfile(taskClass: TaskClass, overrides?: ModelOverrides): TaskProfile {
@@ -115,9 +123,28 @@ async function postChat(
   apiKey: string,
   body: Record<string, unknown>,
   timeoutMs: number,
+  externalSignal?: AbortSignal,
 ): Promise<OpenAIChatResponse> {
+  // Short-circuit if the caller is already gone — avoids burning a TCP setup.
+  if (externalSignal?.aborted) {
+    throw new LlmCancelledError('caller already aborted');
+  }
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  const onExt = (): void => ctrl.abort();
+  externalSignal?.addEventListener('abort', onExt, { once: true });
+
+  // Race fix: if the external signal aborted between our pre-check above and
+  // addEventListener (the listener spec doesn't replay past events), force the
+  // abort manually before we fire the request.
+  if (externalSignal?.aborted) {
+    ctrl.abort();
+    externalSignal.removeEventListener('abort', onExt);
+    clearTimeout(timer);
+    throw new LlmCancelledError('caller aborted before fetch');
+  }
+
   try {
     const res = await fetch(`${baseURL}/chat/completions`, {
       method: 'POST',
@@ -133,8 +160,18 @@ async function postChat(
       throw new Error(`gateway ${res.status}: ${text.slice(0, 200)}`);
     }
     return (await res.json()) as OpenAIChatResponse;
+  } catch (err) {
+    // External cancel must surface as LlmCancelledError so the caller skips
+    // the fallback chain. The fetch will have rejected with AbortError;
+    // we trust externalSignal.aborted as the disambiguator (timer aborts
+    // don't set externalSignal.aborted).
+    if (externalSignal?.aborted) {
+      throw new LlmCancelledError('caller aborted mid-flight');
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onExt);
   }
 }
 
@@ -166,6 +203,7 @@ export async function chatComplete(
         stream: false,
       },
       timeoutMs,
+      overrides?.signal,
     );
 
   try {
@@ -187,6 +225,13 @@ export async function chatComplete(
       fallbackUsed: false,
     };
   } catch (primaryErr) {
+    // Caller-initiated cancel: do NOT try fallback. Falling back to a cheaper
+    // model after the user closed the tab would be both useless (no one reads
+    // the result) and wasteful (more tokens billed). Surface as cancelled.
+    if (primaryErr instanceof LlmCancelledError) {
+      tel.record({ success: false, cancelled: true, error: null });
+      throw primaryErr;
+    }
     if (!profile.fallback) {
       tel.record({ success: false, error: String(primaryErr) });
       throw primaryErr;
@@ -212,6 +257,11 @@ export async function chatComplete(
         fallbackUsed: true,
       };
     } catch (fbErr) {
+      // Even mid-fallback the caller may abort. Same rule: not an error.
+      if (fbErr instanceof LlmCancelledError) {
+        tel.record({ success: false, cancelled: true, error: null });
+        throw fbErr;
+      }
       tel.record({ success: false, error: `primary=${primaryErr}; fallback=${fbErr}` });
       throw fbErr;
     }
@@ -235,23 +285,40 @@ export async function streamChat(
   }
   const profile = resolveProfile(taskClass, overrides);
   // No wall-clock abort for streams — reasoning replies can legitimately run
-  // for minutes. Newapi enforces its own STREAMING_TIMEOUT (300s) upstream,
-  // and the client's fetch will surface idle disconnects via res.body.
-  return fetch(`${cfg.baseURL}/chat/completions?lucrum_task=${taskClass}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${cfg.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: profile.model,
-      messages,
-      temperature: profile.temperature,
-      max_tokens: profile.maxTokens,
-      stream: true,
-    }),
-  });
+  // for minutes. Newapi enforces its own STREAMING_TIMEOUT (300s) upstream.
+  // The caller's signal (typically `request.signal` in a Next.js route) is
+  // forwarded so a closed tab tears down the upstream socket promptly,
+  // stopping the gateway from generating tokens nobody will read. If the
+  // caller's signal aborts before fetch returns, fetch rejects with an
+  // AbortError — surface it as `LlmCancelledError` so the route handler can
+  // distinguish from a server-side failure.
+  if (overrides?.signal?.aborted) {
+    throw new LlmCancelledError('caller already aborted');
+  }
+  try {
+    return await fetch(`${cfg.baseURL}/chat/completions?lucrum_task=${taskClass}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${cfg.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: profile.model,
+        messages,
+        temperature: profile.temperature,
+        max_tokens: profile.maxTokens,
+        stream: true,
+      }),
+      signal: overrides?.signal,
+    });
+  } catch (err) {
+    if (overrides?.signal?.aborted) {
+      throw new LlmCancelledError('caller aborted before stream began');
+    }
+    throw err;
+  }
 }
 
 export { loadGatewayConfig, TASK_PROFILES };
+export { LlmCancelledError } from './types';
 export type { TaskClass };

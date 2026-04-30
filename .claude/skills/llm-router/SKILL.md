@@ -110,6 +110,29 @@ LLM_API_KEY=<token> bun run lucrum-web/scripts/smoke-llm-router.ts
 
 输出三档 class 的 round-trip + 模型实际 + token 用量。任一失败立刻退非零。
 
+## 8.5 Cancellation 契约（**2026-04-30 加固**）
+
+**问题**: `streamChat` 之前没接 caller signal — 用户关 tab 后，upstream newapi 还会跑到自身 STREAMING_TIMEOUT (300s) 才停，这 5 分钟全是无人读的 token，是真钱。`chatComplete` 同理。
+
+**契约**:
+- `ModelOverrides.signal?: AbortSignal` 现在是一等公民
+- API route 调用时**必须**传 `request.signal`：
+  ```typescript
+  await chatComplete('analytic', msgs, { signal: request.signal });
+  await streamChat('analytic', msgs, { signal: request.signal });
+  ```
+- caller signal abort → fetch socket 立即关 → newapi 端见到 client disconnect → 停止 generation
+- 抛出 `LlmCancelledError`（区别于 fetch 错误），调用方 catch 时:
+  ```typescript
+  if (err instanceof LlmCancelledError) {
+    return new NextResponse(null, { status: 499 }); // nginx convention
+  }
+  ```
+- **重要**: cancel 时**不**走 fallback 链。理由：用户已经走了，再降级到便宜模型只会多烧 token，没人读。这是 router 的硬规则。
+- Telemetry 里 `cancelled:true, error:null, success:false`。监控 error rate 应过滤 `cancelled=false` 否则关 tab 高峰会显假错误。
+
+**未覆盖**: `getChatModel` (LangChain ChatOpenAI) 暂不接 signal — 因为 LangGraph 的 stateful 流转里一个 graph 通常会发起多个 LLM 调用，逐个 abort 是 graph 层的责任，不是 router 的。如果未来 agent 路径长得离谱，再考虑 graph-level cancellation。
+
 ## 9. 已知 newapi side issue
 
 `deepseek-reasoner` 在当前 newapi channel 配置下被 alias 到 `deepseek-v4-flash`（看 telemetry 里 modelActual）。这是 newapi 后台 channel 路由配置，不是 router bug。要让 reasoning class 真正走 R1 时，去 `https://newapi.lurus.cn/console` 加一个 deepseek-reasoner → 真实 endpoint 的 channel。

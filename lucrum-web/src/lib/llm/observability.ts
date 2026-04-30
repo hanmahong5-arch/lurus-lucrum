@@ -41,6 +41,7 @@ export function makeTelemetryRecorder(taskClass: LlmCallTelemetry['taskClass'], 
         success: partial.success ?? false,
         error: partial.error ?? null,
         fallbackUsed,
+        cancelled: partial.cancelled ?? false,
       });
     },
   };

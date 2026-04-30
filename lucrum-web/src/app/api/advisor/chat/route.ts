@@ -30,7 +30,7 @@ import { checkAndConsumeQuota, consumeQuota, resolveAccountId } from "@/lib/midd
 import { recordUserEvent } from "@/lib/db/queries";
 import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
 import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memorus-client";
-import { streamChat, chatComplete, loadGatewayConfig, type TaskClass } from "@/lib/llm";
+import { streamChat, chatComplete, loadGatewayConfig, LlmCancelledError, type TaskClass } from "@/lib/llm";
 
 // Pick a task class per advisor mode. quick = cheap fast model; deep / debate
 // = analytic tier; diagnose involves multi-hop fault reasoning so it gets the
@@ -336,7 +336,14 @@ export async function POST(request: NextRequest) {
 
     // Handle streaming response
     if (stream) {
-      const response = await streamChat(taskClass, messages, { temperature, maxTokens });
+      // Forward request.signal so closing the tab tears down the upstream
+      // newapi socket — otherwise the gateway keeps generating tokens until
+      // its own STREAMING_TIMEOUT (300s) fires, all of which we pay for.
+      const response = await streamChat(taskClass, messages, {
+        temperature,
+        maxTokens,
+        signal: request.signal,
+      });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
         console.error("[Advisor API] LLM error:", response.status, errorText);
@@ -418,8 +425,18 @@ export async function POST(request: NextRequest) {
     // Handle non-streaming response via the central router.
     let completion;
     try {
-      completion = await chatComplete(taskClass, messages, { temperature, maxTokens });
+      completion = await chatComplete(taskClass, messages, {
+        temperature,
+        maxTokens,
+        signal: request.signal,
+      });
     } catch (err) {
+      // Caller cancelled (tab closed): no response shape needed — the client
+      // already disconnected. Bail with 499 (nginx convention for client-
+      // closed-request) so downstream metrics don't paint this as a 5xx.
+      if (err instanceof LlmCancelledError) {
+        return new NextResponse(null, { status: 499 });
+      }
       console.error("[Advisor API] LLM error:", err);
       return NextResponse.json(
         {
