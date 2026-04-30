@@ -14,6 +14,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -41,6 +42,9 @@ import {
   CONVERSATION_TOKEN_BUDGET,
 } from "@/lib/advisor/token-tracker";
 import { showToast } from "@/lib/toast";
+import { ErrorCard } from "@/components/ui/error-card";
+import { toAppError, parseApiError } from "@/lib/errors/error-types";
+import type { AppError, RecoveryAction } from "@/lib/errors/error-types";
 
 // Import types and utilities
 import type {
@@ -204,7 +208,8 @@ export function AdvisorChat({
       ? { ...getDefaultAdvisorContext(), ...initialContext }
       : getDefaultAdvisorContext(),
   );
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
+  const router = useRouter();
   const [showSettings, setShowSettings] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [debateSession, setDebateSession] = useState<DebateSession | null>(
@@ -424,7 +429,16 @@ export function AdvisorChat({
         },
         onError: (err) => {
           setIsWorkflowRunning(false);
-          setError(`工作流执行失败: ${err}`);
+          setError({
+            code: 'ADVISOR_WORKFLOW',
+            title: '工作流执行失败',
+            description: err,
+            severity: 'error',
+            recoveryActions: [
+              { type: 'retry', label: '重试' },
+              { type: 'custom', label: '换问题' },
+            ],
+          });
         },
       });
     },
@@ -488,10 +502,12 @@ export function AdvisorChat({
         });
 
         if (!response.ok) {
-          const errorData = await response.json().catch(() => ({}));
-          throw new Error(
-            errorData.error || `Server error: ${response.status}`,
-          );
+          // Server already speaks the structured error envelope
+          // ({code,title,description,severity,recoveryActions}); parseApiError
+          // pulls it through into an AppError that ErrorCard can render
+          // directly — no more `[object Object]` in the inline banner.
+          setError(await parseApiError(response, 'ADVISOR_CHAT'));
+          return;
         }
 
         const data = await response.json();
@@ -533,15 +549,31 @@ export function AdvisorChat({
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
+      // Network-level / unexpected throw (couldn't reach server, body parse
+      // failed, etc.). Translate to a user-friendly AppError. We still
+      // disambiguate timeout vs network from the underlying message so the
+      // banner can show targeted recovery copy.
       const msg = err instanceof Error ? err.message : "Failed to get response";
-      const isTimeout = msg.includes('timeout') || msg.includes('TIMEOUT');
-      setError(
-        isTimeout
-          ? 'AI 响应超时，建议简化问题后重试'
-          : msg.includes('fetch') || msg.includes('network')
-            ? '网络连接失败，请检查网络后重试'
-            : `AI 顾问服务出错: ${msg}`
-      );
+      const isTimeout = /timeout/i.test(msg);
+      const isNetwork = /fetch|network/i.test(msg);
+      setError({
+        code: isTimeout ? 'ADVISOR_TIMEOUT' : isNetwork ? 'ADVISOR_NETWORK' : 'ADVISOR_UNKNOWN',
+        title: isTimeout
+          ? 'AI 响应超时'
+          : isNetwork
+            ? '网络连接失败'
+            : 'AI 顾问服务出错',
+        description: isTimeout
+          ? '请求超时，建议简化问题后重试。'
+          : isNetwork
+            ? '与服务器的连接异常，请检查网络后重试。'
+            : msg,
+        severity: 'error',
+        recoveryActions: [
+          { type: 'retry', label: '重试' },
+          { type: 'custom', label: '简化问题' },
+        ],
+      });
       console.error("Advisor chat error:", err);
     } finally {
       setIsLoading(false);
@@ -716,7 +748,16 @@ export function AdvisorChat({
         err instanceof Error ? err.message : "辩论过程中发生未知错误";
 
       // Set error state to display in UI
-      setError(`多空辩论失败: ${errorMessage}`);
+      setError({
+        code: 'ADVISOR_DEBATE',
+        title: '多空辩论失败',
+        description: errorMessage,
+        severity: 'error',
+        recoveryActions: [
+          { type: 'retry', label: '重试' },
+          { type: 'custom', label: '换一种模式' },
+        ],
+      });
 
       // Add error message to chat for user visibility
       const errorChatMessage: Message = {
@@ -813,14 +854,13 @@ export function AdvisorChat({
         })
           .then(async (response) => {
             if (!response.ok) {
-              const errorData = await response.json().catch(() => ({}));
-              throw new Error(
-                errorData.error || `Server error: ${response.status}`
-              );
+              setError(await parseApiError(response, 'ADVISOR_CHAT'));
+              return null;
             }
             return response.json();
           })
           .then((data) => {
+            if (!data) return; // error already set above
             const assistantMessage: Message = {
               id: generateId(),
               role: "assistant",
@@ -841,9 +881,7 @@ export function AdvisorChat({
           })
           .catch((err) => {
             if (err instanceof Error && err.name === "AbortError") return;
-            setError(
-              err instanceof Error ? err.message : "Failed to get response"
-            );
+            setError(toAppError(err, 'ADVISOR_CHAT'));
             console.error("Advisor chat error:", err);
           })
           .finally(() => {
@@ -1114,11 +1152,35 @@ export function AdvisorChat({
           </div>
         )}
 
-        {/* Error display */}
+        {/* Error display — server emits structured AppError shape and the
+            generic ErrorCard renders title + description + recoveryActions
+            with the right severity color. We override onAction so retry
+            re-runs the last user message instead of relying on a useless
+            no-op. */}
         {error && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-3 text-red-400 text-sm">
-            <span className="font-medium">错误：</span> {error}
-          </div>
+          <ErrorCard
+            error={error}
+            onAction={(action: RecoveryAction) => {
+              if (action.type === 'retry') {
+                setError(null);
+                const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+                if (lastUser) {
+                  setInput(lastUser.content);
+                  // User explicitly clicks 重试; immediately re-fire the send.
+                  setTimeout(() => void sendMessage(), 0);
+                }
+                return;
+              }
+              if (action.type === 'navigate' && action.href) {
+                router.push(action.href);
+                return;
+              }
+              // dismiss / custom — just clear the banner; "简化问题" / "换问题"
+              // labels are advisory cues, the actual fix is the user editing
+              // their next message.
+              setError(null);
+            }}
+          />
         )}
 
         <div ref={messagesEndRef} />
