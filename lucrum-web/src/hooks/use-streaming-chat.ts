@@ -157,6 +157,11 @@ export function useStreamingChat(): UseStreamingChatReturn {
         const decoder = new TextDecoder();
         let fullResponse = "";
         let buffer = "";
+        // Track terminal frames separately. The server emits exactly one of
+        // `[DONE]` (clean end) or `{error:{...}}` (terminal failure). If we
+        // see neither and the stream just closes, that's a truncation.
+        let sawDone = false;
+        let streamError: { title?: string; description?: string; code?: string } | null = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -173,32 +178,54 @@ export function useStreamingChat(): UseStreamingChatReturn {
           buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6).trim();
+            if (!line.startsWith("data:")) continue;
+            const data = (line.startsWith("data: ") ? line.slice(6) : line.slice(5)).trim();
 
-              // Check for stream end
-              if (data === "[DONE]") {
-                continue;
-              }
+            if (data === "[DONE]") {
+              sawDone = true;
+              continue;
+            }
 
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.content || "";
+            let parsed: { content?: string; error?: { title?: string; description?: string; code?: string } };
+            try {
+              parsed = JSON.parse(data);
+            } catch {
+              continue;
+            }
 
-                if (content) {
-                  fullResponse += content;
-                  setCurrentResponse(fullResponse);
-                  onChunk?.(content);
-                }
-              } catch {
-                // Skip invalid JSON
-              }
+            // Terminal error frame from server (mid-stream upstream failure
+            // or truncation). Stop accumulating and surface to caller.
+            if (parsed.error) {
+              streamError = parsed.error;
+              break;
+            }
+
+            const content = parsed.content || "";
+            if (content) {
+              fullResponse += content;
+              setCurrentResponse(fullResponse);
+              onChunk?.(content);
             }
           }
+
+          if (streamError) break;
         }
 
-        // Add complete assistant message
-        if (fullResponse) {
+        if (streamError) {
+          // Mid-stream failure: don't save partial response as a "message" —
+          // it's misleading. Surface as an error and let the user retry.
+          const msg = streamError.description || streamError.title || streamError.code || "AI 服务异常";
+          setError(msg);
+          setCurrentResponse("");
+          onError?.(new Error(msg));
+        } else if (fullResponse) {
+          if (!sawDone) {
+            // Connection closed without [DONE] *and* without an explicit
+            // error frame — likely a network drop after the server already
+            // wrote partial output. Save what we have but flag truncation
+            // so the UI can offer "继续" / retry chrome.
+            console.warn("[StreamingChat] Stream closed without [DONE] marker — possible truncation");
+          }
           const assistantMessage: ChatMessage = {
             role: "assistant",
             content: fullResponse,
@@ -207,6 +234,12 @@ export function useStreamingChat(): UseStreamingChatReturn {
           setMessages((prev) => [...prev, assistantMessage]);
           setCurrentResponse("");
           onComplete?.(fullResponse);
+        } else if (!sawDone) {
+          // No content, no [DONE], no explicit error — surface as a generic
+          // failure rather than letting the user stare at silence.
+          const msg = "AI 未返回响应，请重试";
+          setError(msg);
+          onError?.(new Error(msg));
         }
       } catch (err) {
         if (err instanceof Error && err.name === "AbortError") {

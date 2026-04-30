@@ -133,6 +133,35 @@ LLM_API_KEY=<token> bun run lucrum-web/scripts/smoke-llm-router.ts
 
 **未覆盖**: `getChatModel` (LangChain ChatOpenAI) 暂不接 signal — 因为 LangGraph 的 stateful 流转里一个 graph 通常会发起多个 LLM 调用，逐个 abort 是 graph 层的责任，不是 router 的。如果未来 agent 路径长得离谱，再考虑 graph-level cancellation。
 
+## 8.6 SSE 流错误翻译（**2026-04-30 加固**）
+
+**问题**: 之前 `/api/advisor/chat` 直接 `pipeThrough(TransformStream)`，三个坑:
+1. 跨 chunk 切的 `data: {…}` JSON.parse 失败被静默吞掉，丢字
+2. newapi 流到一半 `data: {"error":...}` 时 UI 看不到错误，假死
+3. upstream socket 在 `[DONE]` 之前断了，UI 当成"答完了"显示半截答案
+
+**方案**: `src/lib/llm/sse-transform.ts` 做统一翻译层。下游协议:
+```
+data: {"content":"…"}\n\n          (token 流)
+data: {"error":{code,title,description,severity,recoveryActions}}\n\n   (终止错误)
+data: [DONE]\n\n                    (干净结束)
+```
+
+`error` payload 形状跟 JSON-route error 一模一样，UI 可以共用 banner 渲染。
+
+**关键判断**:
+- upstream 的 `data:` JSON 里有 `error` 字段 → 翻译为 `ADVISOR_STREAM_GATEWAY` 错误帧并立即关流
+- upstream 流断没 `[DONE]` → 翻译为 `ADVISOR_STREAM_TRUNCATED`
+- upstream `controller.error()` (socket 断) → 翻译为 `ADVISOR_STREAM_IO`
+- caller signal 已 abort → 静默关流（no error frame，因为 UI 已经走了，发也没人看）
+
+**UI 端**: `src/hooks/use-streaming-chat.ts` 现在认 `parsed.error`：
+- 见到 `error` 字段 → 不把 partial response 当 message 存（误导用户）→ setError + onError
+- 流结束没 `sawDone` 也没 error → console.warn，可能是网络层 truncation
+- 完全没内容、没 done、没 error → 显式报"AI 未返回响应"
+
+**测试**: `sse-transform.test.ts` 8 个 case 覆盖 cross-chunk buffer / mid-stream error / truncation / IO error / pre-aborted / `data:` 无空格变体 / 非-data 行忽略。
+
 ## 9. 已知 newapi side issue
 
 `deepseek-reasoner` 在当前 newapi channel 配置下被 alias 到 `deepseek-v4-flash`（看 telemetry 里 modelActual）。这是 newapi 后台 channel 路由配置，不是 router bug。要让 reasoning class 真正走 R1 时，去 `https://newapi.lurus.cn/console` 加一个 deepseek-reasoner → 真实 endpoint 的 channel。

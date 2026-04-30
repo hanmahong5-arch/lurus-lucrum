@@ -31,6 +31,7 @@ import { recordUserEvent } from "@/lib/db/queries";
 import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
 import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memorus-client";
 import { streamChat, chatComplete, loadGatewayConfig, LlmCancelledError, type TaskClass } from "@/lib/llm";
+import { translateUpstreamSseStream } from "@/lib/llm/sse-transform";
 
 // Pick a task class per advisor mode. quick = cheap fast model; deep / debate
 // = analytic tier; diagnose involves multi-hop fault reasoning so it gets the
@@ -368,49 +369,32 @@ export async function POST(request: NextRequest) {
       const responseTime = Date.now() - startTime;
       console.log(`[Advisor API] Streaming started in ${responseTime}ms (task=${taskClass})`);
 
-      // Create a TransformStream to process SSE data
-      // 创建 TransformStream 处理 SSE 数据
-      const encoder = new TextEncoder();
-      const decoder = new TextDecoder();
+      if (!response.body) {
+        // newapi returned 200 with no body — extremely rare, but treat as a
+        // server-side error rather than silently emitting an empty stream.
+        return NextResponse.json(
+          {
+            error: {
+              code: 'ADVISOR_LLM',
+              title: 'AI 顾问响应失败',
+              description: 'AI 服务返回了空响应，请稍后重试',
+              severity: 'error',
+              recoveryActions: [{ type: 'retry', label: '重试' }],
+            },
+          },
+          { status: 502 },
+        );
+      }
 
-      const transformStream = new TransformStream({
-        transform(chunk, controller) {
-          const text = decoder.decode(chunk, { stream: true });
-          const lines = text.split("\n");
-
-          for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const data = line.slice(6);
-
-              // Check for stream end
-              if (data === "[DONE]") {
-                controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-                continue;
-              }
-
-              try {
-                const parsed = JSON.parse(data);
-                const content = parsed.choices?.[0]?.delta?.content || "";
-
-                if (content) {
-                  // Send content as SSE event
-                  // 将内容作为 SSE 事件发送
-                  const sseData = JSON.stringify({ content });
-                  controller.enqueue(encoder.encode(`data: ${sseData}\n\n`));
-                }
-              } catch {
-                // Skip invalid JSON
-              }
-            }
-          }
-        },
+      // Re-frame the upstream SSE: cross-chunk line buffering, mid-stream
+      // upstream errors translated to canonical `data:{error:{...}}` frames,
+      // truncation (close without [DONE]) surfaced as a stream-truncated
+      // error. See `src/lib/llm/sse-transform.ts` for the protocol.
+      const downstream = translateUpstreamSseStream(response.body, {
+        signal: request.signal,
       });
 
-      // Pipe the response through our transform
-      // 通过我们的转换器管道响应
-      const streamResponse = response.body?.pipeThrough(transformStream);
-
-      return new Response(streamResponse, {
+      return new Response(downstream, {
         headers: {
           "Content-Type": "text/event-stream",
           "Cache-Control": "no-cache",
