@@ -214,6 +214,83 @@ describe('chatComplete cancellation', () => {
   });
 });
 
+describe('maxTokens floor', () => {
+  it('respects an override at or above the floor', async () => {
+    const captured: Array<{ max_tokens?: number }> = [];
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { max_tokens: number };
+      captured.push(body);
+      return new Response(
+        JSON.stringify({
+          model: 'deepseek-v4-pro',
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 5 },
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete } = await loadRouter();
+    await chatComplete('analytic', [{ role: 'user', content: 'q' }], { maxTokens: 4096 });
+    expect(captured[0]?.max_tokens).toBe(4096);
+  });
+
+  it('raises a sub-floor analytic override to minMaxTokens and warns', async () => {
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const captured: Array<{ max_tokens?: number }> = [];
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body)) as { max_tokens: number };
+      captured.push(body);
+      return new Response(
+        JSON.stringify({
+          model: 'deepseek-v4-pro',
+          choices: [{ message: { content: 'ok' } }],
+          usage: { total_tokens: 5 },
+        }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete, TASK_PROFILES } = await loadRouter();
+    await chatComplete('analytic', [{ role: 'user', content: 'q' }], { maxTokens: 100 });
+    expect(captured[0]?.max_tokens).toBe(TASK_PROFILES.analytic.minMaxTokens);
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain('floor');
+  });
+
+  it('coerces NaN / negative maxTokens to the floor', async () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const captured: Array<{ max_tokens?: number }> = [];
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      captured.push(JSON.parse(String(init?.body)) as { max_tokens: number });
+      return new Response(
+        JSON.stringify({ model: 'x', choices: [{ message: { content: 'ok' } }] }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete, TASK_PROFILES } = await loadRouter();
+    await chatComplete('reasoning', [{ role: 'user', content: 'q' }], { maxTokens: -50 });
+    expect(captured[0]?.max_tokens).toBe(TASK_PROFILES.reasoning.minMaxTokens);
+  });
+
+  it('routine class accepts a much smaller override (lower floor)', async () => {
+    const captured: Array<{ max_tokens?: number }> = [];
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      captured.push(JSON.parse(String(init?.body)) as { max_tokens: number });
+      return new Response(
+        JSON.stringify({ model: 'x', choices: [{ message: { content: 'ok' } }] }),
+        { status: 200 },
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete } = await loadRouter();
+    // routine floor is intentionally low (no CoT model); 128 should pass through.
+    await chatComplete('routine', [{ role: 'user', content: 'q' }], { maxTokens: 128 });
+    expect(captured[0]?.max_tokens).toBe(128);
+  });
+});
+
 describe('streamChat cancellation', () => {
   it('forwards the caller signal into fetch so upstream gets disconnected', async () => {
     let receivedSignal: AbortSignal | null = null;

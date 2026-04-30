@@ -22,9 +22,23 @@ export function emitLlmTelemetry(t: LlmCallTelemetry): void {
   );
 }
 
-export function makeTelemetryRecorder(taskClass: LlmCallTelemetry['taskClass'], modelRequested: string) {
+export interface RecorderOptions {
+  /**
+   * Sticky flag set at recorder construction (the floor decision is made
+   * before the call begins, doesn't change across success/fallback paths,
+   * and we don't want to forget to thread it through every `record()` call).
+   */
+  readonly maxTokensFloored?: boolean;
+}
+
+export function makeTelemetryRecorder(
+  taskClass: LlmCallTelemetry['taskClass'],
+  modelRequested: string,
+  options?: RecorderOptions,
+) {
   const start = Date.now();
   let fallbackUsed = false;
+  const maxTokensFloored = options?.maxTokensFloored ?? false;
   return {
     markFallback() {
       fallbackUsed = true;
@@ -42,6 +56,7 @@ export function makeTelemetryRecorder(taskClass: LlmCallTelemetry['taskClass'], 
         error: partial.error ?? null,
         fallbackUsed,
         cancelled: partial.cancelled ?? false,
+        maxTokensFloored,
       });
     },
   };

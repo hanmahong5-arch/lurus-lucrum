@@ -32,13 +32,41 @@ export interface ModelOverrides {
   readonly signal?: AbortSignal;
 }
 
-function resolveProfile(taskClass: TaskClass, overrides?: ModelOverrides): TaskProfile {
+interface ResolvedProfile extends TaskProfile {
+  /** True when the caller-supplied maxTokens was clamped up to minMaxTokens. */
+  readonly maxTokensFloored: boolean;
+}
+
+function resolveProfile(taskClass: TaskClass, overrides?: ModelOverrides): ResolvedProfile {
   const base = TASK_PROFILES[taskClass];
-  if (!overrides) return base;
+  if (!overrides || overrides.maxTokens === undefined) {
+    return { ...base, maxTokensFloored: false };
+  }
+  // Validate + floor the override. NaN, negative, sub-floor → use the floor.
+  // The base default (`base.maxTokens`) is never below the floor by design,
+  // so the *override* is the only path through which we'd ever go too small.
+  const requested = overrides.maxTokens;
+  let resolved: number;
+  let floored = false;
+  if (!Number.isFinite(requested) || requested < base.minMaxTokens) {
+    resolved = base.minMaxTokens;
+    floored = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[llm-router] maxTokens=${requested} for taskClass=${taskClass} is below the documented ` +
+        `floor (${base.minMaxTokens}); auto-raising to ${base.minMaxTokens}. ` +
+        `Setting tiny budgets on this class typically yields empty content because ` +
+        `the model's reasoning_content consumes the whole budget. ` +
+        `If you want a fast cheap call, use taskClass='routine' instead of overriding.`,
+    );
+  } else {
+    resolved = requested;
+  }
   return {
     ...base,
     temperature: overrides.temperature ?? base.temperature,
-    maxTokens: overrides.maxTokens ?? base.maxTokens,
+    maxTokens: resolved,
+    maxTokensFloored: floored,
   };
 }
 
@@ -189,7 +217,9 @@ export async function chatComplete(
     throw new Error('LLM gateway key not configured (set LLM_API_KEY)');
   }
   const profile = resolveProfile(taskClass, overrides);
-  const tel = makeTelemetryRecorder(taskClass, profile.model);
+  const tel = makeTelemetryRecorder(taskClass, profile.model, {
+    maxTokensFloored: profile.maxTokensFloored,
+  });
 
   const attempt = async (model: string, timeoutMs: number) =>
     postChat(

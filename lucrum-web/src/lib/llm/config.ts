@@ -73,6 +73,11 @@ export const TASK_PROFILES: Readonly<Record<TaskClass, TaskProfile>> = {
     model: process.env.LLM_MODEL_ROUTINE ?? 'deepseek-chat',
     temperature: 0.3,
     maxTokens: 1024,
+    // routine = deepseek-chat (no CoT alias). A tiny budget just truncates
+    // the answer; it doesn't trigger the empty-content trap. Pick a floor
+    // generous enough for a usable short reply but not so high it wastes
+    // budget on classification calls.
+    minMaxTokens: 64,
     timeoutMs: 30_000,
   },
   analytic: {
@@ -81,6 +86,10 @@ export const TASK_PROFILES: Readonly<Record<TaskClass, TaskProfile>> = {
     // V4 burns several hundred tokens on reasoning_content; leave 4-6K for
     // the user-facing content after that.
     maxTokens: 8192,
+    // Below this the V4 reasoning_content alone often consumes the whole
+    // budget, leaving content empty. Documented in the llm-router skill;
+    // now enforced here.
+    minMaxTokens: 1024,
     timeoutMs: 90_000,
     fallback: 'routine',
   },
@@ -90,6 +99,8 @@ export const TASK_PROFILES: Readonly<Record<TaskClass, TaskProfile>> = {
     temperature: 0,
     // R1 routinely produces 4-8K of CoT before the final answer.
     maxTokens: 16384,
+    // Same justification as analytic — and reasoner is even more CoT-heavy.
+    minMaxTokens: 1024,
     timeoutMs: 240_000,
     fallback: 'analytic',
   },

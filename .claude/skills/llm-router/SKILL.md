@@ -162,6 +162,29 @@ data: [DONE]\n\n                    (干净结束)
 
 **测试**: `sse-transform.test.ts` 8 个 case 覆盖 cross-chunk buffer / mid-stream error / truncation / IO error / pre-aborted / `data:` 无空格变体 / 非-data 行忽略。
 
+## 8.7 maxTokens 守门员（**2026-04-30 加固**）
+
+§4 提到的 V4 reasoning_content 吃光预算的坑，之前只在 skill 里口头警告。现在 router 强制：
+
+| Class | default maxTokens | minMaxTokens (floor) |
+|-------|------:|------:|
+| routine | 1024 | 64 |
+| analytic | 8192 | 1024 |
+| reasoning | 16384 | 1024 |
+
+**行为**: 调用者 override `maxTokens` 低于 floor 时:
+- 自动上调到 floor（不抛错，避免一个粗心覆盖把 route 打挂）
+- `console.warn` 一次，附带 hint："想要快/便宜，用 `taskClass='routine'`"
+- Telemetry 加 `maxTokensFloored:true`，监控可以 grep `maxTokensFloored=true` 找出被默默修过的调用
+
+**设计取舍**: 抛错 vs warn-floor。选 warn-floor 是因为：
+- 抛错: 一次粗心修改让上线挂了，UI 收到 502
+- warn-floor: 调用 OK，监控能发现，开发后续修
+
+NaN / 负数 / Infinity 一律视作 < floor。
+
+**未覆盖**: routine class 的 minMaxTokens=64 偏低，理论上 64 token 也能触发尾部截断。但 routine 是 deepseek-chat 直答模式无 CoT，截断的就是用户答案本身，不会出现"内部独白把预算吃光"的现象，可接受。
+
 ## 9. 已知 newapi side issue
 
 `deepseek-reasoner` 在当前 newapi channel 配置下被 alias 到 `deepseek-v4-flash`（看 telemetry 里 modelActual）。这是 newapi 后台 channel 路由配置，不是 router bug。要让 reasoning class 真正走 R1 时，去 `https://newapi.lurus.cn/console` 加一个 deepseek-reasoner → 真实 endpoint 的 channel。

@@ -23,6 +23,16 @@ export interface TaskProfile {
   readonly maxTokens: number;
   readonly timeoutMs: number;
   readonly fallback?: TaskClass;
+  /**
+   * Hard floor on `maxTokens` — caller-supplied overrides below this are
+   * silently raised to this value (with a warn log + `maxTokensFloored:true`
+   * telemetry flag). Exists to defend against the DeepSeek V4 reasoning_content
+   * trap: the model burns several hundred tokens of CoT before emitting any
+   * `content`, so a tiny budget yields an empty user-facing answer with
+   * `finish_reason:"length"`. Routine class can take a much lower floor since
+   * `deepseek-chat` is the no-CoT direct-answer alias.
+   */
+  readonly minMaxTokens: number;
 }
 
 export interface LlmCallTelemetry {
@@ -40,6 +50,10 @@ export interface LlmCallTelemetry {
   // request.signal fired) — distinguished from server-side errors so that
   // monitoring can compute error rate as `success=false AND cancelled=false`.
   readonly cancelled: boolean;
+  // True iff the caller-supplied `maxTokens` was below the task class's
+  // documented floor and the router auto-raised it. Useful for grepping
+  // out call sites that would otherwise silently produce empty content.
+  readonly maxTokensFloored: boolean;
 }
 
 /**
