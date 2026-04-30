@@ -30,6 +30,16 @@ export interface ModelOverrides {
    * stops burning tokens upstream.
    */
   readonly signal?: AbortSignal;
+  /**
+   * Free-form caller identifier surfaced in telemetry as the `caller` field.
+   * Convention: `<feature>.<route>[:<sub-mode>]`. Examples:
+   *   `advisor.chat:diagnose`     — diagnose-mode chat in advisor
+   *   `advisor.debate:argument`   — bull/bear argument generation
+   *   `strategy.generate`         — strategy code generation
+   * Lets ops attribute newapi spend / fallback rate / cancel rate to a
+   * specific UI surface without crawling stack traces.
+   */
+  readonly caller?: string;
 }
 
 interface ResolvedProfile extends TaskProfile {
@@ -219,6 +229,7 @@ export async function chatComplete(
   const profile = resolveProfile(taskClass, overrides);
   const tel = makeTelemetryRecorder(taskClass, profile.model, {
     maxTokensFloored: profile.maxTokensFloored,
+    caller: overrides?.caller ?? null,
   });
 
   const attempt = async (model: string, timeoutMs: number) =>

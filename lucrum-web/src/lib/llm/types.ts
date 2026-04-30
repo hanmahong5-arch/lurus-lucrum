@@ -54,6 +54,15 @@ export interface LlmCallTelemetry {
   // documented floor and the router auto-raised it. Useful for grepping
   // out call sites that would otherwise silently produce empty content.
   readonly maxTokensFloored: boolean;
+  /**
+   * Free-form caller identifier — convention is `<feature>.<route>[:<sub-mode>]`,
+   * e.g. `advisor.chat:diagnose`, `advisor.debate:argument`, `strategy.generate`.
+   * Lets ops grep `caller="advisor.chat:diagnose"` to attribute newapi
+   * spend / latency / fallback rate to a specific UI surface, without
+   * crawling every route's stack trace. Null when caller didn't pass one
+   * (legacy or library-internal calls).
+   */
+  readonly caller: string | null;
 }
 
 /**

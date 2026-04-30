@@ -291,6 +291,67 @@ describe('maxTokens floor', () => {
   });
 });
 
+describe('caller telemetry', () => {
+  it('emits caller=null when not supplied', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ model: 'x', choices: [{ message: { content: 'ok' } }] }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete } = await loadRouter();
+    await chatComplete('routine', [{ role: 'user', content: 'q' }]);
+    expect(logSpy).toHaveBeenCalled();
+    const line = logSpy.mock.calls[0]?.[0];
+    expect(typeof line).toBe('string');
+    const parsed = JSON.parse(String(line)) as { caller: unknown };
+    expect(parsed.caller).toBeNull();
+  });
+
+  it('plumbs caller string through to telemetry', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fetchMock = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ model: 'x', choices: [{ message: { content: 'ok' } }] }),
+        { status: 200 },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete } = await loadRouter();
+    await chatComplete('routine', [{ role: 'user', content: 'q' }], {
+      caller: 'advisor.chat:diagnose',
+    });
+    const line = logSpy.mock.calls[0]?.[0];
+    const parsed = JSON.parse(String(line)) as { caller: string };
+    expect(parsed.caller).toBe('advisor.chat:diagnose');
+  });
+
+  it('preserves caller across the fallback chain', async () => {
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response('boom', { status: 500 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({ model: 'x', choices: [{ message: { content: 'ok' } }] }),
+          { status: 200 },
+        ),
+      );
+    vi.stubGlobal('fetch', fetchMock);
+    const { chatComplete } = await loadRouter();
+    await chatComplete('analytic', [{ role: 'user', content: 'q' }], {
+      caller: 'strategy.generate',
+    });
+    // record() fires once at end; should reflect caller and fallbackUsed=true
+    const line = logSpy.mock.calls[0]?.[0];
+    const parsed = JSON.parse(String(line)) as { caller: string; fallbackUsed: boolean };
+    expect(parsed.caller).toBe('strategy.generate');
+    expect(parsed.fallbackUsed).toBe(true);
+  });
+});
+
 describe('streamChat cancellation', () => {
   it('forwards the caller signal into fetch so upstream gets disconnected', async () => {
     let receivedSignal: AbortSignal | null = null;

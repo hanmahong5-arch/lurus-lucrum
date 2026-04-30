@@ -29,6 +29,8 @@ export interface RecorderOptions {
    * and we don't want to forget to thread it through every `record()` call).
    */
   readonly maxTokensFloored?: boolean;
+  /** Sticky caller identifier — see ModelOverrides.caller in router.ts. */
+  readonly caller?: string | null;
 }
 
 export function makeTelemetryRecorder(
@@ -39,6 +41,7 @@ export function makeTelemetryRecorder(
   const start = Date.now();
   let fallbackUsed = false;
   const maxTokensFloored = options?.maxTokensFloored ?? false;
+  const caller = options?.caller ?? null;
   return {
     markFallback() {
       fallbackUsed = true;
@@ -57,6 +60,7 @@ export function makeTelemetryRecorder(
         fallbackUsed,
         cancelled: partial.cancelled ?? false,
         maxTokensFloored,
+        caller,
       });
     },
   };

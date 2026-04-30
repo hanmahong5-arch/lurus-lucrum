@@ -344,6 +344,7 @@ export async function POST(request: NextRequest) {
         temperature,
         maxTokens,
         signal: request.signal,
+        caller: `advisor.chat:${mode}`,
       });
       if (!response.ok) {
         const errorText = await response.text().catch(() => "Unknown error");
@@ -413,6 +414,7 @@ export async function POST(request: NextRequest) {
         temperature,
         maxTokens,
         signal: request.signal,
+        caller: `advisor.chat:${mode}`,
       });
     } catch (err) {
       // Caller cancelled (tab closed): no response shape needed — the client

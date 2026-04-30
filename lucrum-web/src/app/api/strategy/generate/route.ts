@@ -174,7 +174,7 @@ export async function POST(request: NextRequest) {
             content: `请根据以下策略描述生成 VeighNa CTA 策略代码：\n\n${prompt}`,
           },
         ],
-        { temperature: 0.3, maxTokens: 2000, signal: request.signal },
+        { temperature: 0.3, maxTokens: 2000, signal: request.signal, caller: 'strategy.generate' },
       );
     } catch (err) {
       if (err instanceof LlmCancelledError) {

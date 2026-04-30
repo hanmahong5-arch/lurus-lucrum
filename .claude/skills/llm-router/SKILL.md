@@ -185,6 +185,39 @@ NaN / 负数 / Infinity 一律视作 < floor。
 
 **未覆盖**: routine class 的 minMaxTokens=64 偏低，理论上 64 token 也能触发尾部截断。但 routine 是 deepseek-chat 直答模式无 CoT，截断的就是用户答案本身，不会出现"内部独白把预算吃光"的现象，可接受。
 
+## 8.8 Caller telemetry（**2026-04-30 加固**）
+
+之前 `kind:"llm.call"` 日志只能告诉你"哪个 task class 在烧 token"，不能告诉你"哪个**route**在烧"。新增 `caller` 字段闭这个口子。
+
+**调用方式**:
+```typescript
+chatComplete('analytic', msgs, {
+  ...,
+  caller: 'advisor.chat:diagnose',   // 命名约定: <feature>.<route>[:<sub-mode>]
+});
+```
+
+**已布点**:
+| Caller string | 描述 |
+|--|--|
+| `advisor.chat:quick\|deep\|debate\|diagnose` | 顾问对话四种模式 |
+| `advisor.debate:argument:bull\|bear` | 多空辩论分论点 |
+| `advisor.debate:conclusion` | 主持人结论 |
+| `strategy.generate` | 策略代码生成 |
+
+**Loki / kubectl 用法**:
+```bash
+# 哪个 caller 在烧最多 token
+ssh root@100.122.83.20 "kubectl -n lucrum logs deploy/lucrum-web --tail=10000 | \
+  grep 'kind\":\"llm.call' | jq -r 'select(.success) | [.caller, .totalTokens] | @tsv' | \
+  awk '{a[$1]+=$2} END{for (k in a) print a[k], k}' | sort -rn"
+
+# 哪个 caller 在触发 fallback（重型模型抖动定位到具体 UI）
+... | jq 'select(.fallbackUsed) | .caller' | sort | uniq -c | sort -rn
+```
+
+**未覆盖**: LangChain `getChatModel` 路径（backtest-agent/scanner-agent/advisor-graph/custom-agent）目前没办法注入 caller — ChatOpenAI 不走 router 的 `chatComplete`，是 LangChain 内部 fetch。后续要管 graph 出口需改造成 router-aware ChatOpenAI 子类。本次明确不做。
+
 ## 9. 已知 newapi side issue
 
 `deepseek-reasoner` 在当前 newapi channel 配置下被 alias 到 `deepseek-v4-flash`（看 telemetry 里 modelActual）。这是 newapi 后台 channel 路由配置，不是 router bug。要让 reasoning class 真正走 R1 时，去 `https://newapi.lurus.cn/console` 加一个 deepseek-reasoner → 真实 endpoint 的 channel。

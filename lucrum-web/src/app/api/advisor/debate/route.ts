@@ -72,17 +72,19 @@ async function callLLM(
   userMessage: string,
   temperature: number = 0.5,
   signal?: AbortSignal,
+  caller?: string,
 ): Promise<string> {
   // Debate is multi-turn analytic prose; use the analytic tier (falls back to
   // routine if pro is degraded). Caller can pass `request.signal` to abort
-  // when the client disconnects mid-debate.
+  // when the client disconnects mid-debate. `caller` distinguishes argument
+  // vs conclusion in telemetry.
   const result = await chatComplete(
     'analytic',
     [
       { role: "system", content: systemPrompt },
       { role: "user", content: userMessage },
     ],
-    { temperature, maxTokens: 2000, signal },
+    { temperature, maxTokens: 2000, signal, caller },
   );
   return result.content;
 }
@@ -218,7 +220,7 @@ async function handleDebateArgument(body: DebateArgumentRequest, signal?: AbortS
     `[Debate API] Generating ${stance} argument for round ${currentRound}`,
   );
 
-  const argument = await callLLM(systemPrompt, userMessage, 0.5, signal);
+  const argument = await callLLM(systemPrompt, userMessage, 0.5, signal, `advisor.debate:argument:${stance}`);
 
   const responseTime = Date.now() - startTime;
   console.log(`[Debate API] ${stance} argument generated in ${responseTime}ms`);
@@ -293,6 +295,7 @@ async function handleDebateConclusion(body: DebateConclusionRequest, signal?: Ab
     userMessage,
     0.3,
     signal,
+    'advisor.debate:conclusion',
   );
 
   const responseTime = Date.now() - startTime;
