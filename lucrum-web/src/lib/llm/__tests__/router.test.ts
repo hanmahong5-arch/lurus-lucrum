@@ -542,9 +542,10 @@ describe('streamChat telemetry', () => {
   });
 
   it('sets stream_options.include_usage so upstream emits a token frame', async () => {
-    let capturedBody: { stream_options?: { include_usage?: boolean }; stream?: boolean } | null = null;
+    interface CapturedBody { stream_options?: { include_usage?: boolean }; stream?: boolean }
+    const captured: { body: CapturedBody | null } = { body: null };
     const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
-      capturedBody = JSON.parse(String(init?.body)) as { stream_options?: { include_usage?: boolean }; stream?: boolean };
+      captured.body = JSON.parse(String(init?.body)) as CapturedBody;
       return makeStreamResponse(['data: [DONE]\n\n']);
     });
     vi.stubGlobal('fetch', fetchMock);
@@ -553,7 +554,7 @@ describe('streamChat telemetry', () => {
     const res = await streamChat('routine', [{ role: 'user', content: 'q' }]);
     await drain(res);
 
-    expect(capturedBody?.stream).toBe(true);
-    expect(capturedBody?.stream_options?.include_usage).toBe(true);
+    expect(captured.body?.stream).toBe(true);
+    expect(captured.body?.stream_options?.include_usage).toBe(true);
   });
 });

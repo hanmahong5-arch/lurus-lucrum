@@ -214,15 +214,31 @@ chatComplete('analytic', msgs, {
 | `agent.custom:insights` | 自定义 agent 多标的对比洞察 |
 | `advisor.graph:quickAnalyst\|deepAnalyst\|bullResearcher\|bearResearcher\|moderator` | LangGraph 多 agent 顾问图，按节点分别归因 |
 
-**Loki / kubectl 用法**:
+**最快用法 — 产品化的 spend-report CLI**:
 ```bash
-# 哪个 caller 在烧最多 token
+# 默认 R6 / 最近 1h / 按 caller 分桶
+./scripts/llm-spend-report.sh
+
+# 最近 24h 按 graph 节点分组
+SINCE=24h GROUP=caller ./scripts/llm-spend-report.sh
+
+# 仅看 advisor.* 流量
+FILTER=advisor ./scripts/llm-spend-report.sh
+
+# 看 fallback 流向（哪个 modelActual 在分担流量）
+GROUP=modelActual ./scripts/llm-spend-report.sh
+
+# JSON 输出，喂给其他工具
+FORMAT=json ./scripts/llm-spend-report.sh | jq .
+```
+
+**输出列**: `cnt / ok / cncl / err / fb / tokens / p50ms / p95ms`，按 token 量降序排，TOTAL 行带 success/cancel/err/fallback 比例。
+
+**手动 jq 一行式**（脚本不可用时备用）:
+```bash
 ssh root@100.122.83.20 "kubectl -n lucrum logs deploy/lucrum-web --tail=10000 | \
   grep 'kind\":\"llm.call' | jq -r 'select(.success) | [.caller, .totalTokens] | @tsv' | \
   awk '{a[$1]+=$2} END{for (k in a) print a[k], k}' | sort -rn"
-
-# 哪个 caller 在触发 fallback（重型模型抖动定位到具体 UI）
-... | jq 'select(.fallbackUsed) | .caller' | sort | uniq -c | sort -rn
 ```
 
 ## 8.9 LangChain agents 已纳入 router 契约（**2026-04-30 加固**）
