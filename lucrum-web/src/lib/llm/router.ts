@@ -321,9 +321,27 @@ export async function chatComplete(
 
 /**
  * Streaming chat — pipes the OpenAI SSE response straight back. The router
- * does not parse the body so callers can stream-forward to the client. Adds
- * task-class to the URL as a query string for log correlation only (newapi
- * ignores unknown query strings).
+ * does not parse the body for content forwarding, but it *does* now sniff
+ * passing `data:` frames for the trailing `usage` chunk so token counts
+ * land in telemetry (without this, streaming was a spend black hole).
+ *
+ * Telemetry lifecycle for one streamChat call:
+ *   - pre-aborted signal              → emit {success:false, cancelled:true} immediately, throw
+ *   - fetch throws (caller-aborted)   → emit {success:false, cancelled:true}, throw LlmCancelledError
+ *   - fetch throws (network/other)    → emit {success:false, error}, rethrow
+ *   - gateway non-OK response         → emit {success:false, error:"gateway NNN"}, return Response
+ *   - body fully consumed             → emit {success:true, ...tokens}
+ *   - body errored mid-flight         → emit {success:false, error or cancelled depending on signal}
+ *   - downstream cancel (client gone) → emit {success:false, cancelled:true}
+ *
+ * Adds task-class to the URL as a query string for log correlation only —
+ * newapi ignores unknown query strings.
+ *
+ * Also sets `stream_options.include_usage:true` so the gateway emits a final
+ * `data:` frame containing `usage:{prompt_tokens,...}` before `[DONE]`.
+ * Most OpenAI-compatible gateways (incl. newapi → DeepSeek) honor this; if
+ * a specific gateway doesn't, the field is harmlessly ignored — telemetry
+ * just records null token counts for that call.
  */
 export async function streamChat(
   taskClass: TaskClass,
@@ -335,19 +353,24 @@ export async function streamChat(
     throw new Error('LLM gateway key not configured (set LLM_API_KEY)');
   }
   const profile = resolveProfile(taskClass, overrides);
+  const tel = makeTelemetryRecorder(taskClass, profile.model, {
+    maxTokensFloored: profile.maxTokensFloored,
+    caller: overrides?.caller ?? null,
+  });
+
   // No wall-clock abort for streams — reasoning replies can legitimately run
   // for minutes. Newapi enforces its own STREAMING_TIMEOUT (300s) upstream.
   // The caller's signal (typically `request.signal` in a Next.js route) is
   // forwarded so a closed tab tears down the upstream socket promptly,
-  // stopping the gateway from generating tokens nobody will read. If the
-  // caller's signal aborts before fetch returns, fetch rejects with an
-  // AbortError — surface it as `LlmCancelledError` so the route handler can
-  // distinguish from a server-side failure.
+  // stopping the gateway from generating tokens nobody will read.
   if (overrides?.signal?.aborted) {
+    tel.record({ success: false, cancelled: true, error: null });
     throw new LlmCancelledError('caller already aborted');
   }
+
+  let res: Response;
   try {
-    return await fetch(`${cfg.baseURL}/chat/completions?lucrum_task=${taskClass}`, {
+    res = await fetch(`${cfg.baseURL}/chat/completions?lucrum_task=${taskClass}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -359,15 +382,134 @@ export async function streamChat(
         temperature: profile.temperature,
         max_tokens: profile.maxTokens,
         stream: true,
+        stream_options: { include_usage: true },
       }),
       signal: overrides?.signal,
     });
   } catch (err) {
     if (overrides?.signal?.aborted) {
+      tel.record({ success: false, cancelled: true, error: null });
       throw new LlmCancelledError('caller aborted before stream began');
     }
+    tel.record({ success: false, error: String(err) });
     throw err;
   }
+
+  if (!res.ok) {
+    tel.record({ success: false, error: `gateway ${res.status}` });
+    return res;
+  }
+
+  // OK upstream: wrap the body so we record on stream end. If there's no
+  // body (shouldn't happen for stream:true, but keep the type-checker honest)
+  // emit a best-effort success record and return as-is.
+  if (!res.body) {
+    tel.record({ success: true });
+    return res;
+  }
+
+  const wrapped = wrapStreamBodyWithTelemetry(res.body, tel, overrides?.signal, profile.model);
+  return new Response(wrapped, {
+    status: res.status,
+    statusText: res.statusText,
+    headers: res.headers,
+  });
+}
+
+/**
+ * Wrap the upstream SSE byte stream so it records telemetry exactly once on
+ * terminate. Does NOT alter the bytes — downstream consumers (e.g. the
+ * advisor route's `translateUpstreamSseStream`) see identical chunks.
+ *
+ * Also sniffs `data:` frames for `usage:{...}` so token counts make it into
+ * telemetry. Sniffing is best-effort and never fails the stream — a malformed
+ * frame just means we record null tokens for that call.
+ */
+function wrapStreamBodyWithTelemetry(
+  upstream: ReadableStream<Uint8Array>,
+  tel: ReturnType<typeof makeTelemetryRecorder>,
+  signal: AbortSignal | undefined,
+  modelRequested: string,
+): ReadableStream<Uint8Array> {
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let promptTokens: number | null = null;
+  let completionTokens: number | null = null;
+  let totalTokens: number | null = null;
+  let modelActual: string | null = null;
+  let recorded = false;
+
+  const recordOnce = (partial: Partial<import('./types').LlmCallTelemetry>): void => {
+    if (recorded) return;
+    recorded = true;
+    tel.record({
+      modelActual: modelActual ?? modelRequested,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      ...partial,
+    });
+  };
+
+  const sniffUsage = (chunkText: string): void => {
+    buffer += chunkText;
+    const lines = buffer.split('\n');
+    buffer = lines.pop() ?? '';
+    for (const raw of lines) {
+      const line = raw.trim();
+      if (!line.startsWith('data:')) continue;
+      const data = line.slice(5).trim();
+      if (!data || data === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(data) as {
+          model?: string;
+          usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+        };
+        if (obj.model && !modelActual) modelActual = obj.model;
+        if (obj.usage) {
+          promptTokens = obj.usage.prompt_tokens ?? promptTokens;
+          completionTokens = obj.usage.completion_tokens ?? completionTokens;
+          totalTokens = obj.usage.total_tokens ?? totalTokens;
+        }
+      } catch {
+        // Ignore parse errors — telemetry sniffing must never fail the stream.
+      }
+    }
+  };
+
+  const reader = upstream.getReader();
+
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          controller.close();
+          recordOnce({ success: true });
+          return;
+        }
+        if (value) {
+          // Cheap to decode for sniff (no copy); we still pass the original
+          // bytes downstream, never the decoded string.
+          sniffUsage(decoder.decode(value, { stream: true }));
+          controller.enqueue(value);
+        }
+      } catch (err) {
+        controller.error(err);
+        if (signal?.aborted) {
+          recordOnce({ success: false, cancelled: true, error: null });
+        } else {
+          recordOnce({ success: false, error: String(err) });
+        }
+      }
+    },
+    cancel(_reason) {
+      // Downstream consumer cancelled (e.g. Next.js dropped the response when
+      // the client closed the tab). Treat as caller-cancel: not an error.
+      reader.cancel(_reason).catch(() => {});
+      recordOnce({ success: false, cancelled: true, error: null });
+    },
+  });
 }
 
 export { loadGatewayConfig, TASK_PROFILES };

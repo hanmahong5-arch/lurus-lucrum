@@ -379,3 +379,181 @@ describe('streamChat cancellation', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 });
+
+describe('streamChat telemetry', () => {
+  // Helper: build a Response whose body is the given list of SSE byte chunks.
+  function makeStreamResponse(chunks: ReadonlyArray<string>, opts?: { status?: number }): Response {
+    const enc = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const c of chunks) controller.enqueue(enc.encode(c));
+        controller.close();
+      },
+    });
+    return new Response(body, { status: opts?.status ?? 200 });
+  }
+
+  // Drain a stream so the wrapping ReadableStream's pull() runs to completion.
+  async function drain(res: Response): Promise<string> {
+    const reader = res.body?.getReader();
+    if (!reader) return '';
+    const decoder = new TextDecoder();
+    let out = '';
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      if (value) out += decoder.decode(value, { stream: true });
+    }
+    return out;
+  }
+
+  function findTelemetry(logSpy: ReturnType<typeof vi.spyOn>): {
+    success?: boolean;
+    cancelled?: boolean;
+    caller?: string | null;
+    promptTokens?: number | null;
+    completionTokens?: number | null;
+    totalTokens?: number | null;
+    modelActual?: string | null;
+    error?: string | null;
+  } {
+    for (let i = logSpy.mock.calls.length - 1; i >= 0; i -= 1) {
+      const arg = logSpy.mock.calls[i]?.[0];
+      if (typeof arg !== 'string') continue;
+      try {
+        const parsed = JSON.parse(arg) as { kind?: string };
+        if (parsed.kind === 'llm.call') return parsed as never;
+      } catch {
+        /* skip non-JSON lines */
+      }
+    }
+    throw new Error('no telemetry line captured');
+  }
+
+  it('records success + parsed token usage from final SSE chunk', async () => {
+    const fetchMock = vi.fn(async () =>
+      makeStreamResponse([
+        'data: {"model":"deepseek-v4-pro","choices":[{"delta":{"content":"hi"}}]}\n\n',
+        'data: {"model":"deepseek-v4-pro","choices":[],"usage":{"prompt_tokens":17,"completion_tokens":42,"total_tokens":59}}\n\n',
+        'data: [DONE]\n\n',
+      ]),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { streamChat } = await loadRouter();
+    const res = await streamChat('analytic', [{ role: 'user', content: 'q' }], {
+      caller: 'advisor.chat:diagnose',
+    });
+    await drain(res);
+
+    const t = findTelemetry(logSpy);
+    expect(t.success).toBe(true);
+    expect(t.cancelled).toBe(false);
+    expect(t.caller).toBe('advisor.chat:diagnose');
+    expect(t.promptTokens).toBe(17);
+    expect(t.completionTokens).toBe(42);
+    expect(t.totalTokens).toBe(59);
+    expect(t.modelActual).toBe('deepseek-v4-pro');
+  });
+
+  it('forwards bytes downstream identically (no truncation, no rewrite)', async () => {
+    const sseFrames = [
+      'data: {"choices":[{"delta":{"content":"a"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"b"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ];
+    const fetchMock = vi.fn(async () => makeStreamResponse(sseFrames));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { streamChat } = await loadRouter();
+    const res = await streamChat('routine', [{ role: 'user', content: 'q' }]);
+    const out = await drain(res);
+    expect(out).toBe(sseFrames.join(''));
+  });
+
+  it('records cancelled when caller signal pre-aborts (no fetch call)', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { streamChat, LlmCancelledError } = await loadRouter();
+    const ctrl = new AbortController();
+    ctrl.abort();
+    await expect(
+      streamChat('analytic', [{ role: 'user', content: 'q' }], {
+        signal: ctrl.signal,
+        caller: 'advisor.chat:quick',
+      }),
+    ).rejects.toBeInstanceOf(LlmCancelledError);
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const t = findTelemetry(logSpy);
+    expect(t.success).toBe(false);
+    expect(t.cancelled).toBe(true);
+    expect(t.error).toBeNull();
+    expect(t.caller).toBe('advisor.chat:quick');
+  });
+
+  it('records error + does not wrap body when gateway returns non-OK', async () => {
+    const fetchMock = vi.fn(async () => new Response('boom', { status: 502 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { streamChat } = await loadRouter();
+    const res = await streamChat('routine', [{ role: 'user', content: 'q' }]);
+    expect(res.status).toBe(502);
+    expect(await res.text()).toBe('boom');
+
+    const t = findTelemetry(logSpy);
+    expect(t.success).toBe(false);
+    expect(t.cancelled).toBe(false);
+    expect(t.error).toMatch(/gateway 502/);
+  });
+
+  it('records cancelled when downstream consumer cancels mid-stream', async () => {
+    const enc = new TextEncoder();
+    let pulled = 0;
+    const body = new ReadableStream<Uint8Array>({
+      pull(controller) {
+        pulled += 1;
+        // Emit a single delta then yield indefinitely. Real upstream that's
+        // still generating when the route handler aborts the stream.
+        if (pulled === 1) {
+          controller.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"x"}}]}\n\n'));
+        }
+        // Don't close; wait to be cancelled.
+      },
+    });
+    const fetchMock = vi.fn(async () => new Response(body, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+    const { streamChat } = await loadRouter();
+    const res = await streamChat('analytic', [{ role: 'user', content: 'q' }]);
+    const reader = res.body!.getReader();
+    await reader.read(); // pull once so the wrap actually starts
+    await reader.cancel('client gone');
+
+    const t = findTelemetry(logSpy);
+    expect(t.success).toBe(false);
+    expect(t.cancelled).toBe(true);
+    expect(t.error).toBeNull();
+  });
+
+  it('sets stream_options.include_usage so upstream emits a token frame', async () => {
+    let capturedBody: { stream_options?: { include_usage?: boolean }; stream?: boolean } | null = null;
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) => {
+      capturedBody = JSON.parse(String(init?.body)) as { stream_options?: { include_usage?: boolean }; stream?: boolean };
+      return makeStreamResponse(['data: [DONE]\n\n']);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { streamChat } = await loadRouter();
+    const res = await streamChat('routine', [{ role: 'user', content: 'q' }]);
+    await drain(res);
+
+    expect(capturedBody?.stream).toBe(true);
+    expect(capturedBody?.stream_options?.include_usage).toBe(true);
+  });
+});

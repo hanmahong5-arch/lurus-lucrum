@@ -60,20 +60,25 @@ router 的修复：
 
 ## 5. Telemetry
 
-每次 `chatComplete` / `streamChat` 调用产生一行 JSON：
+每次 `chatComplete` / `streamChat` / 任何 `getChatModel` 返回的 LangChain 调用产生一行 JSON：
 
 ```json
 {"kind":"llm.call","ts":"2026-04-27T08:17:16Z",
  "taskClass":"analytic","modelRequested":"deepseek-v4-pro",
  "modelActual":"deepseek-v4-pro","latencyMs":5623,
  "promptTokens":13,"completionTokens":145,"totalTokens":158,
- "success":true,"error":null,"fallbackUsed":false}
+ "success":true,"cancelled":false,"error":null,
+ "fallbackUsed":false,"maxTokensFloored":false,
+ "caller":"advisor.chat:diagnose"}
 ```
 
 落 stdout，被 K8s/Loki 直接采集。在 lucrum-monitoring 加面板筛 `kind=llm.call` 可以看：
 - 各 class 的 P50/P99 延迟
 - fallback 频率（重型模型健康度）
 - 每 class 的 token 用量趋势（对账 newapi 计费）
+- 按 `caller` 切分的归因（哪个 UI surface 在花钱、哪个 graph 节点最慢）
+
+**streamChat 的 token 用量**：`stream_options.include_usage:true` 让 newapi 在 `[DONE]` 之前发一个 `usage:{...}` 帧，router 在透传字节的同时 sniff 这一帧，写进 telemetry。如果上游（某些 channel）忽略 `include_usage`，token 字段为 `null`，但 success/cancelled/latency 仍然准确 —— 数清"调了多少次"的成本归因不依赖 token。
 
 ## 6. Gateway 配置
 
