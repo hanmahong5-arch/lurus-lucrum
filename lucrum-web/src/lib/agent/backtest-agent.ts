@@ -117,8 +117,8 @@ export type BacktestAgentState = typeof BacktestAgentStateAnnotation.State;
 // LLM Configuration (reuses DeepSeek, consistent with advisor-graph.ts)
 // =============================================================================
 
-function createLLM(temperature: number = 0.3): ChatOpenAI {
-  return getChatModel('analytic', { temperature, maxTokens: 2000 });
+function createLLM(caller: string, temperature: number = 0.3): ChatOpenAI {
+  return getChatModel('analytic', { temperature, maxTokens: 2000, caller });
 }
 
 // =============================================================================
@@ -132,7 +132,7 @@ async function parseIntentNode(
   const lastMessage = state.messages[state.messages.length - 1];
   const userText = lastMessage instanceof HumanMessage ? lastMessage.content as string : "";
 
-  const llm = createLLM(0.1);
+  const llm = createLLM('agent.backtest:parseIntent', 0.1);
   const systemPrompt = `你是一个回测参数解析助手。从用户的自然语言中提取回测参数，返回严格的 JSON 格式。
 
 字段说明：
@@ -326,7 +326,7 @@ async function analyzeResultNode(
     return { step: "error", errorMessage: "无回测结果可供分析" };
   }
 
-  const llm = createLLM(0.7);
+  const llm = createLLM('agent.backtest:analyzeResult', 0.7);
   const systemPrompt = `你是一位专业的量化交易分析师。请根据回测数据生成简洁、专业的分析报告。
 报告包含：
 1. 策略总体表现（1-2句）

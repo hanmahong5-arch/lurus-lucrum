@@ -126,9 +126,11 @@ type AdvisorState = typeof AdvisorStateAnnotation.State;
 
 /**
  * Create LLM instance via the central router (newapi gateway).
+ * Pass `caller` to attribute newapi spend / fallback / cancel rate to the
+ * specific graph node — see ModelOverrides.caller in router.ts.
  */
-function createLLM(temperature: number = 0.7): ChatOpenAI {
-  return getChatModel('analytic', { temperature, maxTokens: 2000 });
+function createLLM(caller: string, temperature: number = 0.7): ChatOpenAI {
+  return getChatModel('analytic', { temperature, maxTokens: 2000, caller });
 }
 
 // ============================================================================
@@ -181,7 +183,7 @@ async function quickAnalystNode(
 ): Promise<Partial<AdvisorState>> {
   console.log(`[quickAnalystNode] Processing quick analysis...`);
 
-  const llm = createLLM(0.7);
+  const llm = createLLM('advisor.graph:quickAnalyst', 0.7);
 
   const systemPrompt = buildQuickAnalystPrompt(state);
   const messages = [
@@ -226,7 +228,7 @@ async function deepAnalystNode(
 ): Promise<Partial<AdvisorState>> {
   console.log(`[deepAnalystNode] Processing deep analysis...`);
 
-  const llm = createLLM(0.7);
+  const llm = createLLM('advisor.graph:deepAnalyst', 0.7);
 
   // Run multiple analysis perspectives in parallel
   const perspectives = state.userContext.analysisMethods.slice(0, 3);
@@ -277,7 +279,7 @@ async function bullResearcherNode(
 ): Promise<Partial<AdvisorState>> {
   console.log(`[bullResearcherNode] Round ${state.debateRound + 1}...`);
 
-  const llm = createLLM(0.8);
+  const llm = createLLM('advisor.graph:bullResearcher', 0.8);
 
   // Get previous bear argument if exists
   const prevBearArg = state.debateArguments
@@ -340,7 +342,7 @@ async function bearResearcherNode(
 ): Promise<Partial<AdvisorState>> {
   console.log(`[bearResearcherNode] Round ${state.debateRound + 1}...`);
 
-  const llm = createLLM(0.8);
+  const llm = createLLM('advisor.graph:bearResearcher', 0.8);
 
   // Get previous bull argument
   const prevBullArg = state.debateArguments
@@ -406,7 +408,7 @@ async function moderatorNode(
 ): Promise<Partial<AdvisorState>> {
   console.log(`[moderatorNode] Synthesizing debate conclusion...`);
 
-  const llm = createLLM(0.5);
+  const llm = createLLM('advisor.graph:moderator', 0.5);
 
   const bullArgs = state.debateArguments
     .filter((a) => a.stance === "bull")

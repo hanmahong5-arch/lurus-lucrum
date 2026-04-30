@@ -16,6 +16,7 @@
 import { ChatOpenAI } from '@langchain/openai';
 import { loadGatewayConfig, TASK_PROFILES } from './config';
 import { makeTelemetryRecorder } from './observability';
+import { RouterAwareChatOpenAI } from './router-aware-chat-model';
 import { LlmCancelledError, type TaskClass, type TaskProfile } from './types';
 
 export interface ModelOverrides {
@@ -84,6 +85,12 @@ function resolveProfile(taskClass: TaskClass, overrides?: ModelOverrides): Resol
  * Build a LangChain ChatOpenAI bound to the Lurus newapi gateway with the
  * task-class profile applied. Used by LangGraph agents (backtest, scanner,
  * advisor-graph, custom-agent).
+ *
+ * Returns a `RouterAwareChatOpenAI` (subclass of `ChatOpenAI`) so every
+ * `_generate` / streaming call emits the same telemetry shape as
+ * `chatComplete` and honors the same cancellation contract. Pass
+ * `overrides.caller` so spend can be attributed by graph node, e.g.
+ * `caller: 'advisor.graph:trader'`.
  */
 export function getChatModel(
   taskClass: TaskClass,
@@ -91,7 +98,7 @@ export function getChatModel(
 ): ChatOpenAI {
   const cfg = loadGatewayConfig();
   const profile = resolveProfile(taskClass, overrides);
-  return new ChatOpenAI({
+  return new RouterAwareChatOpenAI({
     model: profile.model,
     temperature: profile.temperature,
     maxTokens: profile.maxTokens,
@@ -102,6 +109,9 @@ export function getChatModel(
       apiKey: cfg.apiKey,
     },
     apiKey: cfg.apiKey,
+    taskClass,
+    maxTokensFloored: profile.maxTokensFloored,
+    caller: overrides?.caller ?? null,
   });
 }
 

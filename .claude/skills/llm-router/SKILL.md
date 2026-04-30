@@ -197,13 +197,17 @@ chatComplete('analytic', msgs, {
 });
 ```
 
-**已布点**:
+**已布点**（含 LangChain agents — 见 §8.9）:
 | Caller string | 描述 |
 |--|--|
 | `advisor.chat:quick\|deep\|debate\|diagnose` | 顾问对话四种模式 |
 | `advisor.debate:argument:bull\|bear` | 多空辩论分论点 |
 | `advisor.debate:conclusion` | 主持人结论 |
 | `strategy.generate` | 策略代码生成 |
+| `agent.backtest:parseIntent\|analyzeResult` | 回测 agent 两个 LLM 节点 |
+| `agent.scanner:insights` | 扫描 agent 排名洞察 |
+| `agent.custom:insights` | 自定义 agent 多标的对比洞察 |
+| `advisor.graph:quickAnalyst\|deepAnalyst\|bullResearcher\|bearResearcher\|moderator` | LangGraph 多 agent 顾问图，按节点分别归因 |
 
 **Loki / kubectl 用法**:
 ```bash
@@ -216,7 +220,27 @@ ssh root@100.122.83.20 "kubectl -n lucrum logs deploy/lucrum-web --tail=10000 | 
 ... | jq 'select(.fallbackUsed) | .caller' | sort | uniq -c | sort -rn
 ```
 
-**未覆盖**: LangChain `getChatModel` 路径（backtest-agent/scanner-agent/advisor-graph/custom-agent）目前没办法注入 caller — ChatOpenAI 不走 router 的 `chatComplete`，是 LangChain 内部 fetch。后续要管 graph 出口需改造成 router-aware ChatOpenAI 子类。本次明确不做。
+## 8.9 LangChain agents 已纳入 router 契约（**2026-04-30 加固**）
+
+之前 `getChatModel` 返回的是裸 `ChatOpenAI`，LangGraph 节点的调用绕过 router 的 telemetry / cancel / floor / caller 四套契约 —— 是 router 最大的盲区。新增 `RouterAwareChatOpenAI` 子类填掉。
+
+**实现位置**: `src/lib/llm/router-aware-chat-model.ts`
+
+**子类的覆盖范围**:
+- `_generate`：success/error/cancel 三态都 emit telemetry（同 `chatComplete` 一份 schema），sticky `caller` / `taskClass` / `maxTokensFloored` 在构造期固定
+- `_streamResponseChunks`：流式同上，最终 chunk 的 tokenUsage 进入 telemetry
+- AbortSignal：`options.signal`（来自 RunnableConfig）pre-check + 中途异常→`LlmCancelledError`，识别基于 `signal.aborted` + `error.name === 'AbortError'` + 消息正则
+- maxTokens floor：在 `getChatModel` 里和 `chatComplete` 共用 `resolveProfile`，已经统一
+
+**调用约定**:
+```typescript
+const llm = getChatModel('analytic', { temperature: 0.7, caller: 'agent.scanner:insights' });
+const out = await llm.invoke([...], { signal: request.signal });  // signal 走 RunnableConfig
+```
+
+**故意不做**：跨 task class fallback（analytic→routine on failure）。LangChain 自己有 retry，graph 节点对 LLM 失败有自己的 state 处理；router 在这层做 fallback 会让 graph 状态机出现不可预测分支。要 fallback 用 `chatComplete` 直接调。
+
+**测试**: `src/lib/llm/__tests__/router-aware-chat-model.test.ts`（10 例）—— 通过 `vi.spyOn(ChatOpenAI.prototype, '_generate')` 把 super 调用打桩，覆盖成功/失败/pre-cancel/mid-cancel/timeout-非-cancel 五种路径。
 
 ## 9. 已知 newapi side issue
 

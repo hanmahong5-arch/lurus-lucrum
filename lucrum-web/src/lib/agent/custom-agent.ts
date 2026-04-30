@@ -51,8 +51,8 @@ const MAX_STOCKS_ALL_MARKET = 100;
 // LLM
 // =============================================================================
 
-function createLLM(temperature = 0.4, maxTokens = 2000): ChatOpenAI {
-  return getChatModel('analytic', { temperature, maxTokens });
+function createLLM(caller: string, temperature = 0.4, maxTokens = 2000): ChatOpenAI {
+  return getChatModel('analytic', { temperature, maxTokens, caller });
 }
 
 // =============================================================================
@@ -475,7 +475,7 @@ ${depthInstruction}
 
 输出格式：纯 Markdown。`;
 
-  const llm = createLLM(0.6, maxTokens);
+  const llm = createLLM('agent.custom:insights', 0.6, maxTokens);
 
   const response = await llm.invoke([
     new SystemMessage(

@@ -107,8 +107,8 @@ export type ScannerState = typeof ScannerStateAnnotation.State;
 // LLM Configuration
 // =============================================================================
 
-function createLLM(temperature = 0.4): ChatOpenAI {
-  return getChatModel('analytic', { temperature, maxTokens: 2000 });
+function createLLM(caller: string, temperature = 0.4): ChatOpenAI {
+  return getChatModel('analytic', { temperature, maxTokens: 2000, caller });
 }
 
 // =============================================================================
@@ -339,7 +339,7 @@ async function generateInsightsNode(
     )
     .join("\n");
 
-  const llm = createLLM(0.6);
+  const llm = createLLM('agent.scanner:insights', 0.6);
   const prompt = `你是一位资深A股量化投资分析师。
 
 以下是使用「${state.strategyName}」策略在 ${state.dateRange.start} 至 ${state.dateRange.end} 期间对多个板块/个股的回测排名结果（Top 5）：
