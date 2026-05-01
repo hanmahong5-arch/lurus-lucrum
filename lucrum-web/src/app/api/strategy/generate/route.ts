@@ -157,16 +157,25 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Cache miss — generate via the central router. Strategy generation is
-    // structured code output: an analytic-class task (not reasoning) — code
-    // length and structure are well-bounded, so v4-pro is the right tier.
+    // Cache miss — generate via the central router.
+    //
+    // Task class is `routine` (deepseek-chat / -v4-flash), not `analytic`.
+    // The original code picked analytic on the grounds that "code length and
+    // structure are well-bounded, so v4-pro is the right tier", but v4-pro is
+    // CoT-heavy: it emits hundreds-thousands of `reasoning_content` tokens
+    // before the user-facing code. For a structured fill-in-the-template
+    // task like CtaTemplate generation that overhead is pure waste — and at
+    // maxTokens=2000 the reasoning burn frequently truncates the answer
+    // mid-method (measured 2026-05-01: v4-pro 65s @ 1.4K-char output and
+    // truncated, v4-flash 25s @ 6.4K-char output and complete). Routine is
+    // ~2.6x faster AND produces more complete code on this prompt shape.
     console.log('[strategy/generate] Cache MISS — calling LLM router...');
     const startTime = Date.now();
 
     let completion;
     try {
       completion = await chatComplete(
-        'analytic',
+        'routine',
         [
           { role: 'system', content: SYSTEM_PROMPT },
           {
