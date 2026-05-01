@@ -9,10 +9,14 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { DisabledWithReason } from "@/components/ui/disabled-with-reason";
+import { ErrorCard } from "@/components/ui/error-card";
+import { parseApiError } from "@/lib/errors/error-types";
+import type { AppError, RecoveryAction } from "@/lib/errors/error-types";
 import { useAdvisorStore } from "@/lib/stores/advisor-store";
 import { cn } from "@/lib/utils";
 
@@ -206,7 +210,8 @@ export function DebatePanel({
   >(null);
   const [args, setArgs] = useState<DebateArgument[]>([]);
   const [conclusion, setConclusion] = useState<DebateConclusion | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
+  const router = useRouter();
 
   // Abort all debate requests on unmount
   const createDebateSignal = useAbortController();
@@ -246,15 +251,28 @@ export function DebatePanel({
       });
 
       if (!startRes.ok) {
-        const err = await startRes.json().catch(() => ({}));
-        throw new Error(
-          (err as { error?: string }).error || "Failed to start debate"
-        );
+        // Server emits the structured envelope; surface it via ErrorCard
+        // instead of swallowing details inside an Error message.
+        const appErr = await parseApiError(startRes, "DEBATE_START_FAILED");
+        setError(appErr);
+        return;
       }
 
       const startData = await startRes.json();
       const sessionId = startData.session?.id;
-      if (!sessionId) throw new Error("Invalid session");
+      if (!sessionId) {
+        setError({
+          code: "DEBATE_INVALID_SESSION",
+          title: "辩论启动失败",
+          description: "服务器未返回有效的辩论会话，请稍后重试。",
+          severity: "error",
+          recoveryActions: [
+            { type: "retry", label: "重试" },
+            { type: "custom", label: "换主题" },
+          ],
+        });
+        return;
+      }
 
       const symbol = initialSymbol || "";
       const symbolName = topic.trim();
@@ -383,14 +401,33 @@ export function DebatePanel({
       });
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
+      // Network-level / unexpected throw — disambiguate timeout vs network so
+      // the banner shows targeted recovery copy.
       const msg = err instanceof Error ? err.message : "辩论过程中发生错误";
-      setError(
-        msg.includes('fetch') || msg.includes('network')
-          ? '网络连接失败，请检查网络后重试'
-          : msg.includes('timeout')
-            ? 'AI 响应超时，建议简化辩论主题后重试'
-            : `辩论失败: ${msg}`
-      );
+      const isTimeout = /timeout/i.test(msg);
+      const isNetwork = /fetch|network/i.test(msg);
+      setError({
+        code: isTimeout
+          ? "DEBATE_TIMEOUT"
+          : isNetwork
+            ? "DEBATE_NETWORK"
+            : "DEBATE_UNKNOWN",
+        title: isTimeout
+          ? "AI 响应超时"
+          : isNetwork
+            ? "网络连接失败"
+            : "辩论失败",
+        description: isTimeout
+          ? "建议简化辩论主题后重试。"
+          : isNetwork
+            ? "请检查网络后重试。"
+            : msg,
+        severity: "error",
+        recoveryActions: [
+          { type: "retry", label: "重试" },
+          { type: "custom", label: "换主题" },
+        ],
+      });
     } finally {
       setIsDebating(false);
       setCurrentSpeaker(null);
@@ -445,27 +482,25 @@ export function DebatePanel({
         </div>
       </div>
 
-      {/* Error */}
+      {/* Structured error banner — retry re-runs handleStartDebate with the
+          current topic; navigate uses next/router; "换主题" is advisory and
+          just clears the banner so the user can edit the textarea above. */}
       {error && (
-        <div className="p-3 rounded-lg border border-loss/30 bg-loss/10">
-          <p className="text-loss text-sm">{error}</p>
-          <div className="flex gap-2 mt-2">
-            <button
-              type="button"
-              onClick={() => { setError(null); if (topic.trim()) void handleStartDebate(); }}
-              className="text-xs font-medium text-loss hover:text-loss/80 px-2 py-1 rounded bg-loss/10 transition"
-            >
-              重试
-            </button>
-            <button
-              type="button"
-              onClick={() => setError(null)}
-              className="text-xs font-medium text-white/40 hover:text-white/60 px-2 py-1 rounded transition"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
+        <ErrorCard
+          error={error}
+          onAction={(action: RecoveryAction) => {
+            if (action.type === "retry") {
+              setError(null);
+              if (topic.trim()) void handleStartDebate();
+              return;
+            }
+            if (action.type === "navigate" && action.href) {
+              router.push(action.href);
+              return;
+            }
+            setError(null);
+          }}
+        />
       )}
 
       {/* Loading indicator */}
