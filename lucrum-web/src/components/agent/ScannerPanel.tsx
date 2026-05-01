@@ -8,11 +8,15 @@
 "use client";
 
 import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { SW_SECTORS, CONCEPT_SECTORS } from "@/lib/data-service/sources/eastmoney-sector";
 import type { ScanTarget, RankedResult, ScannerEvent } from "@/lib/agent/scanner-agent";
 import { useAsyncTask } from "@/hooks/use-async-task";
 import { useAnalysisStore } from "@/lib/stores/analysis-store";
 import { cn } from "@/lib/utils";
+import { ErrorCard } from "@/components/ui/error-card";
+import { parseApiError, toAppError } from "@/lib/errors/error-types";
+import type { AppError, RecoveryAction } from "@/lib/errors/error-types";
 import {
   Tooltip,
   TooltipContent,
@@ -509,7 +513,9 @@ export function ScannerPanel() {
   const [progress, setProgress] = useState({ done: 0, total: 0, current: "" });
   const [ranking, setRanking] = useState<RankedResult[]>([]);
   const [insights, setInsights] = useState<string>("");
-  const [error, setError] = useState<string>("");
+  const [error, setError] = useState<AppError | null>(null);
+
+  const router = useRouter();
 
   // View mode for results
   const [viewMode, setViewMode] = useState<"heatmap" | "table">("heatmap");
@@ -545,12 +551,20 @@ export function ScannerPanel() {
 
   const handleStart = useCallback(async () => {
     if (scanTargets.length === 0) {
-      setError("请至少选择一个板块或股票");
+      // Validation error stays as a structured warning rather than raw text;
+      // there's no retry path so we offer dismiss only.
+      setError({
+        code: "SCANNER_NO_TARGET",
+        title: "未选择扫描标的",
+        description: "请至少选择一个板块或股票后再开始扫描。",
+        severity: "warning",
+        recoveryActions: [{ type: "dismiss", label: "知道了" }],
+      });
       return;
     }
 
     setRunning(true);
-    setError("");
+    setError(null);
     setRanking([]);
     setInsights("");
     setProgress({ done: 0, total: scanTargets.length, current: "" });
@@ -581,11 +595,12 @@ export function ScannerPanel() {
       });
 
       if (!res.ok) {
-        const text = await res.text();
-        const errMsg = `请求失败 (${res.status}): ${text}`;
-        setError(errMsg);
-        store.setError(errMsg);
-        task.fail(errMsg);
+        // Server returns the structured envelope; parseApiError extracts it
+        // into an AppError ErrorCard can render directly.
+        const appErr = await parseApiError(res, "SCANNER_REQUEST_FAILED");
+        setError(appErr);
+        store.setError(appErr.description);
+        task.fail(appErr.description);
         return;
       }
 
@@ -619,7 +634,18 @@ export function ScannerPanel() {
             finalInsights = event.content;
             break;
           case "error":
-            setError(event.message);
+            // SSE-emitted error during scan execution. Translate to AppError
+            // with a meaningful retry path (re-run last scan params).
+            setError({
+              code: "SCANNER_RUN_FAILED",
+              title: "扫描失败",
+              description: event.message,
+              severity: "error",
+              recoveryActions: [
+                { type: "retry", label: "重试" },
+                { type: "custom", label: "调整参数" },
+              ],
+            });
             store.setError(event.message);
             task.fail(event.message);
             break;
@@ -655,10 +681,33 @@ export function ScannerPanel() {
       }
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
-        const errMsg = String(err);
-        setError(errMsg);
-        store.setError(errMsg);
-        task.fail(errMsg);
+        // Network / unexpected throw — disambiguate timeout / network so the
+        // banner shows targeted recovery copy.
+        const errMsg = err instanceof Error ? err.message : String(err);
+        const isTimeout = /timeout/i.test(errMsg);
+        const isNetwork = /fetch|network/i.test(errMsg);
+        const appErr = toAppError(err, "SCANNER_NETWORK");
+        const next: AppError = {
+          ...appErr,
+          title: isTimeout
+            ? "扫描请求超时"
+            : isNetwork
+              ? "网络连接失败"
+              : "扫描出错",
+          description: isTimeout
+            ? "扫描耗时较长，请减少标的数量后重试。"
+            : isNetwork
+              ? "无法连接到扫描服务，请检查网络后重试。"
+              : errMsg,
+          severity: "error",
+          recoveryActions: [
+            { type: "retry", label: "重试" },
+            { type: "custom", label: "调整参数" },
+          ],
+        };
+        setError(next);
+        store.setError(next.description);
+        task.fail(next.description);
       } else {
         task.cancel();
       }
@@ -779,11 +828,26 @@ export function ScannerPanel() {
         </div>
       </div>
 
-      {/* Error */}
+      {/* Error — structured AppError with retry / navigate / dismiss
+          recovery actions. retry re-runs the same scan params. */}
       {error && (
-        <div className="p-3 rounded-lg border border-loss/30 bg-loss/10 text-loss text-sm">
-          {error}
-        </div>
+        <ErrorCard
+          error={error}
+          onAction={(action: RecoveryAction) => {
+            if (action.type === "retry") {
+              setError(null);
+              void handleStart();
+              return;
+            }
+            if (action.type === "navigate" && action.href) {
+              router.push(action.href);
+              return;
+            }
+            // dismiss / custom — clear the banner; "调整参数" is advisory,
+            // the user adjusts the inputs above.
+            setError(null);
+          }}
+        />
       )}
 
       {/* Progress */}
