@@ -12,9 +12,13 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Send, Loader2, TrendingUp, BarChart2, Activity } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { ErrorCard } from "@/components/ui/error-card";
 import type { BacktestAgentResult } from "@/lib/agent/backtest-agent";
 import { useAsyncTask } from "@/hooks/use-async-task";
+import type { AppError, RecoveryAction } from "@/lib/errors/error-types";
+import { toAppError } from "@/lib/errors/error-types";
 
 // =============================================================================
 // Types
@@ -308,6 +312,10 @@ export function BacktestAgentPanel() {
   const [isLoading, setIsLoading] = useState(false);
   const [backtestResult, setBacktestResult] = useState<BacktestAgentResult | undefined>();
   const [report, setReport] = useState<string | undefined>();
+  const [error, setError] = useState<AppError | null>(null);
+  // Last user prompt — drives retry semantics on the structured error card
+  const lastPromptRef = useRef<string>("");
+  const router = useRouter();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -329,6 +337,8 @@ export function BacktestAgentPanel() {
     setIsLoading(true);
     setBacktestResult(undefined);
     setReport(undefined);
+    setError(null);
+    lastPromptRef.current = text;
 
     addMessage({ role: "user", content: text, timestamp: Date.now() });
     task.registerTask({ type: 'agent', title: `AI 回测 — ${text.slice(0, 30)}${text.length > 30 ? '...' : ''}` });
@@ -383,12 +393,35 @@ export function BacktestAgentPanel() {
               });
               task.complete({ hasResult: true, reportLength: event.content.length });
             } else if (event.type === "error") {
-              addMessage({
-                role: "agent",
-                content: `出现错误: ${event.message ?? "请重试"}`,
-                timestamp: Date.now(),
+              // SSE error event — server emits {code, message}. Translate
+              // into a structured AppError so the user sees retry / 修改描述
+              // actions instead of a raw inline string.
+              const message = event.message ?? "请重试";
+              const code = event.code ?? "BACKTEST_AGENT_ERROR";
+              const isQuota = code === "QUOTA_EXCEEDED" || code === "DAILY_LIMIT";
+              const isAuth = code === "UNAUTHORIZED";
+              setError({
+                code,
+                title: isQuota
+                  ? "AI 调用额度已用完"
+                  : isAuth
+                    ? "请先登录"
+                    : "AI 回测失败",
+                description: message,
+                severity: isQuota ? "warning" : "error",
+                recoveryActions: isAuth
+                  ? [{ type: "navigate", label: "去登录", href: "/auth/signin" }]
+                  : isQuota
+                    ? [
+                        { type: "navigate", label: "升级计划", href: "/dashboard/account" },
+                        { type: "dismiss", label: "知道了" },
+                      ]
+                    : [
+                        { type: "retry", label: "重试" },
+                        { type: "custom", label: "修改描述" },
+                      ],
               });
-              task.fail(event.message ?? '回测失败');
+              task.fail(message);
             }
           } catch {
             // Ignore JSON parse errors for partial lines
@@ -396,17 +429,62 @@ export function BacktestAgentPanel() {
         }
       }
     } catch (err) {
+      // Network / unexpected throw — disambiguate timeout vs network so the
+      // banner shows targeted recovery copy.
       const errMsg = err instanceof Error ? err.message : "请重试";
-      addMessage({
-        role: "agent",
-        content: `连接失败: ${errMsg}`,
-        timestamp: Date.now(),
+      const isTimeout = /timeout/i.test(errMsg);
+      const isNetwork = /fetch|network/i.test(errMsg);
+      const appErr = toAppError(err, "BACKTEST_AGENT_NETWORK");
+      setError({
+        ...appErr,
+        title: isTimeout
+          ? "请求超时"
+          : isNetwork
+            ? "网络连接失败"
+            : "AI 回测出错",
+        description: isTimeout
+          ? "AI 回测耗时较长，建议简化需求后重试。"
+          : isNetwork
+            ? "无法连接到回测服务，请检查网络后重试。"
+            : errMsg,
+        severity: "error",
+        recoveryActions: [
+          { type: "retry", label: "重试" },
+          { type: "custom", label: "修改描述" },
+        ],
       });
       task.fail(`连接失败: ${errMsg}`);
     } finally {
       setIsLoading(false);
     }
   };
+
+  // Recovery handler: retry re-fires the last natural-language request,
+  // navigate uses Next router, custom / dismiss just clear the banner so
+  // the user can edit their next message.
+  const handleErrorAction = useCallback(
+    (action: RecoveryAction) => {
+      if (action.type === "retry") {
+        const last = lastPromptRef.current;
+        setError(null);
+        if (last) {
+          setInput(last);
+          // Defer to next tick so input state is committed before send.
+          setTimeout(() => void handleSend(), 0);
+        }
+        return;
+      }
+      if (action.type === "navigate" && action.href) {
+        router.push(action.href);
+        return;
+      }
+      setError(null);
+    },
+    // handleSend is stable enough; intentionally not declared as a dep to
+    // avoid a forward-reference loop with useCallback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [router],
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -457,6 +535,14 @@ export function BacktestAgentPanel() {
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Structured error banner — shows actionable recovery (retry uses
+            the last natural-language prompt; navigate routes via next/router) */}
+        {error && (
+          <div className="px-3 pt-3">
+            <ErrorCard error={error} onAction={handleErrorAction} />
+          </div>
+        )}
 
         {/* Input */}
         <div className="p-3 border-t border-slate-700/50">
