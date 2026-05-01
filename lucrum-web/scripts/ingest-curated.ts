@@ -84,6 +84,14 @@ async function jitter(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, Math.random() * JITTER_MS));
 }
 
+// stocks.symbol is stored bare (e.g. "600519"), with the venue in the separate
+// `exchange` column ("SH"/"SZ"/"BJ"). curated-symbols.ts uses the human-friendly
+// "600519.SH" form for readability — strip the suffix before DB writes/reads so
+// the canonical key matches what kline-persister and db-kline-provider expect.
+function dbSymbol(s: string): string {
+  return s.replace(/\.(SH|SZ|BJ)$/i, '');
+}
+
 /**
  * Skip a symbol if our DB already has its latest kline for "today" (or
  * the most recent trading day). Prevents needlessly hammering EastMoney
@@ -98,7 +106,7 @@ async function shouldRefresh(pool: Pool, symbol: string): Promise<{ refresh: boo
             (SELECT max(date)
                FROM kline_daily k WHERE k.stock_id = s.id) AS max_date
        FROM stocks s WHERE s.symbol = $1`,
-    [symbol],
+    [dbSymbol(symbol)],
   );
   const row = r.rows[0];
   if (!row) return { refresh: true, stockId: null };
@@ -160,7 +168,7 @@ async function upsertStock(pool: Pool, sym: CuratedSymbol): Promise<number> {
             status = 'active',
             updated_at = NOW()
      RETURNING id`,
-    [sym.symbol, sym.name, sym.market],
+    [dbSymbol(sym.symbol), sym.name, sym.market],
   );
   const id = r.rows[0]?.id;
   if (typeof id !== 'number') throw new Error(`upsert stocks did not return id for ${sym.symbol}`);
