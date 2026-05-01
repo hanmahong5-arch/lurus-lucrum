@@ -69,9 +69,6 @@ spec:
               value: "3000"
             - name: HOSTNAME
               value: "0.0.0.0"
-            # API proxy configuration
-            - name: API_URL
-              value: "http://lucrum-api:8000"
 
             # Lurus integration
             - name: LURUS_API_URL
@@ -136,18 +133,19 @@ spec:
                   name: lucrum-secrets
                   key: LLM_API_KEY
 
-            # Redis configuration
+            # Redis — points at the Lurus-system cluster Redis (no password,
+            # confirmed via redis-cli ping from inside the lucrum-web pod
+            # 2026-04-30). Earlier `redis-service.lucrum.svc.cluster.local`
+            # never existed → every cache op logged ENOTFOUND. REDIS_PASSWORD
+            # is intentionally omitted because the R6 redis-8854b4797 pod
+            # has no password configured; sending one would AUTH-fail. See
+            # `lurus.yaml` capabilities.redis for the canonical service.
             - name: REDIS_ENABLED
               value: "true"
             - name: REDIS_HOST
-              value: "redis-service.lucrum.svc.cluster.local"
+              value: "redis.lurus-system.svc.cluster.local"
             - name: REDIS_PORT
               value: "6379"
-            - name: REDIS_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: lucrum-secrets
-                  key: REDIS_PASSWORD
             - name: REDIS_DB
               value: "0"
 
