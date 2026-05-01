@@ -59,6 +59,12 @@ vi.mock('@/components/ui/tooltip', () => ({
   TooltipContent: ({ children }: any) => <span data-testid="tooltip-content">{children}</span>,
 }));
 
+// Mock next/navigation router (BacktestPanel now navigates via router on
+// some recovery actions; without this Vitest's happy-dom invariant fails).
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+}));
+
 // Mock fetch API
 const mockFetch = vi.fn();
 global.fetch = mockFetch;
@@ -297,15 +303,19 @@ describe('BacktestPanel', () => {
       // Must select a stock first so run button is enabled
       await selectStock();
 
-      // Now override fetch for the backtest call
+      // Now override fetch for the backtest call. Mock a successful HTTP
+      // response (ok=true) with a payload that fails the success check, so
+      // the panel surfaces the inline error description via ErrorCard.
       mockFetch.mockImplementation((url: string) => {
         if (typeof url === 'string' && url.includes('/api/stocks/date-range')) {
           return Promise.resolve({
+            ok: true,
             json: () => Promise.resolve({ success: true, data: { minDate: '2020-01-02', maxDate: '2025-12-31', dataPoints: 1450 } }),
           });
         }
         return Promise.resolve({
-          json: () => Promise.resolve({ success: false, error: 'Backtest failed' }),
+          ok: true,
+          json: () => Promise.resolve({ success: false, error: { message: 'Backtest failed' } }),
         });
       });
 
@@ -313,6 +323,7 @@ describe('BacktestPanel', () => {
       await userEvent.click(screen.getByText('运行回测'));
 
       await waitFor(() => {
+        // ErrorCard renders the description in a paragraph.
         expect(screen.getByText(/Backtest failed/)).toBeInTheDocument();
       });
     });
@@ -719,7 +730,10 @@ describe('BacktestPanel', () => {
       await userEvent.click(screen.getByText('运行回测'));
 
       await waitFor(() => {
-        expect(screen.getByText(/Network error/)).toBeInTheDocument();
+        // The panel translates `Network error` into the structured banner
+        // copy; assert the user-facing recovery copy rather than the raw
+        // exception message.
+        expect(screen.getByText(/网络连接失败/)).toBeInTheDocument();
       });
     });
 

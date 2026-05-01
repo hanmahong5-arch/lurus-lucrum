@@ -13,9 +13,13 @@
 "use client";
 
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useAsyncTask } from "@/hooks/use-async-task";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { ErrorCard } from "@/components/ui/error-card";
+import { parseApiError, toAppError } from "@/lib/errors/error-types";
+import type { AppError, RecoveryAction } from "@/lib/errors/error-types";
 import { KLineChart, type TradeMarkerInfo } from "@/components/charts/kline-chart";
 import { EnhancedTradeCard } from "./enhanced-trade-card";
 import { TradeTableView } from "./trade-table-view";
@@ -295,9 +299,10 @@ export function BacktestPanel({
   const [showKlineChart, setShowKlineChart] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
   const [result, setResult] = useState<BacktestResult | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<DataSourceInfo | null>(null);
   const backtestTask = useAsyncTask();
+  const router = useRouter();
 
   const displayResult = externalResult ?? result;
   const running = externalIsRunning || isRunning;
@@ -458,50 +463,99 @@ export function BacktestPanel({
           }),
         });
 
-        const data = await response.json();
+        if (response.ok) {
+          const data = await response.json();
+          if (data.success && data.data) {
+            setResult(data.data);
+            onResult?.(data.data);
+            backtestTask.complete({ symbol: effectiveSymbol });
+            // Store data source info from API response
+            if (data.meta?.dataSource) {
+              setDataSourceInfo(data.meta.dataSource);
+            }
 
-        if (data.success && data.data) {
-          setResult(data.data);
-          onResult?.(data.data);
-          backtestTask.complete({ symbol: effectiveSymbol });
-          // Store data source info from API response
-          if (data.meta?.dataSource) {
-            setDataSourceInfo(data.meta.dataSource);
-          }
-
-          // Aha moment: Sharpe > 1.5 and free plan
-          const sharpe = data.data.sharpeRatio ?? data.data.riskMetrics?.sharpeRatio ?? 0;
-          if (sharpe > 1.5 && plan === "free") {
-            setAhaSharpRatio(sharpe);
-            setUpgradeVariant("aha");
-            setUpgradeDialogOpen(true);
+            // Aha moment: Sharpe > 1.5 and free plan
+            const sharpe = data.data.sharpeRatio ?? data.data.riskMetrics?.sharpeRatio ?? 0;
+            if (sharpe > 1.5 && plan === "free") {
+              setAhaSharpRatio(sharpe);
+              setUpgradeVariant("aha");
+              setUpgradeDialogOpen(true);
+            }
+          } else {
+            // 200 OK but unsuccessful payload — degrade gracefully into a
+            // structured error so the user gets a retry button.
+            const description = data.error?.message ?? data.error?.description ?? "回测失败 / Backtest failed";
+            setError({
+              code: data.error?.code ?? "BACKTEST_FAILED",
+              title: "回测失败",
+              description,
+              severity: "error",
+              recoveryActions: [
+                { type: "retry", label: "重试" },
+                { type: "custom", label: "调整参数" },
+              ],
+            });
+            backtestTask.fail(description);
           }
         } else if (response.status === 429) {
-          // Rate limited or quota exceeded
-          const errorCode = data.error?.code;
+          // Peek the body to differentiate rate-limit (transient, just wait)
+          // from quota-exceeded (needs upgrade dialog).
+          const cloned = response.clone();
+          let errorCode: string | undefined;
+          try {
+            const body = await cloned.json();
+            errorCode = body?.error?.code;
+          } catch {
+            // ignore parse errors
+          }
           if (errorCode === 'RATE_LIMITED' || errorCode === 'CONCURRENCY_LIMIT') {
-            // Rate limit — show error message, not upgrade dialog
-            const retryAfter = response.headers.get('Retry-After');
-            const description = data.error?.description
-              ?? (retryAfter ? `请等待${retryAfter}秒后再试` : '请求过于频繁，请稍后再试');
-            setError(description);
-            backtestTask.fail(description);
+            // parseApiError already handles 429 with Retry-After header
+            // and emits a warning-severity AppError with dismiss action.
+            const appErr = await parseApiError(response, errorCode);
+            setError(appErr);
+            backtestTask.fail(appErr.description);
           } else {
-            // Quota exceeded — show upgrade dialog
+            // Quota exceeded — keep existing upgrade-dialog flow (paywall UX
+            // is already first-class and lives outside the ErrorCard system).
             setUpgradeVariant("limit");
             setUpgradeDialogOpen(true);
             backtestTask.fail('配额超限');
           }
         } else {
-          const errMsg = data.error?.message ?? data.error ?? "回测失败 / Backtest failed";
-          setError(errMsg);
-          backtestTask.fail(errMsg);
+          // Server-side failure (4xx / 5xx) — backtest API speaks the
+          // canonical error envelope, so parseApiError pulls
+          // {code, title, description, recoveryActions} directly.
+          const appErr = await parseApiError(response, "BACKTEST_FAILED");
+          setError(appErr);
+          backtestTask.fail(appErr.description);
         }
       }
     } catch (err) {
+      // Network-level / unexpected throw.
       const errMsg = err instanceof Error ? err.message : "回测出错 / Backtest error";
-      setError(errMsg);
-      backtestTask.fail(errMsg);
+      const isTimeout = /timeout/i.test(errMsg);
+      const isNetwork = /fetch|network/i.test(errMsg);
+      const appErr = toAppError(err, "BACKTEST_NETWORK");
+      const next: AppError = {
+        ...appErr,
+        title: isTimeout
+          ? "回测请求超时"
+          : isNetwork
+            ? "网络连接失败"
+            : "回测出错",
+        description: isTimeout
+          ? "回测耗时较长，请缩短时间范围或重试。"
+          : isNetwork
+            ? "无法连接到回测服务，请检查网络后重试。"
+            : errMsg,
+        severity: "error",
+        recoveryActions: [
+          { type: "retry", label: "重试" },
+          { type: "custom", label: "调整参数" },
+        ],
+      };
+      setError(next);
+      backtestTask.fail(next.description);
     } finally {
       setIsRunning(false);
       onBacktestEnd?.();
@@ -998,13 +1052,27 @@ export function BacktestPanel({
         </div>
       )}
 
-      {/* Error Message / 错误消息 */}
+      {/* Error — backtest API emits structured BT-codes (BT201/etc) with
+          recoveryActions like 调整参数 / 升级套餐; ErrorCard renders them
+          with retry + navigate semantics so the user gets one click out. */}
       {error && (
-        <div className="px-4 py-3 bg-loss/10 border-b border-loss/30 flex items-center gap-2">
-          <svg className="w-4 h-4 text-loss shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <p className="text-sm text-loss">{error}</p>
+        <div className="px-4 py-3 border-b border-loss/30">
+          <ErrorCard
+            error={error}
+            onAction={(action: RecoveryAction) => {
+              if (action.type === "retry") {
+                setError(null);
+                void handleRunBacktest();
+                return;
+              }
+              if (action.type === "navigate" && action.href) {
+                router.push(action.href);
+                return;
+              }
+              // dismiss / custom — banner advisory, user adjusts the form.
+              setError(null);
+            }}
+          />
         </div>
       )}
 
