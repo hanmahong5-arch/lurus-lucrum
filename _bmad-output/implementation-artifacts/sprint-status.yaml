@@ -138,7 +138,7 @@ development_status:
   # NFRs: NFR-2.1 (99.5% uptime), NFR-4.1-4.4 (WCAG AA), NFR-5.2-5.4 (test coverage)
   # ══════════════════════════════════════════════════════════════════
   epic-7: done
-  7-1-realtime-market-data: done                  # [P] 实时行情数据集成 (Cron + incremental update)
+  7-1-realtime-market-data: partial               # [P] 行情数据集成 — 代码 done 但生产 DB 空白至 2026-04-30；2026-05-01 引导入 56 只精选 A 股 (40k+ K 线) 解锁 magic-moment。完整 ~5000 股 backfill + 自动 cron 触发未完成。详见 plans/data-ingest-pipeline.md。
   7-2-e2e-critical-user-journeys: done            # [P] E2E 测试关键用户旅程 (Playwright, 4 viewports)
   7-3-wcag-accessibility-audit: done              # [P] WCAG 2.1 AA 无障碍审计与修复
   7-4-test-coverage-improvement: done             # [P] 数据层与组件测试覆盖率提升 (data≥60%, components≥50%)
