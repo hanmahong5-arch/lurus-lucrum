@@ -54,6 +54,7 @@
     "langchain": "0.3.17",
     "lightweight-charts": "^4.1.0",
     "lucide-react": "^0.400.0",
+    "nats": "^2.29.3",
     "next": "^14.2.0",
     "next-auth": "^4.24.0",
     "node-cron": "^4.2.1",

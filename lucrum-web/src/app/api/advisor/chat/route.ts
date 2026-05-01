@@ -32,6 +32,7 @@ import { getInstitutionRoleById } from "@/lib/advisor/agent/institution-agents";
 import { searchMemories, addMemory, buildMemoryPromptSection } from "@/lib/memorus-client";
 import { streamChat, chatComplete, loadGatewayConfig, LlmCancelledError, type TaskClass } from "@/lib/llm";
 import { translateUpstreamSseStream } from "@/lib/llm/sse-transform";
+import { publishAdvisorOutput } from "@/lib/services/nats-publisher";
 
 // Pick a task class per advisor mode. quick = cheap fast model; deep / debate
 // = analytic tier; diagnose involves multi-hop fault reasoning so it gets the
@@ -514,6 +515,27 @@ export async function POST(request: NextRequest) {
     // Consume actual tokens (in addition to estimated already consumed in checkAndConsumeQuota)
     if (userId && actualTokens > maxTokens) {
       consumeQuota({ accountId, userId, tokens: actualTokens - maxTokens, operationType: "advisor_chat" });
+    }
+
+    // Publish advisor.output to LUCRUM_EVENTS for the unified notification
+    // inbox. Fire-and-forget — failures stay inside nats-publisher.ts and
+    // never affect the response. Skipped on streaming path (no completion
+    // hook) and on guest requests (no accountId).
+    if (userId && accountId) {
+      const numericAccountId = Number.parseInt(accountId, 10);
+      if (Number.isFinite(numericAccountId) && numericAccountId > 0) {
+        publishAdvisorOutput({
+          userId,
+          accountId: numericAccountId,
+          advisorId: institutionRole ?? advisorContext?.masterAgent ?? mode,
+          advisorName:
+            (institutionRole && getInstitutionRoleById(institutionRole).title) ||
+            advisorContext?.masterAgent ||
+            "Lucrum Advisor",
+          symbol: context?.symbol ?? "",
+          summary: advisorResponse,
+        });
+      }
     }
 
     return NextResponse.json({

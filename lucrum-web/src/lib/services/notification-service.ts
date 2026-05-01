@@ -14,6 +14,8 @@ import {
 } from '@/lib/db/schema';
 import { eq, and, desc, sql, isNull } from 'drizzle-orm';
 import { getRedis, cacheGet, cacheSet, cacheDel } from '@/lib/redis/client';
+import { publishMarketEvent } from './nats-publisher';
+import { resolveAccountId } from '@/lib/middleware/quota-check';
 
 // ============================================================================
 // Types
@@ -72,6 +74,11 @@ export async function createNotification(
       publishNotification(params.userId, notification).catch(() => {
         // Redis unavailable — SSE will fall back to polling
       });
+      // Also publish significant market events to LUCRUM_EVENTS for the
+      // platform unified notification inbox. The two channels coexist —
+      // Redis SSE is for in-tab live updates, NATS is for cross-device /
+      // cross-app delivery (Lutu APP, etc.).
+      void maybePublishMarketEventToNats(params);
       // Invalidate unread count cache
       await cacheDel(`notify:unread:${params.userId}`);
     }
@@ -197,6 +204,55 @@ export async function getUnreadCount(userId: string): Promise<number> {
 // ============================================================================
 // Redis Pub/Sub for Real-Time Delivery
 // ============================================================================
+
+/**
+ * Bridge a market-flavored notification to the LUCRUM_EVENTS NATS stream.
+ *
+ * Filter:
+ *   - type === 'system' (advisor team / portfolio activity uses 'activity')
+ *   - metadata.symbol present
+ *   - metadata.severity ∈ {'warning', 'critical'} (the consumer template
+ *     is for high-priority alerts; 'info'-grade events stay local)
+ *
+ * Account-id resolution: lucrum-web stores Zitadel sub on `userId`. The
+ * consumer envelope wants a numeric account id; we resolve it via the
+ * existing identity middleware. If resolution fails we drop silently —
+ * the publisher is best-effort.
+ */
+async function maybePublishMarketEventToNats(
+  params: CreateNotificationParams,
+): Promise<void> {
+  try {
+    if (params.type !== 'system') return;
+    const md = params.metadata;
+    if (!md) return;
+    const symbol = typeof md.symbol === 'string' ? md.symbol : '';
+    const severityRaw = typeof md.severity === 'string' ? md.severity : '';
+    if (!symbol) return;
+    if (severityRaw !== 'warning' && severityRaw !== 'critical') return;
+
+    const accountIdStr = await resolveAccountId(params.userId);
+    if (!accountIdStr) return;
+    const accountId = Number.parseInt(accountIdStr, 10);
+    if (!Number.isFinite(accountId) || accountId <= 0) return;
+
+    const headline =
+      typeof md.headline === 'string' && md.headline
+        ? md.headline
+        : params.title;
+
+    publishMarketEvent({
+      userId: params.userId,
+      accountId,
+      symbol,
+      headline,
+      severity: severityRaw,
+    });
+  } catch (error) {
+    // Bridge is best-effort; never break the primary write path.
+    console.warn('[NotificationService] maybePublishMarketEventToNats:', error);
+  }
+}
 
 /**
  * Publish notification event to Redis channel
