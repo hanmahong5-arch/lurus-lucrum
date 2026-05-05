@@ -154,6 +154,76 @@ describe('translateUpstreamSseStream', () => {
     expect(dataPayload(frames[1]!)).toBe('[DONE]');
   });
 
+  it('invokes onContent for each forwarded chunk and onComplete on [DONE]', async () => {
+    const upstream = makeUpstream([
+      'data: {"choices":[{"delta":{"content":"Hello"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":" world"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    const chunks: string[] = [];
+    let completed = 0;
+    const downstream = translateUpstreamSseStream(upstream, {
+      onContent: (c) => {
+        chunks.push(c);
+      },
+      onComplete: () => {
+        completed += 1;
+      },
+    });
+    await collectFrames(downstream);
+    expect(chunks).toEqual(['Hello', ' world']);
+    expect(completed).toBe(1);
+  });
+
+  it('does NOT invoke onComplete on truncation', async () => {
+    const upstream = makeUpstream([
+      'data: {"choices":[{"delta":{"content":"partial"}}]}\n\n',
+      // No [DONE] — stream just ends.
+    ]);
+    let completed = 0;
+    const downstream = translateUpstreamSseStream(upstream, {
+      onComplete: () => {
+        completed += 1;
+      },
+    });
+    await collectFrames(downstream);
+    expect(completed).toBe(0);
+  });
+
+  it('does NOT invoke onComplete on mid-stream error frame', async () => {
+    const upstream = makeUpstream([
+      'data: {"error":{"message":"upstream blew up"}}\n\n',
+    ]);
+    let completed = 0;
+    const downstream = translateUpstreamSseStream(upstream, {
+      onComplete: () => {
+        completed += 1;
+      },
+    });
+    await collectFrames(downstream);
+    expect(completed).toBe(0);
+  });
+
+  it('swallows exceptions thrown from onContent so the stream survives', async () => {
+    const upstream = makeUpstream([
+      'data: {"choices":[{"delta":{"content":"first"}}]}\n\n',
+      'data: {"choices":[{"delta":{"content":"second"}}]}\n\n',
+      'data: [DONE]\n\n',
+    ]);
+    let calls = 0;
+    const downstream = translateUpstreamSseStream(upstream, {
+      onContent: () => {
+        calls += 1;
+        throw new Error('boom');
+      },
+    });
+    const frames = await collectFrames(downstream);
+    // Stream still terminated cleanly with both content frames + DONE.
+    expect(calls).toBe(2);
+    expect(frames).toHaveLength(3);
+    expect(dataPayload(frames[2]!)).toBe('[DONE]');
+  });
+
   it('ignores non-data SSE lines (comments, event-name lines)', async () => {
     const upstream = makeUpstream([
       ': keepalive\n\n',

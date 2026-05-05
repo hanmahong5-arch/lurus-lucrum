@@ -14,6 +14,7 @@ import { DashboardHeader } from "@/components/dashboard/dashboard-header";
 import { ContinueWorkBanner } from "@/components/dashboard/continue-work-banner";
 import { useOnboardingImport } from "@/hooks/use-onboarding-import";
 import { parseStrategyParameters, updateParameterInCode } from "@/lib/strategy/parameter-parser";
+import { extractCodeProgressively } from "@/lib/strategy/generate-shared";
 import { useUserWorkspace } from "@/hooks/use-user-workspace";
 import { useUserActions } from "@/hooks/use-user-actions";
 import type { CompactBacktestConfigData } from "@/components/strategy-editor/compact-backtest-config";
@@ -329,7 +330,17 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Handle AI strategy generation
+  // Handle AI strategy generation via SSE.
+  //
+  // Streams from `/api/strategy/generate/stream` so the editor fills in token
+  // by token instead of waiting ~52s for the full response (cold-cache LLM).
+  // Cache hits still arrive as a single content frame followed by [DONE], so
+  // the consumer code path is identical for hit and miss.
+  //
+  // Server protocol (matches `lib/llm/sse-transform.ts`):
+  //   data: {"content":"<delta>"}\n\n      — append to buffer
+  //   data: {"error":{...}}\n\n             — terminal failure
+  //   data: [DONE]\n\n                       — clean end
   const handleGenerate = useCallback(async (prompt: string) => {
     // If already generating, do nothing (prevent double-click)
     if (isGenerating) return;
@@ -339,6 +350,17 @@ export default function DashboardPage() {
       setAiUpgradeDialogOpen(true);
       return;
     }
+
+    const applyFallback = (appErr: AppError) => {
+      setError(appErr);
+      setGenerationError(appErr.description);
+      generateTask.fail(appErr.description);
+      const fallbackCode = generateFallbackCode(prompt);
+      updateGeneratedCode(fallbackCode);
+      const fallbackName = extractStrategyName(prompt, fallbackCode);
+      setStrategyName(fallbackName);
+      saveStrategyToDatabase(fallbackName, fallbackCode, prompt, 'ai_generated');
+    };
 
     setGenerating(true);
     updateGeneratedCode("");
@@ -353,62 +375,114 @@ export default function DashboardPage() {
     // Create abort signal — aborts previous generation if any
     const signal = createSignal();
 
+    let assembled = "";
+    let firstChunkRendered = false;
+
     try {
-      const response = await fetch("/api/strategy/generate", {
+      const response = await fetch("/api/strategy/generate/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ prompt }),
         signal,
       });
 
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        const text = await response.text();
-        throw new Error(text || `HTTP ${response.status}`);
+      // Server may emit a single SSE error frame at any status (auth, quota,
+      // upstream LLM down). Always parse the body as SSE and let the reader
+      // surface the error frame uniformly — no JSON-vs-SSE branching.
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error(`HTTP ${response.status} (no response body)`);
       }
 
-      const data = await response.json();
-      if (!response.ok) {
-        // Parse structured error from API
-        if (data.error && typeof data.error === 'object' && data.error.code) {
-          const appErr: AppError = {
-            code: data.error.code,
-            title: data.error.title ?? '策略生成失败',
-            description: data.error.description ?? '未知错误',
-            severity: data.error.severity ?? 'error',
-            recoveryActions: data.error.recoveryActions ?? [],
-          };
-          setError(appErr);
-          setGenerationError(appErr.description);
-          generateTask.fail(appErr.description);
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let sawDone = false;
+      let streamError: AppError | null = null;
 
-          // Still provide fallback code
-          const fallbackCode = generateFallbackCode(prompt);
-          updateGeneratedCode(fallbackCode);
-          const name = extractStrategyName(prompt, fallbackCode);
-          setStrategyName(name);
-          saveStrategyToDatabase(name, fallbackCode, prompt, 'ai_generated');
-          return;
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data:")) continue;
+          const data = (line.startsWith("data: ") ? line.slice(6) : line.slice(5)).trim();
+          if (!data) continue;
+          if (data === "[DONE]") {
+            sawDone = true;
+            continue;
+          }
+
+          let parsed: { content?: unknown; error?: { code?: string; title?: string; description?: string; severity?: string; recoveryActions?: unknown } };
+          try {
+            parsed = JSON.parse(data);
+          } catch {
+            // Corrupt frame — best-effort skip rather than abort.
+            continue;
+          }
+
+          if (parsed.error) {
+            streamError = {
+              code: parsed.error.code ?? 'STRATEGY_STREAM_ERROR',
+              title: parsed.error.title ?? '策略生成失败',
+              description: parsed.error.description ?? '未知错误',
+              severity: (parsed.error.severity === 'warning' ? 'warning' : 'error') as AppError['severity'],
+              recoveryActions: Array.isArray(parsed.error.recoveryActions)
+                ? (parsed.error.recoveryActions as AppError['recoveryActions'])
+                : [],
+            };
+            break;
+          }
+
+          if (typeof parsed.content === "string" && parsed.content.length > 0) {
+            assembled += parsed.content;
+            // Show clean Python in the editor as it streams — strip the
+            // ```python opener even before the closing fence arrives so the
+            // user never sees a raw markdown fence.
+            updateGeneratedCode(extractCodeProgressively(assembled));
+            if (!firstChunkRendered) {
+              setCodePreviewCollapsed(false);
+              firstChunkRendered = true;
+            }
+          }
         }
-        throw new Error(data.error || data.details || "Failed to generate strategy");
+
+        if (streamError) break;
       }
 
-      if (data.success && data.code) {
-        updateGeneratedCode(data.code);
-        setCodePreviewCollapsed(false); // Auto-expand code on generation
-        generateTask.complete({ codeLength: data.code.length });
-        trackAction('strategy-generated', { prompt: prompt.slice(0, 50) });
-        trackUsage("ai"); // Client-side usage tracking for paywall
-        void refreshUsage(); // Refresh server-side usage data
-        // Achievement tracking: record strategy creation
-        recordAchievementStat('totalStrategies', 1);
-        setTimeout(() => saveDraft(), 0);
+      if (streamError) {
+        applyFallback(streamError);
+        return;
+      }
 
-        const name = extractStrategyName(prompt, data.code);
-        setStrategyName(name);
-        saveStrategyToDatabase(name, data.code, prompt, 'ai_generated');
-      } else {
+      if (!assembled) {
         throw new Error("No code generated");
+      }
+
+      const finalCode = extractCodeProgressively(assembled).trim();
+      updateGeneratedCode(finalCode);
+      if (!firstChunkRendered) setCodePreviewCollapsed(false);
+
+      generateTask.complete({ codeLength: finalCode.length });
+      trackAction('strategy-generated', { prompt: prompt.slice(0, 50) });
+      trackUsage("ai"); // Client-side usage tracking for paywall
+      void refreshUsage(); // Refresh server-side usage data
+      recordAchievementStat('totalStrategies', 1);
+      setTimeout(() => saveDraft(), 0);
+
+      const name = extractStrategyName(prompt, finalCode);
+      setStrategyName(name);
+      saveStrategyToDatabase(name, finalCode, prompt, 'ai_generated');
+
+      if (!sawDone) {
+        // Stream closed without [DONE] but produced code — usually a
+        // network drop right at the end. Code is saved; only log so the
+        // user isn't bothered.
+        console.warn('[Dashboard] Generation stream closed without [DONE] — possible truncation');
       }
     } catch (err) {
       // If aborted (user navigated away or triggered new generation), do nothing
@@ -423,17 +497,7 @@ export default function DashboardPage() {
         { type: 'custom', label: '使用模板' },
         { type: 'custom', label: '修改描述' },
       ];
-      setError(appErr);
-      setGenerationError(appErr.description);
-      generateTask.fail(appErr.description);
-
-      // Fallback to mock code
-      const fallbackCode = generateFallbackCode(prompt);
-      updateGeneratedCode(fallbackCode);
-
-      const name = extractStrategyName(prompt, fallbackCode);
-      setStrategyName(name);
-      saveStrategyToDatabase(name, fallbackCode, prompt, 'ai_generated');
+      applyFallback(appErr);
     } finally {
       setGenerating(false);
     }

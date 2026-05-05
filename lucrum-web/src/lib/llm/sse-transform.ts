@@ -45,6 +45,19 @@ export interface SseTransformOptions {
    * went away (any UI is gone).
    */
   readonly signal?: AbortSignal;
+  /**
+   * Server-side content tap. Invoked for every text chunk as it is forwarded
+   * downstream. Lets the route accumulate the full response (e.g. for cache
+   * writes) without parsing the SSE stream a second time. Throws are
+   * swallowed so a buggy callback can never break the user-facing stream.
+   */
+  readonly onContent?: (chunk: string) => void;
+  /**
+   * Called exactly once when the stream terminates cleanly with `[DONE]`.
+   * NOT called on error frames or truncation — only on the happy path. Use
+   * to persist the assembled response. Throws are swallowed.
+   */
+  readonly onComplete?: () => void;
 }
 
 const ENC = new TextEncoder();
@@ -174,7 +187,16 @@ export function translateUpstreamSseStream(
           return true;
         }
         if (content !== null) {
-          if (!closed) controller.enqueue(contentFrame(content));
+          if (!closed) {
+            controller.enqueue(contentFrame(content));
+            // Best-effort tap — never let a callback exception poison the
+            // stream the user is actively consuming.
+            try {
+              options?.onContent?.(content);
+            } catch {
+              /* swallow */
+            }
+          }
         }
         return false;
       };
@@ -201,7 +223,17 @@ export function translateUpstreamSseStream(
             const payload = extractDataPayload(line);
             if (payload === null) continue;
             if (handlePayload(payload)) {
-              if (sawDone && !closed) closeWith(doneFrame());
+              if (sawDone && !closed) {
+                closeWith(doneFrame());
+                // Mid-stream `[DONE]` exit path: notify the server-side tap
+                // here too, otherwise onComplete only fires for streams that
+                // close *after* the upstream EOF arrives.
+                try {
+                  options?.onComplete?.();
+                } catch {
+                  /* swallow */
+                }
+              }
               return;
             }
           }
@@ -212,8 +244,19 @@ export function translateUpstreamSseStream(
           if (payload !== null) handlePayload(payload);
         }
         if (closed) return;
-        if (sawDone) closeWith(doneFrame());
-        else closeWith(errFrame(STREAM_TRUNCATED));
+        if (sawDone) {
+          closeWith(doneFrame());
+          // Clean termination: notify the server-side tap so it can persist
+          // the assembled body. Swallow throws — callback bugs must not
+          // surface as stream errors after we've already emitted [DONE].
+          try {
+            options?.onComplete?.();
+          } catch {
+            /* swallow */
+          }
+        } else {
+          closeWith(errFrame(STREAM_TRUNCATED));
+        }
       } catch (err) {
         // AbortError from caller signal: silent close.
         if ((err as Error)?.name === 'AbortError' || options?.signal?.aborted) {
