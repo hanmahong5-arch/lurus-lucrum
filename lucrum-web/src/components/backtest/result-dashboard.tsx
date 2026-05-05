@@ -595,8 +595,18 @@ export function ResultDashboard({
     target,
   } = result;
 
+  // True when the strategy never triggered a single trade in the backtest
+  // window. This is a fundamentally different state from "trades performed
+  // poorly" — every metric reads 0, the score collapses to D, and a generic
+  // "few trades" warning would mislead the user into thinking the strategy
+  // is broken when it just hasn't fired yet.
+  const noTrades = tradingMetrics.totalTrades === 0;
+
   // Calculate summary badge
   const summaryBadge = useMemo(() => {
+    if (noTrades) {
+      return { label: "未触发", variant: "outline" as const };
+    }
     if (returnMetrics.totalReturn > 20 && riskMetrics.sharpeRatio > 1.5) {
       return { label: "优秀", variant: "success" as const };
     } else if (returnMetrics.totalReturn > 0 && riskMetrics.sharpeRatio > 0.5) {
@@ -605,11 +615,16 @@ export function ResultDashboard({
       return { label: "亏损", variant: "danger" as const };
     }
     return { label: "一般", variant: "outline" as const };
-  }, [returnMetrics, riskMetrics]);
+  }, [noTrades, returnMetrics, riskMetrics]);
 
   // Warnings check
   const warnings = useMemo(() => {
     const list: string[] = [];
+    // Skip the noisy aggregate warnings entirely on a no-trade run — they
+    // describe a degenerate "all zeros" state that the dedicated banner
+    // handles with actionable next steps. Keeping them would make the
+    // panel look like multiple unrelated problems.
+    if (noTrades) return list;
     if (riskMetrics.maxDrawdown > 25) {
       list.push("最大回撤超过25%");
     }
@@ -623,7 +638,7 @@ export function ResultDashboard({
       list.push("夏普比率为负");
     }
     return list;
-  }, [riskMetrics, tradingMetrics]);
+  }, [noTrades, riskMetrics, tradingMetrics]);
 
   return (
     <TooltipProvider>
@@ -653,8 +668,33 @@ export function ResultDashboard({
         )}
       </div>
 
-      {/* Warnings */}
-      {warnings.length > 0 && (
+      {/* No-trade banner — replaces the generic warnings box on degenerate
+          backtests. Specific copy + concrete next steps so the user
+          doesn't read "all zeros" as "this strategy is broken". */}
+      {noTrades && (
+        <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
+          <div className="flex items-start gap-2">
+            <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
+            <div>
+              <div className="font-medium text-yellow-800 dark:text-yellow-200">
+                策略未触发任何交易 / Strategy did not trigger any trades
+              </div>
+              <p className="text-sm text-yellow-700 dark:text-yellow-300 mt-1">
+                所有指标因此为 0，但这不一定代表策略失效。可以尝试：
+              </p>
+              <ul className="text-sm text-yellow-700 dark:text-yellow-300 mt-1 list-disc list-inside">
+                <li>扩大日期范围（例如改成 2 年回测窗口）</li>
+                <li>选择波动更大的标的（如行业 ETF / 主题股）</li>
+                <li>检查买卖阈值是否过严，例如 RSI &lt;20 / &gt;80 在平稳市场难触发</li>
+                <li>确认入场条件不依赖未来数据（look-ahead bias）</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Standard warnings — only render on runs that actually traded */}
+      {!noTrades && warnings.length > 0 && (
         <div className="p-3 bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-800 rounded-md">
           <div className="flex items-start gap-2">
             <AlertTriangle className="h-5 w-5 text-yellow-600 flex-shrink-0 mt-0.5" />
