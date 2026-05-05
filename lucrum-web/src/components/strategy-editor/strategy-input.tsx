@@ -16,6 +16,12 @@ interface StrategyInputProps {
   value?: string;
   /** Callback when value changes / 值变化时的回调 */
   onChange?: (value: string) => void;
+  /**
+   * Abort an in-flight generation. When provided, a "停止" button appears
+   * alongside the loading indicator while `isLoading=true`. Used to cancel
+   * the streaming SSE so users aren't trapped watching a 25s wrong answer.
+   */
+  onStop?: () => void;
 }
 
 /**
@@ -66,6 +72,7 @@ export function StrategyInput({
   isLoading = false,
   value: controlledValue,
   onChange: onControlledChange,
+  onStop,
 }: StrategyInputProps) {
   // Support both controlled and uncontrolled modes
   // 同时支持受控和非受控模式
@@ -280,16 +287,29 @@ Describe your trading strategy in plain language...`}
               <span>✨</span>
               AI优化
             </Button>
-            <AsyncButton
-              onClick={handleSubmit}
-              disabled={!prompt.trim() || isOverLimit}
-              loadingText="正在生成..."
-              successText="已生成"
-              variant="primary"
-              className="min-w-[120px] text-sm"
-            >
-              生成策略 / Generate
-            </AsyncButton>
+            {isLoading && onStop ? (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={onStop}
+                className="min-w-[120px] text-sm gap-1 border-loss/40 text-loss hover:bg-loss/10"
+                aria-label="停止生成"
+              >
+                <span aria-hidden="true">■</span>
+                停止 / Stop
+              </Button>
+            ) : (
+              <AsyncButton
+                onClick={handleSubmit}
+                disabled={!prompt.trim() || isOverLimit}
+                loadingText="正在生成..."
+                successText="已生成"
+                variant="primary"
+                className="min-w-[120px] text-sm"
+              >
+                生成策略 / Generate
+              </AsyncButton>
+            )}
           </div>
         </div>
       </div>

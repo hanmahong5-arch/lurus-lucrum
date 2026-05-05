@@ -514,6 +514,18 @@ export default function DashboardPage() {
     strategyInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [isGenerating, createSignal, setGenerating, updateStrategyInput]);
 
+  // User-facing abort for an in-flight streaming generation. createSignal()
+  // aborts the controller currently held by useAbortController as a side
+  // effect; the new signal returned is unused (and in turn aborted by the
+  // next createSignal() call). We then clear isGenerating immediately so the
+  // UI flips back to the Generate button without waiting for the fetch's
+  // catch path to settle.
+  const abortGeneration = useCallback(() => {
+    if (!isGenerating) return;
+    createSignal();
+    setGenerating(false);
+  }, [isGenerating, createSignal, setGenerating]);
+
   // Handle code update from parameter editor
   const handleCodeUpdate = useCallback((newCode: string) => {
     updateGeneratedCode(newCode);
@@ -742,6 +754,7 @@ export default function DashboardPage() {
                     isBacktesting={isBacktesting}
                     hasUnsavedChanges={hasUnsavedChanges}
                     onGenerate={handleGenerate}
+                    onStopGenerate={abortGeneration}
                     onUpdateInput={updateStrategyInput}
                     onSelectTemplate={handleSelectTemplate}
                     onCodeUpdate={handleCodeUpdate}
@@ -785,6 +798,7 @@ export default function DashboardPage() {
                 isBacktesting={isBacktesting}
                 hasUnsavedChanges={hasUnsavedChanges}
                 onGenerate={handleGenerate}
+                onStopGenerate={abortGeneration}
                 onUpdateInput={updateStrategyInput}
                 onSelectTemplate={handleSelectTemplate}
                 onCodeUpdate={handleCodeUpdate}
@@ -858,6 +872,7 @@ interface LeftPanelProps {
   isBacktesting: boolean;
   hasUnsavedChanges: boolean;
   onGenerate: (prompt: string) => Promise<void>;
+  onStopGenerate: () => void;
   onUpdateInput: (input: string) => void;
   onSelectTemplate: (prompt: string) => void;
   onCodeUpdate: (newCode: string) => void;
@@ -876,6 +891,7 @@ function LeftPanel({
   isBacktesting,
   hasUnsavedChanges,
   onGenerate,
+  onStopGenerate,
   onUpdateInput,
   onSelectTemplate,
   onCodeUpdate,
@@ -894,6 +910,7 @@ function LeftPanel({
           isLoading={isGenerating}
           value={strategyInput}
           onChange={onUpdateInput}
+          onStop={onStopGenerate}
         />
       </div>
 
