@@ -333,11 +333,15 @@ export async function POST(request: NextRequest) {
 
       const totalTime = Date.now() - startTime;
 
-      // TODO: If user is authenticated, save backtest result to history
-      // This will be implemented when the history service integration is complete
+      // History persistence happens client-side from `handleBacktestResult`
+      // in `app/dashboard/page.tsx` — the client has the full result + config
+      // already serialised, and a server-side save here would double-write
+      // for users who run backtests through the dashboard. Server-side
+      // persistence remains a no-op so non-dashboard callers (mobile,
+      // future API consumers) can opt in by hitting POST /api/history
+      // themselves.
       if (user) {
         console.log(`[Backtest] Authenticated user ${user.userId} ran backtest on ${config.symbol}`);
-        // Future: saveBacktestHistory({ userId: user.userId, ... })
       }
 
       return NextResponse.json({

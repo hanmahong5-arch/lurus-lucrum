@@ -602,6 +602,46 @@ export default function DashboardPage() {
     if (symbol) {
       recordAchievementStock(symbol);
     }
+
+    // Persist to /api/history so /dashboard/history actually has data.
+    // Fire-and-forget — a failed save shouldn't block the results view.
+    // Server validates required fields (symbol/dates/config/result); skip
+    // the call if any are missing rather than fail the request.
+    const persistSymbol = result.backtestMeta?.targetSymbol ?? result.config?.symbol;
+    const startDate = result.backtestMeta?.timeRange?.start ?? result.config?.startDate;
+    const endDate = result.backtestMeta?.timeRange?.end ?? result.config?.endDate;
+    if (persistSymbol && startDate && endDate && result.config) {
+      void fetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'backtest',
+          data: {
+            symbol: persistSymbol,
+            stockName: result.backtestMeta?.targetName ?? null,
+            // ISO timestamps land here from the engine; the schema expects
+            // YYYY-MM-DD, so trim to the date prefix.
+            startDate: String(startDate).slice(0, 10),
+            endDate: String(endDate).slice(0, 10),
+            timeframe: '1d',
+            config: result.config,
+            result,
+            dataSource: result.backtestMeta?.dataSource ?? 'unknown',
+            dataCoverage: result.backtestMeta?.dataQuality?.completeness ?? null,
+            totalReturn: isFinite(totalReturn) ? totalReturn : null,
+            sharpeRatio: typeof result.sharpeRatio === 'number' && isFinite(result.sharpeRatio)
+              ? result.sharpeRatio : null,
+            maxDrawdown: typeof result.maxDrawdown === 'number' && isFinite(result.maxDrawdown)
+              ? result.maxDrawdown : null,
+            winRate: typeof result.winRate === 'number' && isFinite(result.winRate)
+              ? result.winRate : null,
+            executionTime: typeof result.executionTime === 'number' ? result.executionTime : null,
+          },
+        }),
+      }).catch((err) => {
+        console.warn('[Dashboard] Failed to persist backtest history:', err);
+      });
+    }
   }, [trackAction, recordAchievementStat, recordAchievementStock]);
 
   // Handle AI assistant parameter application
