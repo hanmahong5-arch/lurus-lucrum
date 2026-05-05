@@ -38,6 +38,7 @@ import { LlmCancelledError, loadGatewayConfig, streamChat } from '@/lib/llm';
 import { translateUpstreamSseStream } from '@/lib/llm/sse-transform';
 import {
   STRATEGY_SYSTEM_PROMPT,
+  STRATEGY_TOKENS_PER_CHAR,
   buildStrategyUserMessage,
   computeStrategyCacheKey,
   extractCode,
@@ -57,6 +58,8 @@ const errorFrame = (payload: Record<string, unknown>): string =>
   `data: ${JSON.stringify({ error: payload })}\n\n`;
 const contentFrame = (text: string): string =>
   `data: ${JSON.stringify({ content: text })}\n\n`;
+const metaFrame = (payload: Record<string, unknown>): string =>
+  `data: ${JSON.stringify({ meta: payload })}\n\n`;
 const doneFrame = (): string => 'data: [DONE]\n\n';
 
 function sseErrorResponse(payload: Record<string, unknown>, status: number): Response {
@@ -134,6 +137,15 @@ export async function POST(request: NextRequest) {
     const cached = await findPopularStrategyByKey(cacheKey);
     if (cached?.veighnaCode) {
       const code = cached.veighnaCode.trim();
+      // Token-saved estimate matches the JSON route's formula so the cache
+      // badge displays the same number across transports — system prompt +
+      // user prompt + ~500 tokens of structural overhead the LLM would
+      // otherwise emit.
+      const savedTokens = Math.round(
+        STRATEGY_SYSTEM_PROMPT.length * STRATEGY_TOKENS_PER_CHAR +
+          prompt.length * STRATEGY_TOKENS_PER_CHAR +
+          500,
+      );
       // Bump usage count asynchronously — same semantics as JSON route.
       void upsertPopularStrategy({
         cacheKey,
@@ -144,10 +156,14 @@ export async function POST(request: NextRequest) {
       });
 
       console.log(`[strategy/generate/stream] Cache HIT for key ${cacheKey}`);
-      return new Response(contentFrame(code) + doneFrame(), {
-        status: 200,
-        headers: SSE_HEADERS,
-      });
+      // Order: meta first so the client can flip the cache badge before
+      // rendering the (possibly large) code block, then the content, then
+      // the terminator. Single Response body keeps the round-trip to a
+      // single TCP write.
+      return new Response(
+        metaFrame({ cached: true, savedTokens }) + contentFrame(code) + doneFrame(),
+        { status: 200, headers: SSE_HEADERS },
+      );
     }
 
     console.log('[strategy/generate/stream] Cache MISS — calling LLM router (streaming)...');

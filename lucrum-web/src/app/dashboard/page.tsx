@@ -174,6 +174,10 @@ export default function DashboardPage() {
   const [strategyName, setStrategyName] = useState("未命名策略");
   const [showHistory, setShowHistory] = useState(false);
   const [focusedLine, setFocusedLine] = useState<number | null>(null);
+  // Cache-hit metadata from the streaming generate route. Reset on every new
+  // generation; the SSE meta frame populates it before the content arrives
+  // so the cache badge can flip immediately. `null` = no info / cache miss.
+  const [genCacheInfo, setGenCacheInfo] = useState<{ fromCache: boolean; savedTokens: number } | null>(null);
   const generateTask = useAsyncTask();
 
   // View mode: URL-synced for browser back/forward navigation
@@ -366,6 +370,7 @@ export default function DashboardPage() {
     updateGeneratedCode("");
     setError(null);
     setGenerationError(null);
+    setGenCacheInfo(null);
     updateStrategyInput(prompt);
     generateTask.registerTask({
       type: 'generate',
@@ -417,12 +422,26 @@ export default function DashboardPage() {
             continue;
           }
 
-          let parsed: { content?: unknown; error?: { code?: string; title?: string; description?: string; severity?: string; recoveryActions?: unknown } };
+          let parsed: {
+            content?: unknown;
+            meta?: { cached?: unknown; savedTokens?: unknown };
+            error?: { code?: string; title?: string; description?: string; severity?: string; recoveryActions?: unknown };
+          };
           try {
             parsed = JSON.parse(data);
           } catch {
             // Corrupt frame — best-effort skip rather than abort.
             continue;
+          }
+
+          if (parsed.meta) {
+            // Cache-hit meta arrives before any content frame. Captures
+            // `cached` + `savedTokens` so the badge flips up the moment
+            // the route confirms a hit, even though the content frame
+            // is in the same TCP write.
+            const cached = parsed.meta.cached === true;
+            const savedTokens = typeof parsed.meta.savedTokens === 'number' ? parsed.meta.savedTokens : 0;
+            setGenCacheInfo({ fromCache: cached, savedTokens });
           }
 
           if (parsed.error) {
@@ -753,6 +772,7 @@ export default function DashboardPage() {
                     isGenerating={isGenerating}
                     isBacktesting={isBacktesting}
                     hasUnsavedChanges={hasUnsavedChanges}
+                    cacheInfo={genCacheInfo}
                     onGenerate={handleGenerate}
                     onStopGenerate={abortGeneration}
                     onUpdateInput={updateStrategyInput}
@@ -797,6 +817,7 @@ export default function DashboardPage() {
                 isGenerating={isGenerating}
                 isBacktesting={isBacktesting}
                 hasUnsavedChanges={hasUnsavedChanges}
+                cacheInfo={genCacheInfo}
                 onGenerate={handleGenerate}
                 onStopGenerate={abortGeneration}
                 onUpdateInput={updateStrategyInput}
@@ -871,6 +892,7 @@ interface LeftPanelProps {
   isGenerating: boolean;
   isBacktesting: boolean;
   hasUnsavedChanges: boolean;
+  cacheInfo: { fromCache: boolean; savedTokens: number } | null;
   onGenerate: (prompt: string) => Promise<void>;
   onStopGenerate: () => void;
   onUpdateInput: (input: string) => void;
@@ -890,6 +912,7 @@ function LeftPanel({
   isGenerating,
   isBacktesting,
   hasUnsavedChanges,
+  cacheInfo,
   onGenerate,
   onStopGenerate,
   onUpdateInput,
@@ -918,6 +941,15 @@ function LeftPanel({
       <GenerationFeedback
         isGenerating={isGenerating}
         generatedCode={generatedCode}
+        fromCache={cacheInfo?.fromCache ?? false}
+        savedCost={
+          cacheInfo?.fromCache
+            ? // DeepSeek output token pricing (CNY): same formula GenerationFeedback
+              // uses internally for the running token estimate, so the two numbers
+              // stay aligned.
+              (cacheInfo.savedTokens / 1000) * 0.0014
+            : undefined
+        }
       />
 
       {/* Template Quick Select (visual cards with category chips) */}
