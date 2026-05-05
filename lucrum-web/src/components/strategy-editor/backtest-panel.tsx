@@ -349,56 +349,44 @@ export function BacktestPanel({
   const strategyScore = useMemo(() => {
     if (!displayResult) return null;
     try {
-      // Map BacktestResult → BacktestSummary for calculateScore.
-      // Fields not available in BacktestResult are derived or zeroed.
-      // NOTE: volatility, calmarRatio, finalCapital etc. are not in
-      // BacktestResult — they only exist in BacktestSummary. When the
-      // backtest engine returns full summary data, this mapping should
-      // be updated to pass real values for more accurate scoring.
-      const winningTrades = Math.round(
-        displayResult.totalTrades * (displayResult.winRate / 100)
-      );
       return calculateScore({
         startDate: displayResult.config.startDate,
         endDate: displayResult.config.endDate,
         tradingDays: displayResult.backtestMeta?.timeRange?.tradingDays ?? 0,
         executionTime: displayResult.executionTime,
         initialCapital: displayResult.config.initialCapital,
-        finalCapital: 0, // Not in BacktestResult
-        peakCapital: 0, // Not in BacktestResult
-        troughCapital: 0, // Not in BacktestResult
+        finalCapital: displayResult.finalCapital,
+        peakCapital: displayResult.peakCapital,
+        troughCapital: displayResult.troughCapital,
         totalReturn: displayResult.totalReturn,
         annualizedReturn: displayResult.annualizedReturn,
-        monthlyReturn: 0, // Not in BacktestResult
-        dailyReturn: 0, // Not in BacktestResult
+        monthlyReturn: displayResult.monthlyReturn,
+        dailyReturn: displayResult.dailyReturn,
         maxDrawdown: displayResult.maxDrawdown,
-        maxDrawdownDuration: 0, // Not in BacktestResult
-        volatility: 0, // Not in BacktestResult — impacts risk dimension scoring
+        maxDrawdownDuration: displayResult.maxDrawdownDuration,
+        volatility: displayResult.volatility,
         sharpeRatio: displayResult.sharpeRatio,
         sortinoRatio: displayResult.sortinoRatio,
-        calmarRatio: 0, // Not in BacktestResult
+        calmarRatio: displayResult.calmarRatio,
         totalTrades: displayResult.totalTrades,
-        winningTrades,
-        losingTrades: displayResult.totalTrades - winningTrades,
+        winningTrades: displayResult.winningTrades,
+        losingTrades: displayResult.losingTrades,
         winRate: displayResult.winRate,
         profitFactor: displayResult.profitFactor,
         avgWin: displayResult.avgWin,
         avgLoss: displayResult.avgLoss,
-        avgWinLossRatio:
-          displayResult.avgLoss !== 0
-            ? displayResult.avgWin / displayResult.avgLoss
-            : 0,
+        avgWinLossRatio: displayResult.avgWinLossRatio,
         maxConsecutiveWins: displayResult.maxConsecutiveWins,
         maxConsecutiveLosses: displayResult.maxConsecutiveLosses,
         avgHoldingPeriod: displayResult.avgHoldingPeriod,
         maxSingleWin: displayResult.maxSingleWin,
-        maxSingleWinDate: "", // Not in BacktestResult
+        maxSingleWinDate: "",
         maxSingleLoss: displayResult.maxSingleLoss,
-        maxSingleLossDate: "", // Not in BacktestResult
-        totalCommission: 0, // Not in BacktestResult
-        totalSlippage: 0, // Not in BacktestResult
-        totalTradingCost: 0, // Not in BacktestResult
-        tradingCostPercent: 0, // Not in BacktestResult
+        maxSingleLossDate: "",
+        totalCommission: 0,
+        totalSlippage: 0,
+        totalTradingCost: 0,
+        tradingCostPercent: 0,
       });
     } catch {
       return null;

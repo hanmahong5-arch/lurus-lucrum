@@ -131,9 +131,6 @@ export function BacktestResultsView({
   const strategyScore = useMemo<StrategyScore | null>(() => {
     if (!result) return null;
     try {
-      const winningTrades = Math.round(
-        result.totalTrades * (result.winRate / 100),
-      );
       return calculateScore({
         startDate: result?.config?.startDate ?? '',
         endDate: result?.config?.endDate ?? '',
@@ -141,30 +138,27 @@ export function BacktestResultsView({
           result?.backtestMeta?.timeRange?.tradingDays ?? 0,
         executionTime: result?.executionTime ?? 0,
         initialCapital: result?.config?.initialCapital ?? 0,
-        finalCapital: 0,
-        peakCapital: 0,
-        troughCapital: 0,
+        finalCapital: result.finalCapital,
+        peakCapital: result.peakCapital,
+        troughCapital: result.troughCapital,
         totalReturn: result.totalReturn,
         annualizedReturn: result.annualizedReturn,
-        monthlyReturn: 0,
-        dailyReturn: 0,
+        monthlyReturn: result.monthlyReturn,
+        dailyReturn: result.dailyReturn,
         maxDrawdown: result.maxDrawdown,
-        maxDrawdownDuration: 0,
-        volatility: 0,
+        maxDrawdownDuration: result.maxDrawdownDuration,
+        volatility: result.volatility,
         sharpeRatio: result.sharpeRatio,
         sortinoRatio: result.sortinoRatio,
-        calmarRatio: 0,
+        calmarRatio: result.calmarRatio,
         totalTrades: result.totalTrades,
-        winningTrades,
-        losingTrades: result.totalTrades - winningTrades,
+        winningTrades: result.winningTrades,
+        losingTrades: result.losingTrades,
         winRate: result.winRate,
         profitFactor: result.profitFactor,
         avgWin: result.avgWin,
         avgLoss: result.avgLoss,
-        avgWinLossRatio:
-          result.avgLoss !== 0
-            ? result.avgWin / result.avgLoss
-            : 0,
+        avgWinLossRatio: result.avgWinLossRatio,
         maxConsecutiveWins: result.maxConsecutiveWins,
         maxConsecutiveLosses: result.maxConsecutiveLosses,
         avgHoldingPeriod: result.avgHoldingPeriod,

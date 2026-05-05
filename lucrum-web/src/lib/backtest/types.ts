@@ -794,6 +794,23 @@ export interface BacktestResult {
   winRate: number;
   totalTrades: number;
 
+  // Capital trajectory
+  finalCapital: number;
+  peakCapital: number;
+  troughCapital: number;
+
+  // Risk / return decomposition
+  monthlyReturn: number;
+  dailyReturn: number;
+  maxDrawdownDuration: number;
+  volatility: number;
+  calmarRatio: number;
+
+  // Trade outcome breakdown
+  winningTrades: number;
+  losingTrades: number;
+  avgWinLossRatio: number;
+
   // Detailed metrics
   profitFactor: number;
   avgWin: number;
