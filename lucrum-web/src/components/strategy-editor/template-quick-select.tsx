@@ -38,7 +38,7 @@ import {
 
 interface TemplateQuickSelectProps {
   /** Callback when a template is selected */
-  onSelectTemplate: (prompt: string) => void;
+  onSelectTemplate: (prompt: string, code?: string) => void;
   /** Whether the workspace has unsaved changes */
   hasUnsavedChanges?: boolean;
   /** Additional CSS classes */
@@ -103,14 +103,17 @@ export function TemplateQuickSelect({
     [setLastCategory]
   );
 
-  // Handle template click with unsaved changes guard
+  // Handle template click with unsaved changes guard.
+  // Pass `template.code` so the parent loads the curated Python directly
+  // — the prompt-only path was forcing a redundant LLM round-trip that
+  // produced strictly-worse output than the hand-written template code.
   const handleTemplateClick = useCallback(
     (template: BuiltinTemplate) => {
       if (hasUnsavedChanges) {
         setConfirmTarget(template);
         return;
       }
-      onSelectTemplate(template.prompt);
+      onSelectTemplate(template.prompt, template.code);
     },
     [hasUnsavedChanges, onSelectTemplate]
   );
@@ -118,8 +121,8 @@ export function TemplateQuickSelect({
   // Confirm load despite unsaved changes
   const handleConfirmLoad = useCallback(() => {
     if (confirmTarget) {
-      onSelectTemplate(confirmTarget.prompt);
-      setConfirmTarget(null);
+      onSelectTemplate(confirmTarget.prompt, confirmTarget.code);
+  setConfirmTarget(null);
     }
   }, [confirmTarget, onSelectTemplate]);
 

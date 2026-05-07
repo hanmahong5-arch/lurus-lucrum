@@ -29,7 +29,7 @@ interface StrategyWorkbenchPanelProps {
   strategyCode: string;
   backtestResult?: unknown;
   currentParameters?: Array<{ name: string; value: number | string | boolean | number[] }>;
-  onSelectTemplate: (prompt: string) => void;
+  onSelectTemplate: (prompt: string, code?: string) => void;
   onApplyParameter?: (name: string, value: number | string | boolean) => void;
   onApplyAllSuggestions?: (
     suggestions: Array<{ name: string; value: number | string | boolean }>
@@ -68,7 +68,11 @@ export function StrategyWorkbenchPanel({
   }, [strategyCode]);
 
   const handleBuiltinTemplateSelect = (template: BuiltinTemplateSelection) => {
-    onSelectTemplate(template.prompt);
+    // Forward both prompt AND curated code so the parent can load the
+    // hand-written Python directly. Without `template.code`, the parent
+    // would discard the curated code and force an LLM round-trip on the
+    // user's next click — strictly worse output, 25s wait, AI quota burn.
+    onSelectTemplate(template.prompt, template.code);
   };
 
   return (

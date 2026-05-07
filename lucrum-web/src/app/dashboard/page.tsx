@@ -522,16 +522,46 @@ export default function DashboardPage() {
     }
   }, [isGenerating, isFeatureBlocked, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction, refreshUsage, recordAchievementStat, setCodePreviewCollapsed]);
 
-  // Handle template selection — abort generation if in progress
-  const handleSelectTemplate = useCallback((prompt: string) => {
+  // Handle template selection — abort generation if in progress.
+  //
+  // When `code` is provided (the BUILTIN_TEMPLATES path), load the curated
+  // Python directly into the workspace instead of leaving the user to click
+  // 生成 and wait for an LLM round-trip that produces strictly-worse output.
+  // Without this, the hand-written template code in `BUILTIN_TEMPLATES` is
+  // dead weight — the click flow only ever populated the prompt textarea.
+  // Onboarding (`use-onboarding-import.ts`) already does this; the regular
+  // template-click path was the outlier.
+  const handleSelectTemplate = useCallback((prompt: string, code?: string) => {
     if (isGenerating) {
       // Abort current generation before loading template
       createSignal(); // This aborts the previous signal
       setGenerating(false);
     }
     updateStrategyInput(prompt);
+    if (code && code.trim().length > 0) {
+      updateGeneratedCode(code);
+      // Auto-expand the code preview so the curated code lands in view
+      // rather than collapsed behind the prompt panel.
+      setCodePreviewCollapsed(false);
+      // Persist immediately as a builtin-template strategy so /dashboard/history
+      // captures it. Strategy name is derived the same way AI-generated runs
+      // do, keeping the timeline naming consistent.
+      const name = extractStrategyName(prompt, code);
+      setStrategyName(name);
+      saveStrategyToDatabase(name, code, prompt, 'builtin_template');
+      setTimeout(() => saveDraft(), 0);
+    }
     strategyInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [isGenerating, createSignal, setGenerating, updateStrategyInput]);
+  }, [
+    isGenerating,
+    createSignal,
+    setGenerating,
+    updateStrategyInput,
+    updateGeneratedCode,
+    setCodePreviewCollapsed,
+    saveDraft,
+    saveStrategyToDatabase,
+  ]);
 
   // User-facing abort for an in-flight streaming generation. createSignal()
   // aborts the controller currently held by useAbortController as a side
@@ -936,7 +966,7 @@ interface LeftPanelProps {
   onGenerate: (prompt: string) => Promise<void>;
   onStopGenerate: () => void;
   onUpdateInput: (input: string) => void;
-  onSelectTemplate: (prompt: string) => void;
+  onSelectTemplate: (prompt: string, code?: string) => void;
   onCodeUpdate: (newCode: string) => void;
   onRerunBacktest: () => void;
   onParameterFocus: (line: number | null) => void;
@@ -1063,7 +1093,7 @@ interface RightPanelProps {
   onBacktestResult: (result: BacktestResult) => void;
   workspace: ReturnType<typeof selectWorkspace>;
   currentParameters: Array<{ name: string; value: unknown }>;
-  onSelectTemplate: (prompt: string) => void;
+  onSelectTemplate: (prompt: string, code?: string) => void;
   onApplyParameter: (name: string, value: number | string | boolean) => void;
   onApplyAllSuggestions: (suggestions: Array<{ name: string; value: number | string | boolean }>) => void;
   codePreviewCollapsed: boolean;
