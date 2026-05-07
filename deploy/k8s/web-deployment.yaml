@@ -149,6 +149,14 @@ spec:
             - name: REDIS_DB
               value: "0"
 
+            # NATS JetStream for cross-product notifications. Publishes to
+            # LUCRUM_EVENTS stream (subjects: lucrum.advisor.output,
+            # lucrum.market.event, etc.). Consumed by lurus-notification
+            # which fans out to APP via WebSocket. R6 cluster brings up its
+            # own messaging/nats from lurus-deploy/cluster/messaging/nats.yaml.
+            - name: NATS_URL
+              value: "nats://nats.messaging.svc:4222"
+
           resources:
             requests:
               cpu: 100m
