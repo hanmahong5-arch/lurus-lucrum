@@ -33,6 +33,9 @@ Thumbs.db
 *.userosscache
 *.sln.docstates
 
+# Dependencies / 依赖
+node_modules/
+
 # Logs / 日志
 *.log
 npm-debug.log*
