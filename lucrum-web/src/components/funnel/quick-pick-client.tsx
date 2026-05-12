@@ -7,25 +7,35 @@
  * justification for each pick. Defaults are pre-filled; every input
  * is optional.
  *
- * State:
- *   - selectedPackId          (auto-selected default; user can change)
- *   - universeKind/sectorCode (dropdown; sensible defaults)
- *   - topN                    (hidden; default 10)
+ * Two design moves added in the 2026-05-12 pass to address "selected 0
+ * stocks and didn't know why":
  *
- * The panel shows three rows once a run starts:
- *   1. Pack header (name + tagline + expected profile)
- *   2. StageProgress (live)
- *   3. Results list (StockResultCard × N)
+ *   1. StrictnessDial — single 4-segment selector that maps to a PackOverride
+ *      bundle. Beats forcing users to learn minListingDays / minMarketCap /
+ *      topN individually before they can run anything.
+ *   2. FunnelDiagnostic — on a 0-candidate completion, surface the stage
+ *      that did the cutting + the dominant rule + a one-click "loosen and
+ *      retry" CTA. We also remember the previous run's candidate count in
+ *      sessionStorage and show a "上次 → 这次" delta when it changes, so
+ *      the user can see the impact of their tweaks.
  *
  * @module components/funnel/quick-pick-client
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { PackCard } from './pack-card';
 import { StageProgress } from './stage-progress';
 import { StockResultCard } from './stock-result-card';
+import { StrictnessDial } from './strictness-dial';
+import { FunnelDiagnostic, type DiagnosticAction } from './funnel-diagnostic';
 import { useFunnelStream } from '@/hooks/use-funnel-stream';
+import {
+  DEFAULT_STRICTNESS,
+  nextLooser,
+  presetToOverride,
+  type StrictnessLevel,
+} from '@/lib/funnel/strictness';
 import type { StrategyPack, StrategyPackId } from '@/lib/strategy-packs';
 
 interface QuickPickClientProps {
@@ -40,12 +50,6 @@ interface UniverseOption {
   readonly symbols?: ReadonlyArray<string>;
 }
 
-/**
- * Defaults pick well-known sector concept codes. If a code happens to
- * have no snapshot yet, the funnel's Universe stage emits a warning and
- * returns an empty candidate set — the UI surfaces the warning instead
- * of a silent empty result.
- */
 const DEFAULT_UNIVERSES: ReadonlyArray<UniverseOption> = [
   { label: '新能源', kind: 'sector', sectorCode: 'BK0478' },
   { label: '半导体', kind: 'sector', sectorCode: 'BK0735' },
@@ -55,13 +59,56 @@ const DEFAULT_UNIVERSES: ReadonlyArray<UniverseOption> = [
   { label: '人工智能', kind: 'sector', sectorCode: 'BK1036' },
 ];
 
+/** sessionStorage key for the last-run candidate count delta marker. */
+const LAST_RUN_COUNT_KEY = 'lucrum:funnel:lastCount';
+
+function readLastCount(): number | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(LAST_RUN_COUNT_KEY);
+    if (!raw) return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLastCount(n: number): void {
+  if (typeof window === 'undefined') return;
+  try {
+    sessionStorage.setItem(LAST_RUN_COUNT_KEY, String(n));
+  } catch {
+    /* storage unavailable — silent fallback */
+  }
+}
+
 export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) {
   const [selectedPackId, setSelectedPackId] = useState<StrategyPackId>(
     defaultPackId ?? packs[0]?.id ?? 'growth-momentum'
   );
   const [universeIdx, setUniverseIdx] = useState(0);
-  const { status, packMeta, stageEvals, candidates, result, error, run, abort } =
-    useFunnelStream();
+  const [strictness, setStrictness] = useState<StrictnessLevel>(DEFAULT_STRICTNESS);
+  /**
+   * `lastCount` is the candidate count from the previous *completed* run in
+   * this browser session; surfacing it lets the user attribute changes in
+   * results to their own knob tweaks rather than guessing.
+   */
+  const [lastCount, setLastCount] = useState<number | null>(null);
+  /** Tracks how many times we've auto-retried inside the current attempt. */
+  const [autoRetryDepth, setAutoRetryDepth] = useState(0);
+  const MAX_AUTO_RETRIES = 2;
+
+  const {
+    status,
+    packMeta,
+    stageEvals,
+    candidates,
+    result,
+    error,
+    runCustom,
+    abort,
+  } = useFunnelStream();
 
   const isRunning = status === 'running';
   const hasResults =
@@ -71,34 +118,78 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
     () => packs.find((p) => p.id === selectedPackId),
     [packs, selectedPackId]
   );
-  const selectedUniverse =
-    DEFAULT_UNIVERSES[universeIdx] ?? DEFAULT_UNIVERSES[0];
+  const selectedUniverse = DEFAULT_UNIVERSES[universeIdx] ?? DEFAULT_UNIVERSES[0];
 
-  const handleRun = () => {
-    if (!selectedUniverse) return;
-    run({
-      packId: selectedPackId,
-      universe: {
-        kind: selectedUniverse.kind,
-        sectorCode: selectedUniverse.sectorCode,
-        symbols: selectedUniverse.symbols ? [...selectedUniverse.symbols] : undefined,
-      },
-      topN: 10,
-    });
-  };
+  useEffect(() => {
+    setLastCount(readLastCount());
+  }, []);
+
+  // Persist completed-run candidate count for the next session-local visit.
+  useEffect(() => {
+    if (status === 'done' && result) {
+      writeLastCount(result.candidates.length);
+    }
+  }, [status, result]);
+
+  const runAt = useCallback(
+    (level: StrictnessLevel) => {
+      if (!selectedUniverse) return;
+      const override = presetToOverride(level);
+      runCustom({
+        basePackId: selectedPackId,
+        override,
+        universe: {
+          kind: selectedUniverse.kind,
+          sectorCode: selectedUniverse.sectorCode,
+          symbols: selectedUniverse.symbols ? [...selectedUniverse.symbols] : undefined,
+        },
+      });
+    },
+    [runCustom, selectedPackId, selectedUniverse]
+  );
+
+  const handleRun = useCallback(() => {
+    setAutoRetryDepth(0);
+    runAt(strictness);
+  }, [runAt, strictness]);
+
+  const handleDiagnosticAction = useCallback(
+    (action: DiagnosticAction) => {
+      if (action.kind === 'relax-strictness') {
+        setStrictness(action.to);
+        setAutoRetryDepth((d) => d + 1);
+        runAt(action.to);
+        return;
+      }
+      if (action.kind === 'universe-fallback' || action.kind === 'change-universe') {
+        // No backend universe-fallback yet — surface the suggestion by rotating
+        // the universe selector to a different sector. Better than a no-op.
+        const nextIdx = (universeIdx + 1) % DEFAULT_UNIVERSES.length;
+        setUniverseIdx(nextIdx);
+        setAutoRetryDepth((d) => d + 1);
+        // Don't auto-run — let user see the new selection before committing.
+        return;
+      }
+      // 'manual' — no-op; the diagnostic already explained the situation.
+    },
+    [runAt, universeIdx]
+  );
 
   useEffect(() => () => abort(), [abort]);
 
   const resultList = result?.candidates ?? candidates;
+  const currentCount = resultList.length;
+  const hasZeroResult =
+    status === 'done' && currentCount === 0 && !error && stageEvals.length > 0;
+  const canAutoRetry =
+    hasZeroResult && nextLooser(strictness) !== null && autoRetryDepth < MAX_AUTO_RETRIES;
 
   return (
     <div className="space-y-6">
       <section>
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-white">1. 选一个风格</h2>
-          <p className="text-sm text-neutral-400">
-            默认已为你选好；不认可就换一个。
-          </p>
+          <p className="text-sm text-neutral-400">默认已为你选好；不认可就换一个。</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {packs.map((pack) => (
@@ -116,9 +207,7 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
       <section>
         <div className="mb-3">
           <h2 className="text-lg font-semibold text-white">2. 选一个股票池</h2>
-          <p className="text-sm text-neutral-400">
-            在这个范围内选 10 只。
-          </p>
+          <p className="text-sm text-neutral-400">在这个范围内选 10 只。</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {DEFAULT_UNIVERSES.map((u, i) => (
@@ -142,7 +231,15 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
       </section>
 
       <section>
-        <div className="flex items-center gap-3">
+        <StrictnessDial
+          value={strictness}
+          onChange={setStrictness}
+          disabled={isRunning}
+        />
+      </section>
+
+      <section>
+        <div className="flex items-center gap-3 flex-wrap">
           {!isRunning ? (
             <Button
               variant="primary"
@@ -150,7 +247,7 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
               onClick={handleRun}
               disabled={!selectedPack || !selectedUniverse}
             >
-              给我选 10 只
+              给我选 {presetToOverride(strictness).topN} 只
             </Button>
           ) : (
             <Button variant="outline" size="lg" onClick={abort}>
@@ -159,25 +256,20 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
           )}
           {selectedPack && (
             <span className="text-sm text-neutral-400">
-              使用 <strong className="text-white">{selectedPack.name}</strong>{' '}
-              风格扫描{' '}
+              使用 <strong className="text-white">{selectedPack.name}</strong> 风格扫描{' '}
               <strong className="text-white">{selectedUniverse?.label}</strong>
             </span>
           )}
         </div>
       </section>
 
-      {(isRunning || hasResults || error) && (
+      {(isRunning || hasResults || error || hasZeroResult) && (
         <section className="bg-surface rounded-lg border border-border p-4 space-y-4">
           {packMeta && (
             <header>
               <div className="flex items-baseline gap-3">
-                <h3 className="text-xl font-semibold text-white">
-                  {packMeta.name}
-                </h3>
-                <span className="text-sm text-neutral-400">
-                  {packMeta.tagline}
-                </span>
+                <h3 className="text-xl font-semibold text-white">{packMeta.name}</h3>
+                <span className="text-sm text-neutral-400">{packMeta.tagline}</span>
               </div>
               <div className="mt-1 flex gap-4 text-xs font-mono tabular-nums text-neutral-400">
                 <span>年化 {packMeta.expectedProfile.annualReturn}</span>
@@ -185,6 +277,23 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
                 <span>换手 {packMeta.expectedProfile.turnover}</span>
               </div>
             </header>
+          )}
+
+          {/* Last-vs-current delta — only when both numbers exist and differ */}
+          {status === 'done' && lastCount !== null && lastCount !== currentCount && (
+            <div className="text-xs text-neutral-500">
+              候选数变化：
+              <span className="font-mono tabular-nums text-neutral-400">{lastCount}</span>
+              {' → '}
+              <span
+                className={
+                  'font-mono tabular-nums ' +
+                  (currentCount > lastCount ? 'text-profit' : 'text-loss')
+                }
+              >
+                {currentCount}
+              </span>
+            </div>
           )}
 
           <StageProgress evals={stageEvals} running={isRunning} />
@@ -195,26 +304,36 @@ export function QuickPickClient({ packs, defaultPackId }: QuickPickClientProps) 
             </div>
           )}
 
+          {/* Diagnostic panel — only on completed 0-result runs */}
+          {hasZeroResult && (
+            <FunnelDiagnostic
+              evals={stageEvals}
+              currentLevel={strictness}
+              onAct={handleDiagnosticAction}
+            />
+          )}
+
+          {hasZeroResult && canAutoRetry && (
+            <div className="text-[11px] text-neutral-500 leading-relaxed">
+              提示：连续 {autoRetryDepth} 次重试仍 0 候选。若仍无结果，建议换板块或检查行情数据回填状态。
+            </div>
+          )}
+
           {resultList.length > 0 && (
             <div className="space-y-2">
               <div className="text-sm text-neutral-400">
                 Top {resultList.length}
                 {isRunning && ' (实时更新中...)'}
+                {autoRetryDepth > 0 && status === 'done' && (
+                  <span className="ml-2 text-[11px] text-accent/80">
+                    （自动放宽 {autoRetryDepth} 次后才选到 — 当前档位：
+                    <span className="font-medium">{strictness}</span>）
+                  </span>
+                )}
               </div>
               {resultList.map((c, idx) => (
-                <StockResultCard
-                  key={c.symbol}
-                  rank={idx + 1}
-                  candidate={c}
-                />
+                <StockResultCard key={c.symbol} rank={idx + 1} candidate={c} />
               ))}
-            </div>
-          )}
-
-          {status === 'done' && resultList.length === 0 && !error && (
-            <div className="text-sm text-neutral-400">
-              选股漏斗跑完了，但没有留下候选。
-              常见原因：板块历史快照未回填（PIT ETL 未运行），或硬过滤太严。
             </div>
           )}
         </section>
