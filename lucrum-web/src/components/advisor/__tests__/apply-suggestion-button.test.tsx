@@ -232,9 +232,14 @@ describe("ApplySuggestionButton", () => {
   // ===========================================================================
 
   describe("re-run backtest prompt", () => {
-    it("shows re-run prompt after applying suggestion", () => {
+    it("shows re-run prompt after applying suggestion when handler is provided", () => {
       const suggestion = createTestSuggestion();
-      render(<ApplySuggestionButton suggestion={suggestion} />);
+      render(
+        <ApplySuggestionButton
+          suggestion={suggestion}
+          onRerunBacktest={vi.fn()}
+        />
+      );
 
       const button = screen.getByRole("button", { name: /apply/i });
       fireEvent.click(button);
@@ -242,6 +247,20 @@ describe("ApplySuggestionButton", () => {
       expect(
         screen.getByRole("button", { name: /re-run/i })
       ).toBeInTheDocument();
+    });
+
+    it("does not show re-run prompt when no handler is wired", () => {
+      const suggestion = createTestSuggestion();
+      render(<ApplySuggestionButton suggestion={suggestion} />);
+
+      const button = screen.getByRole("button", { name: /apply/i });
+      fireEvent.click(button);
+
+      // Without onRerunBacktest the button would be a dead-end click —
+      // hiding it is preferable to surfacing a no-op control.
+      expect(
+        screen.queryByRole("button", { name: /re-run/i })
+      ).not.toBeInTheDocument();
     });
 
     it("calls onRerunBacktest when re-run is clicked", () => {

@@ -14,6 +14,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef, Suspense } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useAbortController } from "@/hooks/use-abort-controller";
 import { useStaleGuard } from "@/hooks/use-stale-guard";
@@ -259,6 +260,10 @@ function HistoryPageInner() {
   // Rerun guard: only run the last clicked rerun (debounce rapid clicks)
   const [rerunningId, setRerunningId] = useState<string | null>(null);
 
+  // Router for deep-linking back into the dashboard with the selected
+  // backtest pre-loaded (?historyId=<id>).
+  const router = useRouter();
+
   // ─── Data Loading ──────────────────────────────────────────────────
   const loadAll = useCallback(async () => {
     setLoading(true);
@@ -324,19 +329,29 @@ function HistoryPageInner() {
   );
 
   // ─── Handlers ──────────────────────────────────────────────────────
+  // Deep-link both "rerun" and "view detail" into the dashboard with the
+  // backtest record pre-loaded. Dashboard reads ?historyId=<num> on mount,
+  // fetches /api/history/backtests/<num>, and rehydrates code + prompt +
+  // result. Strategy entries (id prefix "S") aren't routable yet — fall
+  // back to a no-op until the strategy-rehydration endpoint exists.
+  const openInDashboard = useCallback((entry: BacktestTimelineEntry) => {
+    if (!entry.id.startsWith("B")) return;
+    const numId = entry.id.slice(1);
+    if (!/^\d+$/.test(numId)) return;
+    router.push(`/dashboard?historyId=${numId}`);
+  }, [router]);
+
   const handleRerun = useCallback((entry: BacktestTimelineEntry) => {
-    // If already rerunning, do nothing (prevent rapid clicks)
     if (rerunningId !== null) return;
     setRerunningId(entry.id);
-    // Simulate rerun (actual implementation would call backtest API)
-    alert(`重新运行: ${entry.strategyName} x ${entry.symbolName || entry.symbol}`);
-    setRerunningId(null);
-  }, [rerunningId]);
+    openInDashboard(entry);
+    // Allow a short window before re-enabling — by then we've left the page.
+    setTimeout(() => setRerunningId(null), 1000);
+  }, [rerunningId, openInDashboard]);
 
-  const handleViewBacktestDetail = useCallback((_entry: BacktestTimelineEntry) => {
-    // Navigate to backtest detail or show panel
-    // For now, no-op
-  }, []);
+  const handleViewBacktestDetail = useCallback((entry: BacktestTimelineEntry) => {
+    openInDashboard(entry);
+  }, [openInDashboard]);
 
   const handleRollback = useCallback((version: StrategyVersion) => {
     alert(`回滚到版本 v${version.version}: ${version.strategyName}`);

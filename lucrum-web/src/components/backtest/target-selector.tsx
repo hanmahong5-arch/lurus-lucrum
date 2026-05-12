@@ -788,21 +788,33 @@ function StockMode({ value, onChange }: StockModeProps) {
         </div>
       )}
 
-      {/* Quick access */}
+      {/* Quick access — recent stocks first, then fill with popular up to 8.
+          Reflects the user's actual workflow instead of always showing the
+          same hardcoded names. Deduped by symbol. */}
       <div>
         <div className="text-sm font-medium mb-2">快捷选择 / Quick Access</div>
         <div className="grid grid-cols-4 gap-2">
-          {commonStocks.slice(0, 8).map((stock) => (
-            <Button
-              key={stock.symbol}
-              variant={value?.symbol === stock.symbol ? "primary" : "outline"}
-              size="sm"
-              className="text-xs"
-              onClick={() => handleStockSelect(stock)}
-            >
-              {stock.name}
-            </Button>
-          ))}
+          {(() => {
+            const seen = new Set<string>();
+            const merged: StockTarget[] = [];
+            for (const s of [...recentStocks, ...commonStocks]) {
+              if (!s.symbol || seen.has(s.symbol)) continue;
+              seen.add(s.symbol);
+              merged.push(s);
+              if (merged.length >= 8) break;
+            }
+            return merged.map((stock) => (
+              <Button
+                key={stock.symbol}
+                variant={value?.symbol === stock.symbol ? "primary" : "outline"}
+                size="sm"
+                className="text-xs"
+                onClick={() => handleStockSelect(stock)}
+              >
+                {stock.name}
+              </Button>
+            ));
+          })()}
         </div>
       </div>
     </div>

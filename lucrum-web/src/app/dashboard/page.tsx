@@ -199,6 +199,50 @@ export default function DashboardPage() {
   // Latest backtest result for results view
   const [latestBacktestResult, setLatestBacktestResult] = useState<BacktestResult | null>(null);
 
+  // Deep-link hydration from /dashboard/history. When the URL carries
+  // ?historyId=<num> (or "B<num>" — the prefix /dashboard/history puts on
+  // entry ids), fetch the saved backtest and restore the workspace exactly
+  // as it was: code + prompt + name + result, then switch to results view.
+  // strategyCode / strategyPrompt / strategyName were embedded in the saved
+  // config by handleBacktestResult above; older rows without them just skip
+  // the hydration and the user lands in edit mode with empty workspace.
+  useEffect(() => {
+    const historyId = searchParams.get('historyId');
+    if (!historyId) return;
+    const numId = historyId.startsWith('B') ? historyId.slice(1) : historyId;
+    if (!/^\d+$/.test(numId)) return;
+
+    let cancelled = false;
+    void fetch(`/api/history/backtests/${numId}`)
+      .then(async (res) => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then((payload: unknown) => {
+        if (cancelled) return;
+        const data = (payload as { success?: boolean; data?: Record<string, unknown> } | null)?.data;
+        if (!data) return;
+        const cfg = data.config as
+          | { strategyCode?: string; strategyPrompt?: string; strategyName?: string }
+          | null;
+        if (cfg?.strategyCode) updateGeneratedCode(cfg.strategyCode);
+        if (cfg?.strategyPrompt) updateStrategyInput(cfg.strategyPrompt);
+        if (cfg?.strategyName) setStrategyName(cfg.strategyName);
+        if (data.result) {
+          setLatestBacktestResult(data.result as BacktestResult);
+          setViewMode('results');
+        }
+      })
+      .catch((err) => {
+        console.warn('[Dashboard] history hydration failed:', err);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
   // Paywall: AI generation quota check
   const { usage, plan: userPlan, isBlocked: isFeatureBlocked, refresh: refreshUsage } = useFeatureUsage();
   const [aiUpgradeDialogOpen, setAiUpgradeDialogOpen] = useState(false);
@@ -641,6 +685,17 @@ export default function DashboardPage() {
     const startDate = result.backtestMeta?.timeRange?.start ?? result.config?.startDate;
     const endDate = result.backtestMeta?.timeRange?.end ?? result.config?.endDate;
     if (persistSymbol && startDate && endDate && result.config) {
+      // Embed strategyCode + prompt in the persisted config so /dashboard/history
+      // → "在编辑器中打开" can rehydrate the workspace exactly as it was. The
+      // backtest_history table has a free-form `config` text(JSON) column, so we
+      // tuck these fields in there rather than requiring a schema change. The
+      // engine itself ignores them.
+      const persistedConfig = {
+        ...result.config,
+        strategyCode: generatedCode,
+        strategyPrompt: strategyInput,
+        strategyName,
+      };
       void fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -654,7 +709,7 @@ export default function DashboardPage() {
             startDate: String(startDate).slice(0, 10),
             endDate: String(endDate).slice(0, 10),
             timeframe: '1d',
-            config: result.config,
+            config: persistedConfig,
             result,
             dataSource: result.backtestMeta?.dataSource ?? 'unknown',
             dataCoverage: result.backtestMeta?.dataQuality?.completeness ?? null,
@@ -672,9 +727,12 @@ export default function DashboardPage() {
         console.warn('[Dashboard] Failed to persist backtest history:', err);
       });
     }
-  }, [trackAction, recordAchievementStat, recordAchievementStock]);
+  }, [trackAction, recordAchievementStat, recordAchievementStock, generatedCode, strategyInput, strategyName]);
 
-  // Handle AI assistant parameter application
+  // Handle AI assistant parameter application — applies the param then auto
+  // re-runs the backtest so the user sees the impact without a second click.
+  // Mirrors handleApplyAllAISuggestions; the 100ms delay lets the workspace
+  // store finish persisting before backtestPanelRef.current.runBacktest reads it.
   const handleApplyAIParameter = useCallback(
     (name: string, value: number | string | boolean) => {
       if (!generatedCode) return;
@@ -682,9 +740,10 @@ export default function DashboardPage() {
       if (updatedCode !== generatedCode) {
         updateGeneratedCode(updatedCode);
         markAsUnsaved();
+        setTimeout(() => handleRerunBacktest(), 100);
       }
     },
-    [generatedCode, updateGeneratedCode, markAsUnsaved]
+    [generatedCode, updateGeneratedCode, markAsUnsaved, handleRerunBacktest]
   );
 
   // Handle AI assistant batch suggestions

@@ -59,36 +59,45 @@ export function StageProgress({ evals, running }: StageProgressProps) {
             <li
               key={name}
               className={cn(
-                'flex items-center justify-between text-xs px-2 py-1 rounded',
+                'text-xs px-2 py-1 rounded',
                 ev && !warned && 'text-neutral-200',
                 ev && warned && 'text-accent',
                 isInProgress && 'bg-surface text-white',
                 !ev && !isInProgress && 'text-neutral-600'
               )}
             >
-              <span className="flex items-center gap-2">
-                <span
-                  className={cn(
-                    'inline-block w-2 h-2 rounded-full',
-                    ev
-                      ? warned
-                        ? 'bg-accent'
-                        : 'bg-profit'
-                      : isInProgress
-                      ? 'bg-accent animate-pulse'
-                      : 'bg-neutral-700'
-                  )}
-                />
-                {label}
-              </span>
-              {ev && (
-                <span className="flex items-center gap-3 font-mono tabular-nums">
-                  <span>{ev.inputSize}→{ev.outputSize}</span>
-                  <span className="text-neutral-500">
-                    {(ev.keepRatio * 100).toFixed(0)}%
-                  </span>
-                  <span className="text-neutral-500">{ev.durationMs}ms</span>
+              <div className="flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span
+                    className={cn(
+                      'inline-block w-2 h-2 rounded-full',
+                      ev
+                        ? warned
+                          ? 'bg-accent'
+                          : 'bg-profit'
+                        : isInProgress
+                        ? 'bg-accent animate-pulse'
+                        : 'bg-neutral-700'
+                    )}
+                  />
+                  {label}
                 </span>
+                {ev && (
+                  <span className="flex items-center gap-3 font-mono tabular-nums">
+                    <span>{ev.inputSize}→{ev.outputSize}</span>
+                    <span className="text-neutral-500">
+                      {(ev.keepRatio * 100).toFixed(0)}%
+                    </span>
+                    <span className="text-neutral-500">{ev.durationMs}ms</span>
+                  </span>
+                )}
+              </div>
+              {warned && (
+                <ul className="mt-1 ml-4 space-y-0.5 text-[11px] text-accent/80">
+                  {ev!.warnings.map((w, j) => (
+                    <li key={j} className="leading-snug">⚠ {w}</li>
+                  ))}
+                </ul>
               )}
             </li>
           );

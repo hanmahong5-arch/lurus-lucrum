@@ -176,11 +176,29 @@ export function BacktestResultsView({
     }
   }, [result]);
 
-  // Quick grade from score
+  // 0-trade detection. Fundamentally different state from "trades did poorly":
+  // every metric reads 0 because the strategy never fired, so the D grade and
+  // generic "all zeros" framing would mislead the user into thinking the
+  // strategy is broken when the real problem is non-triggering conditions.
+  const noTrades = result.totalTrades === 0;
+
+  // Quick grade from score. Override for the 0-trade case so we don't badge
+  // a non-triggering strategy as "D 需改进" (looks like a bad strategy when
+  // it's really a degenerate run).
   const quickGrade = useMemo(() => {
+    if (noTrades) {
+      return {
+        min: 0,
+        label: "—",
+        desc: "未触发",
+        color: "text-yellow-400",
+        bg: "bg-yellow-500/10",
+        border: "border-yellow-500/30",
+      } as const;
+    }
     const scoreValue = strategyScore?.score ?? 0;
     return getQuickGrade(scoreValue);
-  }, [strategyScore]);
+  }, [noTrades, strategyScore]);
 
   // Build trade markers for K-line chart
   const tradeMarkers = useMemo<TradeMarkerInfo[]>(() => {
@@ -389,6 +407,57 @@ export function BacktestResultsView({
           maxDrawdown={result.maxDrawdown}
           winRate={result.winRate}
         />
+      )}
+
+      {/* ================================================================= */}
+      {/* 0-TRADE BANNER (replaces misleading "all zeros" with next steps)  */}
+      {/* ================================================================= */}
+      {noTrades && (
+        <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-4">
+          <div className="flex items-start gap-3">
+            <svg
+              className="w-5 h-5 text-yellow-400 flex-shrink-0 mt-0.5"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-2.99l-6.93-12a2 2 0 00-3.48 0l-6.93 12A2 2 0 005.07 19z"
+              />
+            </svg>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-medium text-yellow-300">
+                策略未触发任何交易
+              </div>
+              <p className="text-xs text-yellow-200/70 mt-1">
+                所有指标因此为 0，但这不一定代表策略失效。可以尝试：
+              </p>
+              <ul className="text-xs text-yellow-200/70 mt-1.5 space-y-0.5 list-disc list-inside">
+                <li>扩大日期范围（例如改成 2 年回测窗口）</li>
+                <li>选择波动更大的标的（如行业 ETF / 主题股）</li>
+                <li>检查买卖阈值是否过严，例如 RSI &lt;20 / &gt;80 在平稳市场难触发</li>
+                <li>确认入场条件不依赖未来数据（look-ahead bias）</li>
+              </ul>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <button
+                  onClick={onBackToEdit}
+                  className="px-3 py-1.5 text-xs rounded-md bg-yellow-500/20 text-yellow-200 hover:bg-yellow-500/30 border border-yellow-500/30 transition-all btn-tactile"
+                >
+                  返回编辑修改
+                </button>
+                <button
+                  onClick={onRerunWithEdit}
+                  className="px-3 py-1.5 text-xs rounded-md bg-surface text-neutral-300 hover:bg-surface-hover border border-white/10 transition-all btn-tactile"
+                >
+                  调整后重跑
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ================================================================= */}

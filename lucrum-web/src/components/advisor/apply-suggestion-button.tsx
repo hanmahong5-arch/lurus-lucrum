@@ -99,7 +99,10 @@ export function ApplySuggestionButton({
 
       // Transition to applied state
       setButtonState("applied");
-      setShowRerunPrompt(true);
+      // Only surface the re-run prompt if the parent actually wired a handler —
+      // advisor-chat does not, and showing a button that no-ops on click is
+      // worse than not showing it.
+      setShowRerunPrompt(Boolean(onRerunBacktest));
 
       // Notify parent
       onApply?.(suggestion);
@@ -113,6 +116,7 @@ export function ApplySuggestionButton({
     suggestion,
     updateParameters,
     onApply,
+    onRerunBacktest,
   ]);
 
   // Handle re-run backtest
