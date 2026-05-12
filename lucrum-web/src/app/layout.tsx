@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import { getServerSession } from "next-auth/next";
+import { authOptions } from "@/lib/auth/auth";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { EnhancedErrorBoundary } from "@/components/providers/enhanced-error-boundary";
 import { ToastSystem } from "@/components/feedback/toast-system";
@@ -62,11 +64,12 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const session = await getServerSession(authOptions);
   return (
     <html lang="zh" className={`${inter.variable} ${jetbrainsMono.variable}`}>
       <head>
@@ -78,7 +81,7 @@ export default function RootLayout({
         <SkipLink />
         {/* ARIA live region provider for screen reader announcements (Story 7.3 / WCAG 4.1.3) */}
         <LiveRegionProvider />
-        <AuthSessionProvider>
+        <AuthSessionProvider session={session}>
           <I18nProvider>
           {/* Enhanced error boundary with recovery UI and workspace preservation */}
           <EnhancedErrorBoundary componentName="App">

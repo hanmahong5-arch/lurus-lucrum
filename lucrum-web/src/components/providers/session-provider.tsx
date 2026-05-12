@@ -1,18 +1,14 @@
 "use client";
 
-/**
- * Session Provider Component
- *
- * Wraps the application with NextAuth SessionProvider for client-side session access.
- */
-
 import { SessionProvider } from "next-auth/react";
+import type { Session } from "next-auth";
 import { ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  session?: Session | null;
 }
 
-export function AuthSessionProvider({ children }: Props) {
-  return <SessionProvider>{children}</SessionProvider>;
+export function AuthSessionProvider({ children, session }: Props) {
+  return <SessionProvider session={session}>{children}</SessionProvider>;
 }
