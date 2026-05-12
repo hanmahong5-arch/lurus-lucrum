@@ -97,8 +97,18 @@ spec:
                   key: NEXTAUTH_SECRET
             - name: ZITADEL_ISSUER
               value: "https://auth.lurus.cn"
+            # client_id is provisioned by the platform-core app_registry
+            # reconciler from 2l-svc-platform/config/apps.yaml (entry name=lucrum,
+            # env=prod). The reconciler writes the new Zitadel app id into this
+            # secret key after creating the OIDC app, then triggers a rolling
+            # restart of this deployment. Manual rotation: bounce platform-core
+            # to re-tick the reconciler. Closes the Errors.App.NotFound recovery
+            # path documented in 2l-svc-platform/docs/runbooks/errors-app-not-found.md.
             - name: ZITADEL_CLIENT_ID
-              value: "358400000000065537@lurus-api"
+              valueFrom:
+                secretKeyRef:
+                  name: lucrum-web-secrets-prod
+                  key: ZITADEL_CLIENT_ID
             - name: ZITADEL_CLIENT_SECRET
               value: ""
 
@@ -160,10 +170,10 @@ spec:
           resources:
             requests:
               cpu: 100m
-              memory: 256Mi
+              memory: 512Mi
             limits:
               cpu: 500m
-              memory: 512Mi
+              memory: 1Gi
 
           startupProbe:
             httpGet:
