@@ -1129,17 +1129,28 @@ function EquityCurveDisplay({
           className="w-full h-full"
           preserveAspectRatio="none"
         >
-          {/* Gradient fill */}
+          {/* Gradient fill — color follows the [data-market] profit/loss
+              convention (CN: profit=red, loss=green; US: inverted). */}
           <defs>
             <linearGradient id="eq-fill" x1="0" y1="0" x2="0" y2="1">
               <stop
                 offset="0%"
-                stopColor={totalReturn >= 0 ? "#10b981" : "#ef4444"}
+                style={{
+                  stopColor:
+                    totalReturn >= 0
+                      ? "rgb(var(--color-profit))"
+                      : "rgb(var(--color-loss))",
+                }}
                 stopOpacity="0.3"
               />
               <stop
                 offset="100%"
-                stopColor={totalReturn >= 0 ? "#10b981" : "#ef4444"}
+                style={{
+                  stopColor:
+                    totalReturn >= 0
+                      ? "rgb(var(--color-profit))"
+                      : "rgb(var(--color-loss))",
+                }}
                 stopOpacity="0.02"
               />
             </linearGradient>
@@ -1163,7 +1174,12 @@ function EquityCurveDisplay({
               )
               .join(" ")}
             fill="none"
-            stroke={totalReturn >= 0 ? "#10b981" : "#ef4444"}
+            style={{
+              stroke:
+                totalReturn >= 0
+                  ? "rgb(var(--color-profit))"
+                  : "rgb(var(--color-loss))",
+            }}
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
           />
@@ -1299,8 +1315,18 @@ function DrawdownDisplay({
         >
           <defs>
             <linearGradient id="dd-fill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#ef4444" stopOpacity="0.05" />
-              <stop offset="100%" stopColor="#ef4444" stopOpacity="0.3" />
+              {/* Drawdown is always semantically a loss — pick the loss
+                  color from the [data-market] convention. */}
+              <stop
+                offset="0%"
+                style={{ stopColor: "rgb(var(--color-loss))" }}
+                stopOpacity="0.05"
+              />
+              <stop
+                offset="100%"
+                style={{ stopColor: "rgb(var(--color-loss))" }}
+                stopOpacity="0.3"
+              />
             </linearGradient>
           </defs>
           {/* Zero line */}
@@ -1332,7 +1358,7 @@ function DrawdownDisplay({
               )
               .join(" ")}
             fill="none"
-            stroke="#ef4444"
+            style={{ stroke: "rgb(var(--color-loss))" }}
             strokeWidth="1.5"
             vectorEffect="non-scaling-stroke"
           />

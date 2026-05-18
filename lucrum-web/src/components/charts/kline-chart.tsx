@@ -50,21 +50,20 @@ import {
 } from "@/lib/trading/time-utils";
 import type { BacktestDailyLog } from "@/lib/backtest/types";
 import { TradeNarrative } from "@/components/backtest/trade-narrative";
+import { useThemeRgb } from "@/lib/theme";
 
 // =============================================================================
 // CONSTANTS
 // =============================================================================
 
-const CHART_COLORS = {
-  background: "#0f1117",
-  text: "rgba(255, 255, 255, 0.6)",
-  grid: "rgba(255, 255, 255, 0.06)",
-  upColor: "#10b981",
-  downColor: "#ef4444",
-  volumeUp: "rgba(16, 185, 129, 0.5)",
-  volumeDown: "rgba(239, 68, 68, 0.5)",
-  crosshair: "#f5a623",
-};
+// Candle / volume colors follow the [data-market] dimension, not the theme —
+// CN traders read red-up/green-down, US traders read green-up/red-down, and
+// both conventions are independent of the visual theme. Kept as resolved hex
+// because lightweight-charts does not parse CSS variables.
+const CANDLE_UP_COLOR = "#10b981";
+const CANDLE_DOWN_COLOR = "#ef4444";
+const VOLUME_UP_COLOR = "rgba(16, 185, 129, 0.5)";
+const VOLUME_DOWN_COLOR = "rgba(239, 68, 68, 0.5)";
 
 const MA_COLORS = ["#f5a623", "#3b82f6", "#a855f7", "#ec4899"];
 
@@ -350,6 +349,18 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
     const isInitializingRef = useRef(false);
 
     // -----------------------------------------------------------------------
+    // Theme-driven chart palette
+    //
+    // Initial createChart() uses these values; a follow-up useEffect re-applies
+    // them on theme change via applyOptions(), so switching themes never
+    // destroys the chart instance.
+    // -----------------------------------------------------------------------
+    const chartBg = useThemeRgb("bg-void");
+    const chartText = useThemeRgb("fg-muted", 0.7);
+    const chartGrid = useThemeRgb("bg-surface-border", 0.5);
+    const chartCrosshair = useThemeRgb("color-accent");
+
+    // -----------------------------------------------------------------------
     // Refs — main chart
     // -----------------------------------------------------------------------
     const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -459,8 +470,8 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
         value: item.volume,
         color:
           item.close >= item.open
-            ? CHART_COLORS.volumeUp
-            : CHART_COLORS.volumeDown,
+            ? VOLUME_UP_COLOR
+            : VOLUME_DOWN_COLOR,
       }));
 
       return { candles, volumes };
@@ -519,41 +530,41 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
           layout: {
             background: {
               type: ColorType.Solid,
-              color: CHART_COLORS.background,
+              color: chartBg,
             },
-            textColor: CHART_COLORS.text,
+            textColor: chartText,
           },
           grid: {
-            vertLines: { color: CHART_COLORS.grid },
-            horzLines: { color: CHART_COLORS.grid },
+            vertLines: { color: chartGrid },
+            horzLines: { color: chartGrid },
           },
           crosshair: {
             mode: CrosshairMode.Normal,
             vertLine: {
-              color: CHART_COLORS.crosshair,
+              color: chartCrosshair,
               width: 1,
               style: 2,
-              labelBackgroundColor: CHART_COLORS.crosshair,
+              labelBackgroundColor: chartCrosshair,
               labelVisible: false,
             },
             horzLine: {
-              color: CHART_COLORS.crosshair,
+              color: chartCrosshair,
               width: 1,
               style: 2,
-              labelBackgroundColor: CHART_COLORS.crosshair,
+              labelBackgroundColor: chartCrosshair,
             },
           },
           rightPriceScale: {
-            borderColor: CHART_COLORS.grid,
+            borderColor: chartGrid,
           },
           timeScale: {
-            borderColor: CHART_COLORS.grid,
+            borderColor: chartGrid,
             timeVisible: false,
             visible: false,
           },
         });
       },
-      [],
+      [chartBg, chartText, chartGrid, chartCrosshair],
     );
 
     // -----------------------------------------------------------------------
@@ -605,38 +616,38 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
           layout: {
             background: {
               type: ColorType.Solid,
-              color: CHART_COLORS.background,
+              color: chartBg,
             },
-            textColor: CHART_COLORS.text,
+            textColor: chartText,
           },
           grid: {
-            vertLines: { color: CHART_COLORS.grid },
-            horzLines: { color: CHART_COLORS.grid },
+            vertLines: { color: chartGrid },
+            horzLines: { color: chartGrid },
           },
           crosshair: {
             mode: CrosshairMode.Normal,
             vertLine: {
-              color: CHART_COLORS.crosshair,
+              color: chartCrosshair,
               width: 1,
               style: 2,
-              labelBackgroundColor: CHART_COLORS.crosshair,
+              labelBackgroundColor: chartCrosshair,
             },
             horzLine: {
-              color: CHART_COLORS.crosshair,
+              color: chartCrosshair,
               width: 1,
               style: 2,
-              labelBackgroundColor: CHART_COLORS.crosshair,
+              labelBackgroundColor: chartCrosshair,
             },
           },
           rightPriceScale: {
-            borderColor: CHART_COLORS.grid,
+            borderColor: chartGrid,
             scaleMargins: {
               top: 0.1,
               bottom: showVolume ? 0.25 : 0.1,
             },
           },
           timeScale: {
-            borderColor: CHART_COLORS.grid,
+            borderColor: chartGrid,
             timeVisible: true,
             secondsVisible: false,
           },
@@ -644,17 +655,17 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
         chartRef.current = chart;
 
         const candleSeries = chart.addCandlestickSeries({
-          upColor: CHART_COLORS.upColor,
-          downColor: CHART_COLORS.downColor,
+          upColor: CANDLE_UP_COLOR,
+          downColor: CANDLE_DOWN_COLOR,
           borderVisible: false,
-          wickUpColor: CHART_COLORS.upColor,
-          wickDownColor: CHART_COLORS.downColor,
+          wickUpColor: CANDLE_UP_COLOR,
+          wickDownColor: CANDLE_DOWN_COLOR,
         });
         candleSeriesRef.current = candleSeries;
 
         if (showVolume) {
           const volumeSeries = chart.addHistogramSeries({
-            color: CHART_COLORS.volumeUp,
+            color: VOLUME_UP_COLOR,
             priceFormat: { type: "volume" },
             priceScaleId: "",
           });
@@ -940,6 +951,40 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isClient, showMacd, showRsi]);
+
+    // -----------------------------------------------------------------------
+    // React to theme changes — re-apply layout / grid / crosshair colors on
+    // every chart instance via applyOptions(). This is an incremental update;
+    // no chart is destroyed or recreated, so user pan / zoom state survives.
+    // -----------------------------------------------------------------------
+    useEffect(() => {
+      if (!chartInitialized) return;
+      const layoutOptions = {
+        layout: {
+          background: { type: ColorType.Solid, color: chartBg },
+          textColor: chartText,
+        },
+        grid: {
+          vertLines: { color: chartGrid },
+          horzLines: { color: chartGrid },
+        },
+        crosshair: {
+          vertLine: {
+            color: chartCrosshair,
+            labelBackgroundColor: chartCrosshair,
+          },
+          horzLine: {
+            color: chartCrosshair,
+            labelBackgroundColor: chartCrosshair,
+          },
+        },
+        rightPriceScale: { borderColor: chartGrid },
+        timeScale: { borderColor: chartGrid },
+      } as const;
+      chartRef.current?.applyOptions(layoutOptions);
+      macdChartRef.current?.applyOptions(layoutOptions);
+      rsiChartRef.current?.applyOptions(layoutOptions);
+    }, [chartInitialized, chartBg, chartText, chartGrid, chartCrosshair]);
 
     // -----------------------------------------------------------------------
     // Update chart data

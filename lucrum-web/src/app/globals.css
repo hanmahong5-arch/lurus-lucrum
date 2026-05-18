@@ -18,24 +18,24 @@
    ============================================ */
 
 :root {
-  /* Core palette */
-  --background: #09090b;
+  /* Core palette - aliased to --lucrum-* theme tokens (see theme blocks below) */
+  --background: rgb(var(--lucrum-bg-void));
   --background-secondary: #0f0f12;
-  --foreground: #fafafa;
-  --foreground-muted: #a1a1aa;
+  --foreground: rgb(var(--lucrum-fg));
+  --foreground-muted: rgb(var(--lucrum-fg-muted));
 
-  /* Surface colors */
-  --surface: #18181b;
-  --surface-hover: #27272a;
-  --surface-active: #3f3f46;
-  --surface-border: #27272a;
+  /* Surface colors - aliased to --lucrum-* theme tokens */
+  --surface: rgb(var(--lucrum-bg-surface));
+  --surface-hover: rgb(var(--lucrum-bg-surface-hover));
+  --surface-active: rgb(var(--lucrum-bg-surface-active));
+  --surface-border: rgb(var(--lucrum-bg-surface-border));
 
-  /* Brand colors */
-  --primary: #3b82f6;
-  --primary-hover: #2563eb;
-  --primary-muted: #1e40af;
-  --accent: #f59e0b;
-  --accent-hover: #d97706;
+  /* Brand colors - aliased to --lucrum-* theme tokens */
+  --primary: rgb(var(--lucrum-color-primary));
+  --primary-hover: rgb(var(--lucrum-color-primary-hover));
+  --primary-muted: rgb(var(--lucrum-color-primary-hover));
+  --accent: rgb(var(--lucrum-color-accent));
+  --accent-hover: rgb(var(--lucrum-color-accent-hover));
 
   /* CN Market Mode (Default): Red=Up/Profit, Green=Down/Loss */
   /* This is the traditional Chinese market convention */
@@ -57,7 +57,7 @@
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
   --shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
   --shadow-lg: 0 10px 15px rgba(0, 0, 0, 0.4);
-  --shadow-glow: 0 0 10px rgba(59, 130, 246, 0.5);
+  --shadow-glow: 0 0 10px rgb(var(--lucrum-color-primary) / 0.5);
 
   /* ============================================
      LUCRUM EXTENDED DESIGN TOKENS
@@ -112,6 +112,45 @@
   --radius-md: 0.5rem;
   --radius-lg: 0.75rem;
   --radius-xl: 1rem;
+}
+
+/* ============================================
+   THEME TOKENS - Runtime theme switching via data-theme attribute
+   Default theme ('terminal-pro') is also applied to :root for SSR / no-JS fallback.
+   Toggle via: document.documentElement.setAttribute('data-theme', 'cyberpunk')
+   ============================================ */
+:root,
+[data-theme="terminal-pro"] {
+  --lucrum-bg-void: 9 9 11;
+  --lucrum-bg-surface: 24 24 27;
+  --lucrum-bg-surface-hover: 39 39 42;
+  --lucrum-bg-surface-active: 63 63 70;
+  --lucrum-bg-surface-border: 39 39 42;
+  --lucrum-color-primary: 59 130 246;
+  --lucrum-color-primary-hover: 37 99 235;
+  /* Lighter tint of primary — used by .btn-primary:hover gradient top stop. */
+  --lucrum-color-primary-light: 96 165 250;
+  --lucrum-color-accent: 245 158 11;
+  --lucrum-color-accent-hover: 217 119 6;
+  --lucrum-fg: 250 250 250;
+  --lucrum-fg-muted: 161 161 170;
+}
+
+[data-theme="cyberpunk"] {
+  --lucrum-bg-void: 8 5 18;
+  --lucrum-bg-surface: 20 14 38;
+  --lucrum-bg-surface-hover: 35 22 64;
+  --lucrum-bg-surface-active: 58 36 100;
+  --lucrum-bg-surface-border: 64 36 120;
+  --lucrum-color-primary: 167 139 250;
+  --lucrum-color-primary-hover: 139 92 246;
+  /* Violet lifted toward white for the same hover-tint role. */
+  --lucrum-color-primary-light: 196 181 253;
+  /* Magenta accent — distances from loss-green and from primary-violet. */
+  --lucrum-color-accent: 236 72 153;
+  --lucrum-color-accent-hover: 219 39 119;
+  --lucrum-fg: 237 233 254;
+  --lucrum-fg-muted: 196 181 253;
 }
 
 /* US Market Mode: Green=Up/Profit, Red=Down/Loss */
@@ -179,7 +218,7 @@ code,
 
 /* Selection - Brand color */
 ::selection {
-  background: rgba(59, 130, 246, 0.3);
+  background: rgb(var(--lucrum-color-primary) / 0.3);
   color: var(--foreground);
 }
 
@@ -245,7 +284,7 @@ a:hover {
 
   /* Text gradient - Primary blue */
   .text-gradient-primary {
-    background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 50%, #3b82f6 100%);
+    background: linear-gradient(135deg, rgb(var(--lucrum-color-primary)) 0%, rgb(var(--lucrum-color-primary-hover)) 50%, rgb(var(--lucrum-color-primary)) 100%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
@@ -492,7 +531,7 @@ a:hover {
   }
 
   .btn-primary:hover {
-    background: linear-gradient(180deg, #60a5fa 0%, var(--primary) 100%);
+    background: linear-gradient(180deg, rgb(var(--lucrum-color-primary-light)) 0%, var(--primary) 100%);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   }
 
@@ -533,11 +572,11 @@ a:hover {
 
   /* Glow Effects */
   .glow-primary {
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3);
+    box-shadow: 0 0 10px rgb(var(--lucrum-color-primary) / 0.5), 0 0 20px rgb(var(--lucrum-color-primary) / 0.3);
   }
 
   .glow-accent {
-    box-shadow: 0 0 10px rgba(245, 158, 11, 0.5), 0 0 20px rgba(245, 158, 11, 0.3);
+    box-shadow: 0 0 10px rgb(var(--lucrum-color-accent) / 0.5), 0 0 20px rgb(var(--lucrum-color-accent) / 0.3);
   }
 
   .glow-profit {
@@ -564,7 +603,7 @@ a:hover {
 
   .input-terminal:focus {
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    box-shadow: 0 0 0 2px rgb(var(--lucrum-color-primary) / 0.2);
   }
 
   .input-terminal::placeholder {
@@ -601,7 +640,7 @@ a:hover {
     width: 80%;
     height: 2px;
     background: var(--primary);
-    box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 10px rgb(var(--lucrum-color-primary) / 0.5);
     border-radius: 1px;
   }
 
@@ -619,8 +658,8 @@ a:hover {
 
   .badge-primary {
     color: var(--primary);
-    background: rgba(59, 130, 246, 0.15);
-    border: 1px solid rgba(59, 130, 246, 0.3);
+    background: rgb(var(--lucrum-color-primary) / 0.15);
+    border: 1px solid rgb(var(--lucrum-color-primary) / 0.3);
   }
 
   .badge-profit {
@@ -760,7 +799,7 @@ a:hover {
     left: 0;
     right: 0;
     height: 2px;
-    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent);
+    background: linear-gradient(90deg, transparent, rgb(var(--lucrum-color-primary) / 0.5), transparent);
     animation: scan 2s linear infinite;
   }
 
@@ -768,10 +807,10 @@ a:hover {
   @keyframes glow-pulse {
     0%,
     100% {
-      box-shadow: 0 0 5px rgba(59, 130, 246, 0.3);
+      box-shadow: 0 0 5px rgb(var(--lucrum-color-primary) / 0.3);
     }
     50% {
-      box-shadow: 0 0 15px rgba(59, 130, 246, 0.6);
+      box-shadow: 0 0 15px rgb(var(--lucrum-color-primary) / 0.6);
     }
   }
 
@@ -1170,5 +1209,5 @@ textarea:focus-visible,
 [tabindex]:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
-  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.25);
+  box-shadow: 0 0 0 4px rgb(var(--lucrum-color-primary) / 0.25);
 }

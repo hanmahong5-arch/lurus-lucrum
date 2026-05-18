@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "@/lib/auth/auth";
@@ -14,6 +15,12 @@ import { LiveRegionProvider } from "@/components/accessibility/live-region";
 import { PWAInstallBanner } from "@/components/pwa/install-banner";
 import { I18nProvider } from "@/lib/i18n/context";
 import { AchievementToastManager } from "@/components/achievements/achievement-toast";
+import {
+  LUCRUM_THEME_COOKIE,
+  parseThemeCookie,
+  THEMES,
+  ThemeProvider,
+} from "@/lib/theme";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -27,8 +34,11 @@ const jetbrainsMono = JetBrains_Mono({
   display: "swap",
 });
 
+// NOTE: viewport.themeColor is intentionally omitted — Next 14's metadata API
+// bakes the value at build time, but Lucrum's theme is runtime-switchable.
+// `<ThemeProvider>` patches the `<meta name="theme-color">` tag in the DOM
+// after hydration using each theme's `metaThemeColor` from the registry.
 export const viewport: Viewport = {
-  themeColor: "#f0b90b",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
@@ -70,10 +80,19 @@ export default async function RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await getServerSession(authOptions);
+  // Resolve the active theme from the cookie so first paint carries the
+  // correct `data-theme` attribute — no FOUC on hard refresh.
+  const themeId = parseThemeCookie(cookies().get(LUCRUM_THEME_COOKIE)?.value);
+  const initialMetaThemeColor = THEMES[themeId].metaThemeColor;
   return (
-    <html lang="zh" className={`${inter.variable} ${jetbrainsMono.variable}`}>
+    <html
+      lang="zh"
+      data-theme={themeId}
+      className={`${inter.variable} ${jetbrainsMono.variable}`}
+    >
       <head>
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="theme-color" content={initialMetaThemeColor} />
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
       <body className="antialiased bg-background text-foreground md:pb-7">
@@ -83,20 +102,22 @@ export default async function RootLayout({
         <LiveRegionProvider />
         <AuthSessionProvider session={session}>
           <I18nProvider>
-          {/* Enhanced error boundary with recovery UI and workspace preservation */}
-          <EnhancedErrorBoundary componentName="App">
-            {children}
-          </EnhancedErrorBoundary>
-          {/* Global command palette (Story 6.1) */}
-          <GlobalCommandPalette />
-          {/* Toast notification system (Story 1.2) */}
-          <ToastSystem />
-          {/* Achievement unlock toast manager (Attention Economy P1) */}
-          <AchievementToastManager />
-          {/* PWA install banner (Phase 4 Task 4) */}
-          <PWAInstallBanner />
-          {/* Bottom status bar (Story 1.3) */}
-          <StatusBar />
+            <ThemeProvider initialTheme={themeId}>
+              {/* Enhanced error boundary with recovery UI and workspace preservation */}
+              <EnhancedErrorBoundary componentName="App">
+                {children}
+              </EnhancedErrorBoundary>
+              {/* Global command palette (Story 6.1) */}
+              <GlobalCommandPalette />
+              {/* Toast notification system (Story 1.2) */}
+              <ToastSystem />
+              {/* Achievement unlock toast manager (Attention Economy P1) */}
+              <AchievementToastManager />
+              {/* PWA install banner (Phase 4 Task 4) */}
+              <PWAInstallBanner />
+              {/* Bottom status bar (Story 1.3) */}
+              <StatusBar />
+            </ThemeProvider>
           </I18nProvider>
         </AuthSessionProvider>
       </body>
