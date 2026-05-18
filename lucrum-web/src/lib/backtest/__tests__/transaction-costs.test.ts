@@ -3,6 +3,8 @@ import {
   DEFAULT_COSTS,
   ZERO_COSTS,
   CONSERVATIVE_COSTS,
+  STANDARD_MARKETPLACE_COSTS,
+  assertStandardCosts,
   calculateTradeCost,
   calculateRoundTripCost,
   calculateNetReturn,
@@ -327,5 +329,162 @@ describe('validateCostConfig - boundary values', () => {
 
     expect(result.isValid).toBe(false);
     expect(result.errors.some(e => e.includes('最低佣金'))).toBe(true);
+  });
+});
+
+// ===========================================================================
+// Sprint 1 招 B — marketplace standardized cost profile (added 2026-05-18)
+// ===========================================================================
+//
+// Test design from two perspectives:
+//   USER (publisher): "I want my strategy listed; tell me clearly if and
+//     where my cost config doesn't match the marketplace baseline."
+//   ADVERSARIAL TESTER: "Can I sneak past the gate with floats just under
+//     the epsilon, NaN, negatives, missing keys, string coercion?"
+
+describe('STANDARD_MARKETPLACE_COSTS — published constant shape', () => {
+  it('has all 5 required fields, all numeric', () => {
+    for (const field of ['commission', 'stampDuty', 'transferFee', 'slippage', 'minCommission']) {
+      expect(typeof STANDARD_MARKETPLACE_COSTS[field as keyof typeof STANDARD_MARKETPLACE_COSTS]).toBe('number');
+    }
+  });
+
+  it('matches the documented 2026 A-share retail baseline', () => {
+    expect(STANDARD_MARKETPLACE_COSTS.commission).toBe(0.00025);
+    expect(STANDARD_MARKETPLACE_COSTS.stampDuty).toBe(0.0005);
+    expect(STANDARD_MARKETPLACE_COSTS.transferFee).toBe(0.00001);
+    expect(STANDARD_MARKETPLACE_COSTS.slippage).toBe(0.001);
+    expect(STANDARD_MARKETPLACE_COSTS.minCommission).toBe(5);
+  });
+
+  it('is frozen — caller cannot mutate the published baseline', () => {
+    expect(Object.isFrozen(STANDARD_MARKETPLACE_COSTS)).toBe(true);
+    expect(() => {
+      // Type cast required to express the runtime mutation attempt that
+      // Object.freeze is meant to prevent.
+      (STANDARD_MARKETPLACE_COSTS as { commission: number }).commission = 0;
+    }).toThrow();
+  });
+});
+
+describe('assertStandardCosts — happy path', () => {
+  it('treats null / undefined as compliant (legacy strategies, no override)', () => {
+    expect(assertStandardCosts(null)).toEqual([]);
+    expect(assertStandardCosts(undefined)).toEqual([]);
+  });
+
+  it('exact match returns empty mismatch list', () => {
+    expect(assertStandardCosts({ ...STANDARD_MARKETPLACE_COSTS })).toEqual([]);
+  });
+
+  it('always returns an array (caller branches on .length, not truthiness)', () => {
+    const result = assertStandardCosts({ ...STANDARD_MARKETPLACE_COSTS });
+    expect(Array.isArray(result)).toBe(true);
+    expect(result.length).toBe(0);
+  });
+});
+
+describe('assertStandardCosts — single-field drift', () => {
+  it('detects commission tweaked (the classic "zero fee" cheat)', () => {
+    const result = assertStandardCosts({ ...STANDARD_MARKETPLACE_COSTS, commission: 0 });
+    expect(result).toHaveLength(1);
+    expect(result[0]?.field).toBe('commission');
+    expect(result[0]?.expected).toBe(0.00025);
+    expect(result[0]?.actual).toBe(0);
+  });
+
+  it('detects each field independently when only one differs', () => {
+    for (const field of [
+      'commission',
+      'stampDuty',
+      'transferFee',
+      'slippage',
+      'minCommission',
+    ] as const) {
+      const tweaked = { ...STANDARD_MARKETPLACE_COSTS, [field]: 999 };
+      const result = assertStandardCosts(tweaked);
+      expect(result).toHaveLength(1);
+      expect(result[0]?.field).toBe(field);
+    }
+  });
+});
+
+describe('assertStandardCosts — float tolerance (EPS=1e-9)', () => {
+  it('passes when drift is within numerical noise (1e-10)', () => {
+    const noisy = { ...STANDARD_MARKETPLACE_COSTS, commission: 0.00025 + 1e-10 };
+    expect(assertStandardCosts(noisy)).toEqual([]);
+  });
+
+  it('fails when drift exceeds the epsilon (1e-7)', () => {
+    const tweaked = { ...STANDARD_MARKETPLACE_COSTS, commission: 0.00025 + 1e-7 };
+    expect(assertStandardCosts(tweaked)).not.toEqual([]);
+  });
+
+  it('fails when drift is just over the epsilon boundary', () => {
+    // 1e-9 + smallest representable increment must be > 1e-9 → fail
+    const tweaked = {
+      ...STANDARD_MARKETPLACE_COSTS,
+      commission: 0.00025 + 1e-9 + 1e-12,
+    };
+    expect(assertStandardCosts(tweaked)).not.toEqual([]);
+  });
+});
+
+describe('assertStandardCosts — adversarial inputs', () => {
+  it('flags NaN field as mismatch with actual=NaN', () => {
+    const tweaked = { ...STANDARD_MARKETPLACE_COSTS, commission: Number.NaN };
+    const result = assertStandardCosts(tweaked);
+    expect(result).toHaveLength(1);
+    expect(Number.isNaN(result[0]?.actual)).toBe(true);
+  });
+
+  it('flags Infinity field as mismatch', () => {
+    const tweaked = { ...STANDARD_MARKETPLACE_COSTS, commission: Number.POSITIVE_INFINITY };
+    const result = assertStandardCosts(tweaked);
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it('flags negative slippage (no "subsidy" via inverted slippage)', () => {
+    const tweaked = { ...STANDARD_MARKETPLACE_COSTS, slippage: -0.001 };
+    const result = assertStandardCosts(tweaked);
+    expect(result).toHaveLength(1);
+    expect(result[0]?.field).toBe('slippage');
+  });
+
+  it('flags missing field — partial object trips actual=NaN check', () => {
+    const partial = {
+      commission: 0.00025,
+      stampDuty: 0.0005,
+      transferFee: 0.00001,
+      // slippage missing
+      minCommission: 5,
+    } as Parameters<typeof assertStandardCosts>[0];
+    const result = assertStandardCosts(partial);
+    expect(result.find((m) => m.field === 'slippage')).toBeDefined();
+  });
+
+  it('flags string-coerced number ("0.001") as mismatch — does not silently coerce', () => {
+    // Caller bypassing TS at the boundary (e.g. JSON.parse of user input).
+    const tweaked = {
+      ...STANDARD_MARKETPLACE_COSTS,
+      slippage: '0.001' as unknown as number,
+    };
+    const result = assertStandardCosts(tweaked);
+    expect(result.find((m) => m.field === 'slippage')).toBeDefined();
+  });
+
+  it('returns ALL mismatches when every field is off, not just the first', () => {
+    const allBad = {
+      commission: 0,
+      stampDuty: 0,
+      transferFee: 0,
+      slippage: 0,
+      minCommission: 0,
+    };
+    const result = assertStandardCosts(allBad);
+    expect(result).toHaveLength(5);
+    expect(new Set(result.map((m) => m.field))).toEqual(
+      new Set(['commission', 'stampDuty', 'transferFee', 'slippage', 'minCommission']),
+    );
   });
 });
