@@ -30,6 +30,7 @@ import { calculateScore } from "@/lib/backtest/score";
 import { showToast } from "@/lib/toast";
 import { useAchievementStore } from "@/lib/stores/achievement-store";
 import { StickyMetricsBanner } from "@/components/backtest/sticky-metrics-banner";
+import { LiveSignalCard } from "@/components/backtest/live-signal-card";
 import { SuccessCelebration } from "@/components/ui/success-celebration";
 import { getGradeFromScore } from "@/lib/backtest/score/score-calculator";
 import Link from "next/link";
@@ -392,6 +393,33 @@ export function BacktestResultsView({
 
         {/* Placeholder for symmetry */}
         <div className="w-20" />
+      </div>
+
+      {/* ================================================================= */}
+      {/* LIVE SIGNAL CARD + 合规风险提示                                    */}
+      {/* "现在该持有什么"信号 + 教育用途声明,放在 K 线之前让用户一眼看到决策 */}
+      {/* ================================================================= */}
+      <LiveSignalCard result={result} />
+
+      <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 flex items-start gap-2 text-[11px] text-yellow-300/80 leading-relaxed">
+        <svg
+          className="w-3.5 h-3.5 flex-shrink-0 mt-0.5"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            d="M12 9v2m0 4h.01M5 19h14a2 2 0 001.84-2.75L13.74 4a2 2 0 00-3.48 0L3.16 16.25A2 2 0 005 19z"
+          />
+        </svg>
+        <span>
+          <strong className="font-medium">风险提示:</strong>{" "}
+          回测基于历史数据，<u>不能</u>代表未来收益。本平台不提供投资建议,所有策略仅供教育研究与回测验证;
+          真实交易需独立判断并通过持牌券商执行。
+        </span>
       </div>
 
       {/* ================================================================= */}

@@ -66,7 +66,11 @@ export interface PlanDisplayInfo {
 
 const PLAN_LIMITS: Record<PlanTier, PlanLimits> = {
   free: {
-    dailyBacktests: 5,
+    // Bumped 5→10 (2026-05-18) per analyst risk #3 hedging — give free users
+    // enough runway to evaluate before hitting paywall; below 10 the funnel
+    // dies before strategy-validation completes. dailyAiCalls stays 3 since
+    // LLM cost dwarfs backtest cost and is the actual cash-burn channel.
+    dailyBacktests: 10,
     dailyAiCalls: 3,
     accessibleTemplates: 5,
     maxMultiStocks: 3,

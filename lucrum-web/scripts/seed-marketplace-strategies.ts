@@ -408,6 +408,229 @@ class SectorRotationStrategy(CtaTemplate):
         self.put_event()
 `,
   },
+
+  // =========================================================================
+  // 叙事化策略包 — 2026-05-18 追加（UX 评审 §3）
+  // 标题用"用户场景"而非技术指标，让首次浏览者立刻产生"我想要这个"的心智。
+  // 技术细节藏在 description / tags / bodyCode 里，给极客层。
+  // =========================================================================
+  {
+    title: "跟着北向资金抄作业",
+    description:
+      "买入北向资金近 5 日累计净买入额 TOP10 的标的，持有 5-10 个交易日。外资在买什么就跟买什么，规避羊群效应靠移仓滑点过滤。",
+    school: "macro",
+    priceType: "free",
+    tags: ["北向", "外资", "narrative"],
+    defaultParams: { top_n: 10, lookback_days: 5, hold_days: 7 },
+    expected: { annual: 0.19, sharpe: 1.25, maxDd: 0.17 },
+    bodyCode: `
+class NorthboundFollowStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    top_n = 10
+    lookback_days = 5
+    hold_days = 7
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl reads northbound_flow.daily_net_buy table.
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "打新中签翻倍包",
+    description:
+      "自动筛 PE < 行业 60% 分位 + 首日开板换手 > 30% 的新股，模拟'中签即卖'与'破发坚持'两种执行路径。",
+    school: "quant",
+    priceType: "free",
+    tags: ["打新", "新股", "narrative"],
+    defaultParams: { pe_percentile_max: 60, turnover_min: 0.3, hold_days: 5 },
+    expected: { annual: 0.21, sharpe: 1.15, maxDd: 0.16 },
+    bodyCode: `
+class IpoPlayStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    pe_percentile_max = 60.0
+    turnover_min = 0.3
+    hold_days = 5
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "季报暴雷预警 & 反向",
+    description:
+      "业绩预告下修 > 30% 当日抛售（持仓时）或开空（非持仓时）；预增 > 50% 次日开盘买入并 3 日内不破前低则持有。利用 A 股 T+1 信息差。",
+    school: "reversion",
+    priceType: "free",
+    tags: ["业绩", "暴雷", "narrative"],
+    defaultParams: { revise_down_pct: 0.30, revise_up_pct: 0.50, hold_days: 10 },
+    expected: { annual: 0.16, sharpe: 1.05, maxDd: 0.18 },
+    bodyCode: `
+class EarningsShockStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    revise_down_pct = 0.30
+    revise_up_pct = 0.50
+    hold_days = 10
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl reads earnings_revisions table + breaking-news feed.
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "龙虎榜机构席位跟单",
+    description:
+      "当日龙虎榜机构净买入额 > 5000 万的标的，次日开盘跟买，3 日内不破前低持有；机构现身买入是国内市场最强的短期信号之一。",
+    school: "momentum",
+    priceType: "per_run",
+    pricePerRun: 0.5,
+    tags: ["龙虎榜", "机构", "narrative"],
+    defaultParams: { net_buy_min_wan: 5000, hold_days: 3, stop_breach_low_n: 3 },
+    expected: { annual: 0.25, sharpe: 1.35, maxDd: 0.22 },
+    bodyCode: `
+class DragonTigerListStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    net_buy_min_wan = 5000
+    hold_days = 3
+    stop_breach_low_n = 3
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl reads dragon_tiger_list.daily_institutional_seats.
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "国家队动向追踪",
+    description:
+      "中央汇金 / 社保基金 / 证金 / QFII 季报重仓股变化，新进 + 加仓标的池长期持有。适合'信仰持有'型用户，年化中等但回撤最低。",
+    school: "value",
+    priceType: "free",
+    tags: ["国家队", "汇金", "社保", "narrative"],
+    defaultParams: { rebal_quarters: 1, hold_days: 90 },
+    expected: { annual: 0.12, sharpe: 1.4, maxDd: 0.10 },
+    bodyCode: `
+class NationalTeamStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    rebal_quarters = 1
+    hold_days = 90
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl joins quarterly_top10_holders ON ['汇金', '社保', '证金'].
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "周期股轮动罗盘",
+    description:
+      "PPI / PMI 拐点驱动有色 → 煤炭 → 化工 → 钢铁的板块轮动，每月调仓。告别'满仓守一个周期'，让宏观数据替你决定攻防。",
+    school: "macro",
+    priceType: "per_run",
+    pricePerRun: 1.0,
+    tags: ["周期", "轮动", "narrative"],
+    defaultParams: { rebal_days: 22, ppi_lookback_months: 3 },
+    expected: { annual: 0.18, sharpe: 1.18, maxDd: 0.20 },
+    bodyCode: `
+class CycleSectorRotationStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    rebal_days = 22
+    ppi_lookback_months = 3
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl joins macro_indicators.ppi_yoy + sector_returns.
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.rebal_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
+  {
+    title: "高股息红利避风港",
+    description:
+      "股息率 > 5% + 连续 3 年分红 + ROE > 10% 的低估值蓝筹股，熊市里能睡着觉的策略。年化不一定最高，但夏普最稳。",
+    school: "value",
+    priceType: "free",
+    tags: ["股息", "红利", "narrative"],
+    defaultParams: { div_yield_min: 0.05, payout_years_min: 3, roe_min: 0.10, hold_days: 120 },
+    expected: { annual: 0.11, sharpe: 1.55, maxDd: 0.09 },
+    bodyCode: `
+class HighDividendStrategy(CtaTemplate):
+    author = "Lucrum Curator"
+    div_yield_min = 0.05
+    payout_years_min = 3
+    roe_min = 0.10
+    hold_days = 120
+    fixed_size = 1
+    bars_held = 0
+    def on_bar(self, bar: BarData):
+        if not self.inited:
+            return
+        # Stub: real impl joins fundamentals.dividend_history + roe_history.
+        if self.pos == 0:
+            self.buy(bar.close_price, self.fixed_size)
+            self.bars_held = 0
+        else:
+            self.bars_held += 1
+            if self.bars_held >= self.hold_days:
+                self.sell(bar.close_price, abs(self.pos))
+        self.put_event()
+`,
+  },
 ];
 
 function renderCode(seed: Seed): string {

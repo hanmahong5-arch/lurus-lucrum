@@ -13,14 +13,133 @@
 
 "use client";
 
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, useMemo } from "react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { cn } from "@/lib/utils";
 import { AutoSaveIndicator } from "./auto-save-indicator";
 import {
   useStrategyWorkspaceStore,
   selectAutoSaveStatus,
+  selectDrafts,
 } from "@/lib/stores/strategy-workspace-store";
 import { ThemeSwitcher } from "@/components/theme/theme-switcher";
+
+// =============================================================================
+// VERSION TIMELINE DROPDOWN
+// =============================================================================
+
+/**
+ * Time-Travel dropdown — surfaces the last 5 auto-saved drafts as a one-click
+ * rollback list. Reads from `useStrategyWorkspaceStore.drafts` (already
+ * persisted) so this is a pure UI layer; no new state.
+ *
+ * Sprint 0 W3-4 #5 — Replit-style checkpoint UX, lightweight version.
+ */
+function VersionTimeline() {
+  const drafts = useStrategyWorkspaceStore(selectDrafts);
+  const loadDraft = useStrategyWorkspaceStore((s) => s.loadDraft);
+
+  const items = useMemo(() => drafts.slice(0, 5), [drafts]);
+
+  if (items.length === 0) {
+    return null; // Hide entirely on first session — nothing to time-travel to.
+  }
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "px-3 py-1.5 text-xs rounded-lg font-medium transition-all btn-tactile",
+            "flex items-center gap-1.5 border outline-none",
+            "bg-surface border-white/5 text-neutral-400",
+            "hover:text-neutral-200 hover:border-white/10",
+            "data-[state=open]:text-neutral-100 data-[state=open]:border-white/15",
+          )}
+          aria-label="版本时间线"
+          title="回到此前任意自动保存的版本"
+        >
+          <svg
+            className="w-3.5 h-3.5"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M3 10h10a8 8 0 018 8v2M3 10l6-6m-6 6l6 6"
+            />
+          </svg>
+          版本
+          <span className="text-[10px] text-white/40 font-mono ml-0.5">
+            ({items.length})
+          </span>
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="end"
+          sideOffset={6}
+          className={cn(
+            "z-50 min-w-[16rem] rounded-lg p-1",
+            "bg-surface border border-white/10 shadow-lg",
+            "animate-slide-down",
+          )}
+        >
+          <DropdownMenu.Label className="px-2 py-1 text-[10px] uppercase tracking-wider text-neutral-500">
+            最近 {items.length} 次自动保存
+          </DropdownMenu.Label>
+          {items.map((draft, idx) => {
+            const ts = new Date(draft.timestamp);
+            const timeAgo = formatTimeAgo(ts);
+            const preview =
+              draft.workspace.strategyName?.trim() ||
+              draft.workspace.strategyInput?.slice(0, 28).trim() ||
+              "未命名草稿";
+            return (
+              <DropdownMenu.Item
+                key={draft.id}
+                onSelect={(e) => {
+                  e.preventDefault();
+                  loadDraft(draft.id);
+                }}
+                className={cn(
+                  "flex items-start justify-between gap-3 px-2 py-1.5 text-xs rounded cursor-pointer outline-none",
+                  "text-neutral-300 hover:text-neutral-100 hover:bg-white/5 focus:bg-white/5",
+                )}
+              >
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-white/50 w-6 shrink-0">
+                      v{items.length - idx}
+                    </span>
+                    <span className="truncate">{preview}</span>
+                  </div>
+                  <div className="text-[10px] text-white/40 pl-8">
+                    {timeAgo} ·{" "}
+                    {(draft.workspace.generatedCode?.length ?? 0).toLocaleString()} 字符
+                  </div>
+                </div>
+              </DropdownMenu.Item>
+            );
+          })}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function formatTimeAgo(d: Date): string {
+  const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diffSec < 60) return `${diffSec} 秒前`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)} 分钟前`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)} 小时前`;
+  return d.toLocaleDateString("zh-CN", { month: "2-digit", day: "2-digit" });
+}
 
 // =============================================================================
 // TYPES
@@ -189,6 +308,9 @@ export function WorkbenchToolbar({
           </svg>
           保存
         </button>
+
+        {/* Time-Travel version dropdown — quick rollback to recent drafts */}
+        <VersionTimeline />
 
         {/* History button */}
         <button

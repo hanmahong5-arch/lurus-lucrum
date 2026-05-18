@@ -1,6 +1,38 @@
 {
   "extends": "next/core-web-vitals",
+  "plugins": ["@typescript-eslint"],
   "rules": {
     "@typescript-eslint/no-non-null-assertion": "off"
-  }
+  },
+  "overrides": [
+    {
+      "files": ["src/lib/backtest/**/*.{ts,tsx}"],
+      "excludedFiles": ["**/__tests__/**", "**/*.test.ts", "**/*.test.tsx"],
+      "parser": "@typescript-eslint/parser",
+      "rules": {
+        "no-restricted-imports": "off",
+        "@typescript-eslint/no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "group": [
+                  "@/lib/data-service",
+                  "@/lib/data-service/*",
+                  "**/data-service",
+                  "**/data-service/*"
+                ],
+                "allowTypeImports": true,
+                "message": "PIT 护栏：backtest 禁止运行时 import @/lib/data-service（含实时/缓存数据，会泄漏未来信息）。type-only import 允许；要拉数据请走 @/lib/pit/facts-repository。"
+              },
+              {
+                "group": ["axios", "node-fetch", "**/sources/eastmoney*", "**/sources/sina*"],
+                "message": "PIT 护栏：backtest 内禁止直接拉外部行情源；走 @/lib/pit/* PIT-locked 仓库。"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

@@ -209,12 +209,41 @@ export function StrategyCard({
         </button>
       )}
 
-      {/* Header: Grade + Title */}
-      <div className="flex items-center gap-2 mb-3 pr-6">
+      {/* Hero: 年化数字 (视觉主体, 大字 mono) — 用户决策路径的真正第一信号 */}
+      <div className="flex items-baseline justify-between mb-1 pr-6">
+        <div className="flex items-baseline gap-2">
+          <span
+            className={cn(
+              "text-2xl font-mono tabular-nums font-semibold leading-none",
+              annualized != null
+                ? annualized >= 0
+                  ? "text-profit"
+                  : "text-loss"
+                : "text-white/30",
+            )}
+          >
+            {annualized != null
+              ? `${annualized >= 0 ? "+" : ""}${annualized.toFixed(1)}%`
+              : "--"}
+          </span>
+          <span className="text-[10px] text-white/40 uppercase tracking-wider">
+            年化
+          </span>
+        </div>
         <GradeBadge grade={strategy.gradeScore} />
+      </div>
+
+      {/* Title (narrative) + 合规 hedging mini-badge */}
+      <div className="flex items-center justify-between gap-2 mb-3 pr-6">
         <h3 className="text-sm font-semibold text-white group-hover:text-accent transition line-clamp-1">
           {strategy.title}
         </h3>
+        <span
+          className="text-[9px] text-white/30 uppercase tracking-wide whitespace-nowrap"
+          title="本平台不提供投资建议，所有策略仅用于教育研究与回测验证"
+        >
+          教育用途
+        </span>
       </div>
 
       {/* Decision badges */}
@@ -233,21 +262,8 @@ export function StrategyCard({
       {/* Divider */}
       <div className="h-px bg-white/5 mb-3" />
 
-      {/* Key Metrics Grid (2x2) */}
+      {/* Key Metrics Grid (2x2) — 年化已搬到 hero,这里展示辅助指标 + 社交证明 */}
       <div className="grid grid-cols-2 gap-x-4 gap-y-2 mb-3">
-        <SmartTooltip term="annualReturn">
-          <MetricCell
-            label="年化"
-            value={annualized != null ? `${annualized >= 0 ? "+" : ""}${annualized.toFixed(1)}%` : "--"}
-            colorClass={
-              annualized != null
-                ? annualized >= 0
-                  ? "text-profit"
-                  : "text-loss"
-                : undefined
-            }
-          />
-        </SmartTooltip>
         <SmartTooltip term="winRate">
           <MetricCell
             label="胜率"
@@ -276,6 +292,14 @@ export function StrategyCard({
             }
           />
         </SmartTooltip>
+        <MetricCell
+          label="使用人数"
+          value={
+            strategy.totalRuns != null
+              ? strategy.totalRuns.toLocaleString()
+              : "--"
+          }
+        />
       </div>
 
       {/* Divider */}
