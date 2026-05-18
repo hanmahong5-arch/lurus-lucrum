@@ -1722,6 +1722,140 @@ export type NewWorkflowStepCache = typeof workflowStepCache.$inferInsert;
 export type StrategyVersion = typeof strategyVersions.$inferSelect;
 export type NewStrategyVersion = typeof strategyVersions.$inferInsert;
 
+// ============================================================================
+// Paper Trading Tables (Sprint 1 — skeleton; real-time MTM is Sprint 2)
+// ============================================================================
+
+/**
+ * paper_runs — one row per active or historical paper-trading session.
+ * Mirrors the role of `marketplace_subscriptions` but for the user's own
+ * sandbox runs (no money, real prices).
+ */
+export const paperRuns = pgTable(
+  'paper_runs',
+  {
+    id: serial('id').primaryKey(),
+    /** Zitadel sub of the owner — same shape as `strategyHistory.userId`. */
+    userId: text('user_id').notNull(),
+    /** The user's own strategy if they ran their own. */
+    strategyHistoryId: integer('strategy_history_id').references(
+      () => strategyHistory.id,
+      { onDelete: 'set null' },
+    ),
+    /** The marketplace listing this was forked from (null when self-authored). */
+    marketplaceStrategyId: integer('marketplace_strategy_id').references(
+      () => marketplaceStrategies.id,
+      { onDelete: 'set null' },
+    ),
+    /** active / paused / closed. Closed runs are immutable historical record. */
+    status: varchar('status', { length: 16 }).notNull().default('active'),
+    /** Initial virtual capital, in CNY. Default 100k. */
+    initialCapital: real('initial_capital').notNull().default(100_000),
+    /** Strategy display name captured at start so UI doesn't need a join. */
+    strategyName: varchar('strategy_name', { length: 120 }),
+    /** Symbol the strategy targets — single-symbol runs only in v1. */
+    symbol: varchar('symbol', { length: 20 }),
+    startAt: timestamp('start_at').notNull().defaultNow(),
+    closedAt: timestamp('closed_at'),
+    /** Timestamp of the last successful mark-to-market sweep. */
+    lastMtmAt: timestamp('last_mtm_at'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    userIdx: index('idx_paper_runs_user').on(table.userId, table.startAt),
+    statusIdx: index('idx_paper_runs_status').on(table.status),
+    marketplaceIdx: index('idx_paper_runs_marketplace').on(table.marketplaceStrategyId),
+  }),
+);
+
+/**
+ * paper_positions — current holdings per (run, symbol). Updated by the
+ * mark-to-market sweep; truncated to 0 on full exit.
+ */
+export const paperPositions = pgTable(
+  'paper_positions',
+  {
+    runId: integer('run_id')
+      .notNull()
+      .references(() => paperRuns.id, { onDelete: 'cascade' }),
+    symbol: varchar('symbol', { length: 20 }).notNull(),
+    qty: integer('qty').notNull(),
+    /** Weighted average cost basis. */
+    avgCost: real('avg_cost').notNull(),
+    lastPrice: real('last_price'),
+    lastPriceAt: timestamp('last_price_at'),
+    /** Cached unrealized P&L for cheap reads — recomputed each MTM. */
+    unrealizedPnl: real('unrealized_pnl'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: uniqueIndex('uq_paper_positions_run_symbol').on(table.runId, table.symbol),
+  }),
+);
+
+/**
+ * paper_trades — append-only fill log. The historical record that the
+ * positions table is derived from.
+ */
+export const paperTrades = pgTable(
+  'paper_trades',
+  {
+    id: serial('id').primaryKey(),
+    runId: integer('run_id')
+      .notNull()
+      .references(() => paperRuns.id, { onDelete: 'cascade' }),
+    ts: timestamp('ts').notNull(),
+    symbol: varchar('symbol', { length: 20 }).notNull(),
+    /** buy / sell. */
+    side: varchar('side', { length: 4 }).notNull(),
+    qty: integer('qty').notNull(),
+    price: real('price').notNull(),
+    commission: real('commission').default(0),
+    /** Slippage applied in basis points (10 = 0.10%). */
+    slippageBps: real('slippage_bps').default(0),
+    reason: text('reason'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    runTsIdx: index('idx_paper_trades_run_ts').on(table.runId, table.ts),
+  }),
+);
+
+/**
+ * paper_equity_curve — one row per (run, trading day) holding the EOD
+ * portfolio equity + drawdown. Driven by the daily MTM cron, NOT by ticks
+ * — this keeps the table from exploding (1000 users × 5 years ≈ 1.8M rows
+ * which is fine; tick-grain would be 100 000× that).
+ */
+export const paperEquityCurve = pgTable(
+  'paper_equity_curve',
+  {
+    runId: integer('run_id')
+      .notNull()
+      .references(() => paperRuns.id, { onDelete: 'cascade' }),
+    /** YYYY-MM-DD. UTC date; UI presents in Asia/Shanghai. */
+    date: date('date').notNull(),
+    equity: real('equity').notNull(),
+    /** % drawdown from peak (negative number, -0.0532 = -5.32%). */
+    drawdown: real('drawdown'),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (table) => ({
+    pk: uniqueIndex('uq_paper_equity_run_date').on(table.runId, table.date),
+    runDateIdx: index('idx_paper_equity_run_date_desc').on(table.runId, table.date),
+  }),
+);
+
+// Paper trading types
+export type PaperRun = typeof paperRuns.$inferSelect;
+export type NewPaperRun = typeof paperRuns.$inferInsert;
+export type PaperPosition = typeof paperPositions.$inferSelect;
+export type NewPaperPosition = typeof paperPositions.$inferInsert;
+export type PaperTrade = typeof paperTrades.$inferSelect;
+export type NewPaperTrade = typeof paperTrades.$inferInsert;
+export type PaperEquityCurvePoint = typeof paperEquityCurve.$inferSelect;
+export type NewPaperEquityCurvePoint = typeof paperEquityCurve.$inferInsert;
+
 // User event types
 export type UserEvent = typeof userEvents.$inferSelect;
 export type NewUserEvent = typeof userEvents.$inferInsert;

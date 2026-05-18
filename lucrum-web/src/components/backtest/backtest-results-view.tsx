@@ -399,7 +399,83 @@ export function BacktestResultsView({
       {/* LIVE SIGNAL CARD + 合规风险提示                                    */}
       {/* "现在该持有什么"信号 + 教育用途声明,放在 K 线之前让用户一眼看到决策 */}
       {/* ================================================================= */}
-      <LiveSignalCard result={result} />
+      <LiveSignalCard
+        result={result}
+        symbol={targetSymbol}
+        onPaperRun={async () => {
+          // Sprint 1 wire-up: POST creates a paper_run skeleton. Real-time
+          // mark-to-market lands in Sprint 2 — for now, the user gets a
+          // confirmation toast + a run id they can follow later. We pass
+          // strategy_name + symbol so the API can persist a meaningful row
+          // even though the just-backtested strategy may not have a
+          // strategy_history_id yet.
+          try {
+            const lastTrade = result.trades?.[result.trades.length - 1];
+            const seedSymbol = targetSymbol;
+            // Carry over the open position from the backtest's final state
+            // when long, so paper trading picks up where the simulation left
+            // off rather than starting from cash.
+            let seedPosition: {
+              symbol: string;
+              qty: number;
+              avg_cost: number;
+            } | null = null;
+            if (lastTrade && lastTrade.type === 'buy' && seedSymbol) {
+              // Walk the trade log to compute net open qty.
+              let netQty = 0;
+              let cost = 0;
+              for (const t of result.trades ?? []) {
+                if (t.type === 'buy') {
+                  netQty += t.size;
+                  cost += t.price * t.size;
+                } else {
+                  netQty -= t.size;
+                  if (netQty <= 0) {
+                    netQty = 0;
+                    cost = 0;
+                  }
+                }
+              }
+              if (netQty > 0) {
+                seedPosition = {
+                  symbol: seedSymbol,
+                  qty: netQty,
+                  avg_cost: cost / netQty,
+                };
+              }
+            }
+            const response = await fetch('/api/paper/runs', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                strategy_name: strategyName ?? null,
+                symbol: targetSymbol,
+                initial_capital: 100_000,
+                seed_position: seedPosition,
+              }),
+            });
+            const payload = (await response.json().catch(() => null)) as
+              | { run?: { id: number }; error?: { description?: string } }
+              | null;
+            if (!response.ok) {
+              showToast.error(
+                payload?.error?.description ?? `纸上跑一遍失败: HTTP ${response.status}`,
+              );
+              return;
+            }
+            const runId = payload?.run?.id;
+            showToast.success(
+              runId
+                ? `纸上跑一遍已启动 · Run #${runId}(稍后可在「我的 Paper Runs」查看进度)`
+                : '纸上跑一遍已启动',
+            );
+          } catch (err) {
+            showToast.error(
+              `纸上跑一遍失败: ${err instanceof Error ? err.message : '网络错误'}`,
+            );
+          }
+        }}
+      />
 
       <div className="rounded-lg border border-yellow-500/20 bg-yellow-500/5 px-3 py-2 flex items-start gap-2 text-[11px] text-yellow-300/80 leading-relaxed">
         <svg
