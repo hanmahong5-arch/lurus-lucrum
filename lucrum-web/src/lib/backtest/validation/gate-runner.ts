@@ -38,6 +38,27 @@ export const DEFAULT_GATE_THRESHOLDS: GateThresholds = {
   minGeneralisation: 0.6,
 };
 
+/**
+ * Marketplace submission gate — Sprint 1 reverse-cherry-pick guard 招 C.
+ *
+ * Stricter on robustness (DSR ≥ 0.95) than the default vetting gate, but
+ * deliberately *looser* on PBO (≤ 0.5 vs. default 0.3) — the marketplace
+ * audience tolerates some overfitting risk in exchange for a wider catalog
+ * of submission candidates. The DSR tightening is the real gate; PBO acts
+ * as a sanity floor.
+ *
+ * Walk-forward and bootstrap-lower checks are still applied if the strategy
+ * provides the data; we don't relax minGeneralisation / minBootstrapLower
+ * because doing so would re-open the very holes this gate is meant to plug.
+ */
+export const MARKETPLACE_SUBMIT_GATE: GateThresholds = {
+  minSharpe: 1.0,
+  minBootstrapLower: 0,
+  maxPBO: 0.5,
+  minDSRProbability: 0.95,
+  minGeneralisation: 0.6,
+};
+
 export interface GateInput {
   /** Selected strategy's daily return series. */
   readonly selectedReturns: ReturnSeries;

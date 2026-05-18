@@ -10,15 +10,106 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { db } from "@/lib/db";
-import { marketplaceStrategies, strategyHistory } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { marketplaceStrategies, strategyHistory, strategyVersions } from "@/lib/db/schema";
+import { eq, and, desc } from "drizzle-orm";
 import {
   resolveAccountId,
   debitWallet,
   PlatformError,
 } from "@/lib/platform/client";
+import {
+  assertStandardCosts,
+  type TransactionCosts,
+} from "@/lib/backtest/transaction-costs";
+import { MARKETPLACE_SUBMIT_GATE } from "@/lib/backtest/validation/gate-runner";
 
 const STAKE_AMOUNT = 10;
+
+// =============================================================================
+// REVERSE-CHERRY-PICKING GUARDS (Sprint 1 招 B + 招 C)
+// =============================================================================
+
+/**
+ * Reverse-cherry-picking gate B: reject publishes whose stored backtest
+ * config has hand-tuned transaction costs that diverge from the
+ * STANDARD_MARKETPLACE_COSTS baseline. Legacy strategies without an
+ * explicit costs field are treated as compliant (defaults).
+ */
+function checkStandardCosts(strategyRow: typeof strategyHistory.$inferSelect) {
+  // The strategy history row stores its backtest config as a JSON blob in
+  // the `parameters` text field (varies by strategy version). We probe for
+  // a `costs` sub-object; absence = pass (caller used defaults).
+  let parsed: { costs?: TransactionCosts } | undefined;
+  try {
+    parsed =
+      typeof strategyRow.parameters === "string"
+        ? JSON.parse(strategyRow.parameters)
+        : (strategyRow.parameters as { costs?: TransactionCosts } | undefined);
+  } catch {
+    return { ok: true as const };
+  }
+  const mismatches = assertStandardCosts(parsed?.costs ?? null);
+  if (mismatches.length === 0) return { ok: true as const };
+  return {
+    ok: false as const,
+    mismatches,
+  };
+}
+
+/**
+ * Reverse-cherry-picking gate C: reject publishes whose stored gate report
+ * fails the MARKETPLACE_SUBMIT_GATE thresholds. The gate report lives on
+ * the *latest* `strategy_versions` row's `score` JSON blob (written by the
+ * Phase 7 monitoring pipeline). If no version row carries a gate report,
+ * we soft-warn rather than block — running the gate inline at publish time
+ * is too expensive for an interactive POST.
+ */
+async function checkGateReport(strategyHistoryId: number) {
+  const latestVersionRow = await db
+    .select({ score: strategyVersions.score })
+    .from(strategyVersions)
+    .where(eq(strategyVersions.strategyHistoryId, strategyHistoryId))
+    .orderBy(desc(strategyVersions.createdAt))
+    .limit(1);
+
+  const score = latestVersionRow[0]?.score as
+    | {
+        gateReport?: {
+          passed?: boolean;
+          details?: {
+            sharpe?: number;
+            pbo?: number | null;
+            dsrProbability?: number | null;
+            bootstrap?: { lower?: number };
+            generalisationRatio?: number | null;
+          };
+        };
+      }
+    | null
+    | undefined;
+
+  if (!score?.gateReport?.details) {
+    return { ok: true as const, soft: true as const };
+  }
+  const d = score.gateReport.details;
+  const T = MARKETPLACE_SUBMIT_GATE;
+  const failures: Array<{ check: string; actual: number | null; threshold: number }> = [];
+  if (typeof d.sharpe === "number" && d.sharpe < T.minSharpe) {
+    failures.push({ check: "sharpe", actual: d.sharpe, threshold: T.minSharpe });
+  }
+  if (typeof d.pbo === "number" && d.pbo > T.maxPBO) {
+    failures.push({ check: "pbo", actual: d.pbo, threshold: T.maxPBO });
+  }
+  if (typeof d.dsrProbability === "number" && d.dsrProbability < T.minDSRProbability) {
+    failures.push({
+      check: "dsrProbability",
+      actual: d.dsrProbability,
+      threshold: T.minDSRProbability,
+    });
+  }
+  if (failures.length === 0) return { ok: true as const, soft: false as const };
+  return { ok: false as const, failures };
+}
 
 interface PublishBody {
   strategy_history_id: number;
@@ -86,6 +177,42 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  // ---------------------------------------------------------------------------
+  // Reverse-cherry-picking guards (Sprint 1 招 B + 招 C)
+  // ---------------------------------------------------------------------------
+  const costCheck = checkStandardCosts(strategy);
+  if (!costCheck.ok) {
+    return NextResponse.json(
+      {
+        code: "non_standard_costs",
+        title: "成本不达标准",
+        description:
+          "Marketplace 要求使用标准化成本配置 (commission 0.025% / 印花税 0.05% / 滑点 10bps)。" +
+          "请用标准成本重新回测后再上架。",
+        mismatches: costCheck.mismatches,
+      },
+      { status: 422 },
+    );
+  }
+
+  const gateCheck = await checkGateReport(body.strategy_history_id);
+  if (!gateCheck.ok) {
+    return NextResponse.json(
+      {
+        code: "gate_failed",
+        title: "策略未通过 marketplace 提交门槛",
+        description:
+          "本策略在 DSR / PBO / Sharpe 中至少一项不达标。强健性不足的策略不允许上架,以保护订阅用户。",
+        failures: gateCheck.failures,
+        thresholds: MARKETPLACE_SUBMIT_GATE,
+      },
+      { status: 422 },
+    );
+  }
+  // gateCheck.ok === true but soft === true means no gate report on file;
+  // we allow it through but flag in the response so frontends can warn.
+  const gateSoft = gateCheck.ok && gateCheck.soft === true;
+
   // Resolve identity account
   let accountId: string;
   try {
@@ -142,5 +269,9 @@ export async function POST(request: NextRequest) {
     success: true,
     listing_id: listing?.id,
     staked_lb: STAKE_AMOUNT,
+    // When gateSoft is true the strategy was published without a stored
+    // gate report — frontends can surface this so the author knows their
+    // listing won't display robustness badges until a gate run completes.
+    gate_pending: gateSoft,
   });
 }

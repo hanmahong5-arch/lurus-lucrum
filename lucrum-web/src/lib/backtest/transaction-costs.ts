@@ -79,6 +79,79 @@ export const ZERO_COSTS: TransactionCosts = {
 };
 
 /**
+ * Standardized marketplace cost profile — REQUIRED when publishing.
+ *
+ * Sprint 1 reverse-cherry-pick guard 招 B: 90% of marketplace cheating
+ * comes from running backtests with unrealistic (or zero) costs to inflate
+ * Sharpe / return. By forcing every marketplace listing through a single
+ * audited cost profile, the user-supplied "我的策略年化 200%" becomes
+ * directly comparable to every other listing.
+ *
+ * Values (2026, mainland A-share retail):
+ *   - commission   : 0.025% (typical online broker, post-2024 floor)
+ *   - stampDuty    : 0.05%  (sell only, reduced 2023-08-28)
+ *   - transferFee  : 0.001% (Shanghai only since 2022-04, applied to both)
+ *   - slippage     : 0.10%  (10 bps, conservative retail mid-cap estimate)
+ *   - minCommission: 5 CNY  (industry-wide minimum)
+ *
+ * DO NOT mutate. Adjust the constants only via a versioned migration so
+ * historical listings stay reproducible.
+ */
+export const STANDARD_MARKETPLACE_COSTS: Readonly<TransactionCosts> = Object.freeze({
+  commission: 0.00025,
+  stampDuty: 0.0005,
+  transferFee: 0.00001,
+  slippage: 0.001,
+  minCommission: 5,
+});
+
+/**
+ * Validate that a supplied cost configuration matches the standardized
+ * marketplace profile exactly. Returns the list of mismatched fields, or
+ * an empty array on success. Throws nothing — call sites should branch on
+ * the array length and decide how strict to be.
+ *
+ * No costs supplied → caller used defaults; treated as compliant rather
+ * than forcing every legacy strategy to fail. Publishers who explicitly
+ * override costs are the ones we're guarding against.
+ */
+export function assertStandardCosts(
+  costs: TransactionCosts | undefined | null,
+): ReadonlyArray<{
+  field: keyof TransactionCosts;
+  expected: number;
+  actual: number;
+}> {
+  if (!costs) return [];
+  const baseline = STANDARD_MARKETPLACE_COSTS;
+  const EPS = 1e-9;
+  const fields: ReadonlyArray<keyof TransactionCosts> = [
+    "commission",
+    "stampDuty",
+    "transferFee",
+    "slippage",
+    "minCommission",
+  ];
+  const mismatches: Array<{
+    field: keyof TransactionCosts;
+    expected: number;
+    actual: number;
+  }> = [];
+  for (const field of fields) {
+    const actual = costs[field];
+    const expected = baseline[field];
+    if (typeof actual !== "number" || Math.abs(actual - expected) > EPS) {
+      mismatches.push({
+        field,
+        expected,
+        actual: typeof actual === "number" ? actual : NaN,
+      });
+    }
+  }
+  return mismatches;
+}
+
+/**
  * Conservative cost configuration (higher estimates)
  * 保守成本配置(较高估计)
  */

@@ -27,6 +27,11 @@ import { SmartTooltip } from "@/components/ui/smart-tooltip";
 import {
   MarketplaceDecisionBadges,
 } from "@/components/ui/decision-badge";
+import {
+  vettingStatus,
+  daysSinceAnchor,
+  MIN_OOS_DAYS_FOR_VETTED,
+} from "@/lib/backtest/validation/oos-anchor";
 
 // =============================================================================
 // TYPES
@@ -234,7 +239,7 @@ export function StrategyCard({
       </div>
 
       {/* Title (narrative) + 合规 hedging mini-badge */}
-      <div className="flex items-center justify-between gap-2 mb-3 pr-6">
+      <div className="flex items-center justify-between gap-2 mb-2 pr-6">
         <h3 className="text-sm font-semibold text-white group-hover:text-accent transition line-clamp-1">
           {strategy.title}
         </h3>
@@ -245,6 +250,36 @@ export function StrategyCard({
           教育用途
         </span>
       </div>
+
+      {/* OOS maturity badge (Sprint 1 reverse-cherry-pick 招 A) — calls out
+          strategies still inside their in-sample shadow so users don't trust
+          recent backtests as forward-looking truth. */}
+      {(() => {
+        const status = vettingStatus(strategy.publishedAt);
+        if (status === "vetted") return null;
+        const days = strategy.publishedAt ? daysSinceAnchor(strategy.publishedAt) : 0;
+        const remaining = Math.max(0, MIN_OOS_DAYS_FOR_VETTED - days);
+        return (
+          <div
+            className={cn(
+              "mb-3 -mt-1 px-2 py-1 rounded text-[10px] flex items-center gap-1.5",
+              "bg-yellow-500/10 border border-yellow-500/30 text-yellow-300/90",
+            )}
+            title={
+              status === "unknown"
+                ? "无上架时间记录,无法判定 OOS 成熟度"
+                : `上架 ${days} 天 · OOS 还需 ${remaining} 天才达成熟门槛(${MIN_OOS_DAYS_FOR_VETTED} 天)`
+            }
+          >
+            <span aria-hidden="true">⚠</span>
+            <span>
+              {status === "unknown"
+                ? "未上架记录"
+                : `未成熟 · OOS 还需 ${remaining} 天`}
+            </span>
+          </div>
+        );
+      })()}
 
       {/* Decision badges */}
       <MarketplaceDecisionBadges
