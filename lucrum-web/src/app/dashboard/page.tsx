@@ -32,7 +32,14 @@ import {
   selectGeneratedCode,
   selectIsGenerating,
   selectIsBacktesting,
+  selectStrategyName,
+  selectViewMode,
+  selectGenCacheInfo,
+  selectFocusedLine,
+  selectLastError,
+  selectLatestBacktestSummary,
 } from "@/lib/stores/strategy-workspace-store";
+import { generateStrategyName } from "@/lib/strategy/auto-name";
 import { useAchievementStore } from "@/lib/stores/achievement-store";
 import { useFeatureUsage } from "@/hooks/use-feature-usage";
 import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
@@ -62,9 +69,14 @@ const ParameterEditor = dynamic(
   { ssr: false, loading: () => <FormSkeleton /> },
 );
 
-const DraftHistoryPanel = dynamic(
-  () => import("@/components/strategy-editor/draft-history-panel").then((m) => ({ default: m.DraftHistoryPanel })),
+const EventTimelinePanel = dynamic(
+  () => import("@/components/history/event-timeline-panel").then((m) => ({ default: m.EventTimelinePanel })),
   { ssr: false, loading: () => <PanelSkeleton /> },
+);
+
+const ResumeTaskBanner = dynamic(
+  () => import("@/components/dashboard/resume-task-banner").then((m) => ({ default: m.ResumeTaskBanner })),
+  { ssr: false },
 );
 
 const StrategyGuideCard = dynamic(
@@ -152,6 +164,12 @@ export default function DashboardPage() {
   const generatedCode = useStrategyWorkspaceStore(selectGeneratedCode);
   const isGenerating = useStrategyWorkspaceStore(selectIsGenerating);
   const isBacktesting = useStrategyWorkspaceStore(selectIsBacktesting);
+  const strategyName = useStrategyWorkspaceStore(selectStrategyName);
+  const viewModeStore = useStrategyWorkspaceStore(selectViewMode);
+  const genCacheInfo = useStrategyWorkspaceStore(selectGenCacheInfo);
+  const focusedLine = useStrategyWorkspaceStore(selectFocusedLine);
+  const lastError = useStrategyWorkspaceStore(selectLastError);
+  const latestBacktestSummary = useStrategyWorkspaceStore(selectLatestBacktestSummary);
 
   const {
     updateStrategyInput,
@@ -161,6 +179,14 @@ export default function DashboardPage() {
     setBacktesting,
     saveDraft,
     markAsUnsaved,
+    setStrategyName,
+    setGenCacheInfo,
+    setFocusedLine,
+    setLastError,
+    setLatestBacktestSummary,
+    beginInflightTask,
+    clearInflightTask,
+    setViewMode: setViewModeStore,
   } = useStrategyWorkspaceStore();
 
   // User preferences
@@ -169,24 +195,20 @@ export default function DashboardPage() {
   const codePreviewCollapsed = useUserPreferencesStore(selectCodePreviewCollapsed);
   const setCodePreviewCollapsed = useUserPreferencesStore((s) => s.setCodePreviewCollapsed);
 
-  // Local state
-  const [error, setError] = useState<AppError | null>(null);
-  const [strategyName, setStrategyName] = useState("未命名策略");
+  // Local state (UI-only ephemeral; everything user-facing lives in the store)
   const [showHistory, setShowHistory] = useState(false);
-  const [focusedLine, setFocusedLine] = useState<number | null>(null);
-  // Cache-hit metadata from the streaming generate route. Reset on every new
-  // generation; the SSE meta frame populates it before the content arrives
-  // so the cache badge can flip immediately. `null` = no info / cache miss.
-  const [genCacheInfo, setGenCacheInfo] = useState<{ fromCache: boolean; savedTokens: number } | null>(null);
   const generateTask = useAsyncTask();
 
   // View mode: URL-synced for browser back/forward navigation
   // edit = /dashboard (clean URL), running = ?mode=running, results = ?mode=results
+  // URL is the source of truth on first render; subsequent updates flow URL → store.
   const searchParams = useSearchParams();
   const router = useRouter();
-  const viewMode = (searchParams.get('mode') as 'edit' | 'running' | 'results') || 'edit';
+  const urlMode = (searchParams.get('mode') as 'edit' | 'running' | 'results') || null;
+  const viewMode = urlMode ?? viewModeStore;
 
   const setViewMode = useCallback((mode: 'edit' | 'running' | 'results') => {
+    setViewModeStore(mode);
     const params = new URLSearchParams(searchParams.toString());
     if (mode === 'edit') {
       params.delete('mode');
@@ -195,9 +217,39 @@ export default function DashboardPage() {
     }
     const qs = params.toString();
     router.replace(`/dashboard${qs ? `?${qs}` : ''}`, { scroll: false });
-  }, [searchParams, router]);
-  // Latest backtest result for results view
+  }, [searchParams, router, setViewModeStore]);
+
+  // Keep store in sync when URL changes (e.g. browser back/forward).
+  useEffect(() => {
+    if (urlMode && urlMode !== viewModeStore) {
+      setViewModeStore(urlMode);
+    }
+  }, [urlMode, viewModeStore, setViewModeStore]);
+
+  // Latest full backtest result lives in memory only (too large to persist);
+  // a metric summary goes to the store so /history rehydration works.
   const [latestBacktestResult, setLatestBacktestResult] = useState<BacktestResult | null>(null);
+
+  // Adapter for code paths that still expect the old `setError` signature.
+  const error = lastError
+    ? ({
+        code: lastError.code,
+        title: lastError.title,
+        description: lastError.description,
+        severity: 'error' as AppError['severity'],
+        recoveryActions: [],
+      } satisfies AppError)
+    : null;
+  const setError = useCallback(
+    (err: AppError | null) => {
+      if (!err) {
+        setLastError(undefined);
+      } else {
+        setLastError({ code: err.code, title: err.title, description: err.description });
+      }
+    },
+    [setLastError],
+  );
 
   // Deep-link hydration from /dashboard/history. When the URL carries
   // ?historyId=<num> (or "B<num>" — the prefix /dashboard/history puts on
@@ -227,7 +279,7 @@ export default function DashboardPage() {
           | null;
         if (cfg?.strategyCode) updateGeneratedCode(cfg.strategyCode);
         if (cfg?.strategyPrompt) updateStrategyInput(cfg.strategyPrompt);
-        if (cfg?.strategyName) setStrategyName(cfg.strategyName);
+        if (cfg?.strategyName) setStrategyName(cfg.strategyName, 'user');
         if (data.result) {
           setLatestBacktestResult(data.result as BacktestResult);
           setViewMode('results');
@@ -371,12 +423,26 @@ export default function DashboardPage() {
 
       if (!response.ok) {
         console.warn('[Dashboard] Failed to save strategy to database:', response.status);
+        return;
+      }
+      // The server is authoritative on naming — accept any rename it performed
+      // (e.g. seq bump to avoid collision). Skip if the user has since edited
+      // the name locally (lock flag).
+      const json: unknown = await response.json().catch(() => null);
+      const returned = (json as { data?: { strategyName?: string } } | null)
+        ?.data?.strategyName;
+      if (
+        typeof returned === 'string'
+        && returned !== name
+        && !useStrategyWorkspaceStore.getState().current.nameLockedByUser
+      ) {
+        setStrategyName(returned, 'auto');
       }
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") return;
       console.warn('[Dashboard] Error saving strategy to database:', err);
     }
-  }, []);
+  }, [setStrategyName]);
 
   // Handle AI strategy generation via SSE.
   //
@@ -405,8 +471,8 @@ export default function DashboardPage() {
       generateTask.fail(appErr.description);
       const fallbackCode = generateFallbackCode(prompt);
       updateGeneratedCode(fallbackCode);
-      const fallbackName = extractStrategyName(prompt, fallbackCode);
-      setStrategyName(fallbackName);
+      const fallbackName = generateStrategyName({ prompt, code: fallbackCode });
+      setStrategyName(fallbackName, 'auto');
       saveStrategyToDatabase(fallbackName, fallbackCode, prompt, 'ai_generated');
     };
 
@@ -414,12 +480,11 @@ export default function DashboardPage() {
     updateGeneratedCode("");
     setError(null);
     setGenerationError(null);
-    setGenCacheInfo(null);
+    setGenCacheInfo(undefined);
     updateStrategyInput(prompt);
-    generateTask.registerTask({
-      type: 'generate',
-      title: `策略生成 — ${prompt.slice(0, 25)}${prompt.length > 25 ? '...' : ''}`,
-    });
+    const taskLabel = `策略生成 — ${prompt.slice(0, 25)}${prompt.length > 25 ? '...' : ''}`;
+    generateTask.registerTask({ type: 'generate', title: taskLabel });
+    beginInflightTask({ kind: 'generate', startedAt: new Date(), label: taskLabel });
 
     // Create abort signal — aborts previous generation if any
     const signal = createSignal();
@@ -479,10 +544,6 @@ export default function DashboardPage() {
           }
 
           if (parsed.meta) {
-            // Cache-hit meta arrives before any content frame. Captures
-            // `cached` + `savedTokens` so the badge flips up the moment
-            // the route confirms a hit, even though the content frame
-            // is in the same TCP write.
             const cached = parsed.meta.cached === true;
             const savedTokens = typeof parsed.meta.savedTokens === 'number' ? parsed.meta.savedTokens : 0;
             setGenCacheInfo({ fromCache: cached, savedTokens });
@@ -537,8 +598,8 @@ export default function DashboardPage() {
       recordAchievementStat('totalStrategies', 1);
       setTimeout(() => saveDraft(), 0);
 
-      const name = extractStrategyName(prompt, finalCode);
-      setStrategyName(name);
+      const name = generateStrategyName({ prompt, code: finalCode });
+      setStrategyName(name, 'auto');
       saveStrategyToDatabase(name, finalCode, prompt, 'ai_generated');
 
       if (!sawDone) {
@@ -563,8 +624,9 @@ export default function DashboardPage() {
       applyFallback(appErr);
     } finally {
       setGenerating(false);
+      clearInflightTask();
     }
-  }, [isGenerating, isFeatureBlocked, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction, refreshUsage, recordAchievementStat, setCodePreviewCollapsed]);
+  }, [isGenerating, isFeatureBlocked, createSignal, updateStrategyInput, updateGeneratedCode, setGenerating, setGenerationError, saveDraft, saveStrategyToDatabase, trackAction, refreshUsage, recordAchievementStat, setCodePreviewCollapsed, beginInflightTask, clearInflightTask, generateTask, setError, setGenCacheInfo, setStrategyName]);
 
   // Handle template selection — abort generation if in progress.
   //
@@ -590,8 +652,8 @@ export default function DashboardPage() {
       // Persist immediately as a builtin-template strategy so /dashboard/history
       // captures it. Strategy name is derived the same way AI-generated runs
       // do, keeping the timeline naming consistent.
-      const name = extractStrategyName(prompt, code);
-      setStrategyName(name);
+      const name = generateStrategyName({ prompt, code });
+      setStrategyName(name, 'auto');
       saveStrategyToDatabase(name, code, prompt, 'builtin_template');
       setTimeout(() => saveDraft(), 0);
     }
@@ -605,6 +667,7 @@ export default function DashboardPage() {
     setCodePreviewCollapsed,
     saveDraft,
     saveStrategyToDatabase,
+    setStrategyName,
   ]);
 
   // User-facing abort for an in-flight streaming generation. createSignal()
@@ -639,10 +702,16 @@ export default function DashboardPage() {
     setCodeChangedDuringBacktest(false);
     setCodePreviewCollapsed(true); // Auto-collapse code on backtest start
     setViewMode("running");
-  }, [setBacktesting, setCodePreviewCollapsed]);
+    beginInflightTask({
+      kind: 'backtest',
+      startedAt: new Date(),
+      label: `回测 — ${strategyName || '策略'}`,
+    });
+  }, [setBacktesting, setCodePreviewCollapsed, setViewMode, beginInflightTask, strategyName]);
 
   const handleBacktestEnd = useCallback(() => {
     setBacktesting(false);
+    clearInflightTask();
     // If we received a result via onBacktestResult, transition happens there.
     // If no result arrived (error case), fall back to edit view after brief delay.
     setTimeout(() => {
@@ -651,11 +720,22 @@ export default function DashboardPage() {
         setViewMode("edit");
       }
     }, 200);
-  }, [setBacktesting, setViewMode]);
+  }, [setBacktesting, setViewMode, clearInflightTask]);
 
   // Handle backtest result data — triggers transition to full results view
   const handleBacktestResult = useCallback((result: BacktestResult) => {
     setLatestBacktestResult(result);
+    // Persist a compact metric snapshot so navigation back to /dashboard
+    // restores the result chip even after the full BacktestResult is GC'd.
+    const summarySymbol = result.backtestMeta?.targetSymbol ?? result.config?.symbol;
+    setLatestBacktestSummary({
+      totalReturn: typeof result.totalReturn === 'number' ? result.totalReturn : undefined,
+      sharpeRatio: typeof result.sharpeRatio === 'number' ? result.sharpeRatio : undefined,
+      maxDrawdown: typeof result.maxDrawdown === 'number' ? result.maxDrawdown : undefined,
+      winRate: typeof result.winRate === 'number' ? result.winRate : undefined,
+      symbol: typeof summarySymbol === 'string' ? summarySymbol : undefined,
+      completedAt: new Date(),
+    });
     setViewMode("results");
     // Track for suggestion engine: positive return = good backtest
     const totalReturn = typeof result.totalReturn === 'number'
@@ -727,7 +807,17 @@ export default function DashboardPage() {
         console.warn('[Dashboard] Failed to persist backtest history:', err);
       });
     }
-  }, [trackAction, recordAchievementStat, recordAchievementStock, generatedCode, strategyInput, strategyName]);
+  }, [trackAction, recordAchievementStat, recordAchievementStock, generatedCode, strategyInput, strategyName, setViewMode, setLatestBacktestSummary]);
+
+  // Resume handler — wired to ResumeTaskBanner; re-fires the in-flight kind
+  // when the user opts in.
+  const handleResumeTask = useCallback((task: { kind: 'generate' | 'backtest' }) => {
+    if (task.kind === 'generate' && strategyInput) {
+      void handleGenerate(strategyInput);
+    } else if (task.kind === 'backtest') {
+      backtestPanelRef.current?.runBacktest();
+    }
+  }, [strategyInput, handleGenerate]);
 
   // Handle AI assistant parameter application — applies the param then auto
   // re-runs the backtest so the user sees the impact without a second click.
@@ -808,13 +898,16 @@ export default function DashboardPage() {
       {/* Workbench Toolbar */}
       <WorkbenchToolbar
         strategyName={strategyName}
-        onNameChange={setStrategyName}
+        onNameChange={(name) => setStrategyName(name, 'user')}
         onSave={saveDraft}
         onToggleHistory={() => setShowHistory((p) => !p)}
         historyVisible={showHistory}
         onExport={handleExport}
         hasCode={!!generatedCode}
       />
+
+      {/* Resume-task banner when an inflight task survived a navigation */}
+      <ResumeTaskBanner onResume={handleResumeTask} />
 
       {/* Error message */}
       {error && (
@@ -908,7 +1001,7 @@ export default function DashboardPage() {
                     onSelectTemplate={handleSelectTemplate}
                     onCodeUpdate={handleCodeUpdate}
                     onRerunBacktest={handleRerunBacktest}
-                    onParameterFocus={setFocusedLine}
+                    onParameterFocus={(l: number | null) => setFocusedLine(l ?? undefined)}
                     onBacktestStart={handleBacktestStart}
                     onBacktestEnd={handleBacktestEnd}
                     showHistory={showHistory}
@@ -920,7 +1013,7 @@ export default function DashboardPage() {
                     isGenerating={isGenerating}
                     isBacktesting={isBacktesting}
                     focusedLine={focusedLine}
-                    onHighlightClear={() => setFocusedLine(null)}
+                    onHighlightClear={() => setFocusedLine(undefined)}
                     logicSummary={logicSummary}
                     onBacktestStart={handleBacktestStart}
                     onBacktestEnd={handleBacktestEnd}
@@ -953,7 +1046,7 @@ export default function DashboardPage() {
                 onSelectTemplate={handleSelectTemplate}
                 onCodeUpdate={handleCodeUpdate}
                 onRerunBacktest={handleRerunBacktest}
-                onParameterFocus={setFocusedLine}
+                onParameterFocus={(l: number | null) => setFocusedLine(l ?? undefined)}
                 onBacktestStart={handleBacktestStart}
                 onBacktestEnd={handleBacktestEnd}
                 showHistory={showHistory}
@@ -963,7 +1056,7 @@ export default function DashboardPage() {
                 isGenerating={isGenerating}
                 isBacktesting={isBacktesting}
                 focusedLine={focusedLine}
-                onHighlightClear={() => setFocusedLine(null)}
+                onHighlightClear={() => setFocusedLine(undefined)}
                 logicSummary={logicSummary}
                 onBacktestStart={handleBacktestStart}
                 onBacktestEnd={handleBacktestEnd}
@@ -1021,7 +1114,7 @@ interface LeftPanelProps {
   isGenerating: boolean;
   isBacktesting: boolean;
   hasUnsavedChanges: boolean;
-  cacheInfo: { fromCache: boolean; savedTokens: number } | null;
+  cacheInfo: { fromCache: boolean; savedTokens: number } | undefined;
   onGenerate: (prompt: string) => Promise<void>;
   onStopGenerate: () => void;
   onUpdateInput: (input: string) => void;
@@ -1130,8 +1223,8 @@ function LeftPanel({
         </div>
       )}
 
-      {/* Draft History Panel (collapsible) */}
-      {showHistory && <DraftHistoryPanel />}
+      {/* Event Timeline Panel (collapsible) — replaces the old draft-only history */}
+      {showHistory && <EventTimelinePanel />}
     </div>
   );
 }
@@ -1144,7 +1237,7 @@ interface RightPanelProps {
   generatedCode: string;
   isGenerating: boolean;
   isBacktesting: boolean;
-  focusedLine: number | null;
+  focusedLine: number | undefined;
   onHighlightClear: () => void;
   logicSummary: ReturnType<typeof extractLogicSummary> | null;
   onBacktestStart: () => void;
@@ -1243,19 +1336,6 @@ function RightPanel({
 // =============================================================================
 // UTILITY FUNCTIONS
 // =============================================================================
-
-/**
- * Extract a readable strategy name from user prompt and generated code
- */
-function extractStrategyName(prompt: string, code: string): string {
-  const classMatch = code.match(/class\s+(\w+)\s*[\(:]/)
-  if (classMatch?.[1] && classMatch[1] !== 'AIStrategy') {
-    const name = classMatch[1].replace(/Strategy$/, '');
-    return name;
-  }
-  const trimmed = prompt.trim().substring(0, 30);
-  return trimmed || 'AI策略';
-}
 
 /**
  * Fallback code generator when API is unavailable

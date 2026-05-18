@@ -32,6 +32,21 @@ import {
   type FilterState,
 } from "@/components/marketplace/filter-toolbar";
 import { CardGridSkeleton, PanelSkeleton } from "@/components/ui/loading-skeleton";
+import { useRouter } from "next/navigation";
+
+// ---------------------------------------------------------------------------
+// School filter chips — values match seed `school` codes.
+// ---------------------------------------------------------------------------
+
+const SCHOOLS: ReadonlyArray<{ value: string; label: string }> = [
+  { value: "value", label: "价值" },
+  { value: "growth", label: "成长" },
+  { value: "trend", label: "趋势" },
+  { value: "momentum", label: "动量" },
+  { value: "reversion", label: "反转" },
+  { value: "quant", label: "量化" },
+  { value: "macro", label: "宏观" },
+];
 
 // ---------------------------------------------------------------------------
 // Dynamic imports — split heavy marketplace components into separate chunks
@@ -93,6 +108,8 @@ export default function MarketplacePage() {
   const [sort, setSort] = useState<SortOption>("recommended");
   const [searchQuery, setSearchQuery] = useState("");
   const [filter, setFilter] = useState<FilterState>(EMPTY_FILTER);
+  const [school, setSchool] = useState<string | null>(null);
+  const router = useRouter();
 
   // Comparison mode
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -153,6 +170,9 @@ export default function MarketplacePage() {
       if (sort === "free") {
         params.set("price_type", "free");
       }
+      if (school) {
+        params.set("school", school);
+      }
 
       const res = await fetch(`/api/lurus/marketplace/list?${params}`, { signal });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -178,7 +198,7 @@ export default function MarketplacePage() {
         setLoading(false);
       }
     }
-  }, [sort, createSignal, createVersion, isStale]);
+  }, [sort, school, createSignal, createVersion, isStale]);
 
   useEffect(() => {
     void fetchStrategies();
@@ -280,13 +300,49 @@ export default function MarketplacePage() {
   }, []);
 
   const handleTryStrategy = useCallback(
-    (strategy: MarketplaceStrategy) => {
-      if (!upgradeGate.gate("marketplace_subscribe")) return;
-      // Load strategy into workspace
-      alert(`正在加载 "${strategy.title}" 到工作区...`);
-      setDetailStrategy(null);
+    async (strategy: MarketplaceStrategy) => {
+      // Fork the strategy into the user's workspace and navigate there.
+      try {
+        const res = await fetch("/api/lurus/marketplace/fork", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ marketplaceId: strategy.id }),
+        });
+        if (!res.ok) {
+          if (res.status === 401) {
+            toast.error("请先登录");
+          } else {
+            toast.error("Fork 失败，请稍后重试");
+          }
+          return;
+        }
+        toast.success(`已 Fork「${strategy.title}」到工作台`);
+        setDetailStrategy(null);
+        router.push("/dashboard");
+      } catch {
+        toast.error("网络异常");
+      }
     },
-    [upgradeGate],
+    [router],
+  );
+
+  const handleRate = useCallback(
+    async (strategyId: number, stars: number, review?: string) => {
+      const res = await fetch("/api/lurus/marketplace/rate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketplaceId: strategyId, stars, review }),
+      });
+      if (res.ok) {
+        toast.success("评分已提交");
+        void fetchStrategies();
+      } else if (res.status === 401) {
+        toast.error("请先登录");
+      } else {
+        toast.error("评分失败");
+      }
+    },
+    [fetchStrategies],
   );
 
   const toggleSelect = useCallback((id: number) => {
@@ -333,6 +389,36 @@ export default function MarketplacePage() {
           >
             发布策略
           </Link>
+        </div>
+
+        {/* School chips — one row above the filter toolbar */}
+        <div className="flex items-center gap-2 mb-3 overflow-x-auto">
+          <span className="text-xs text-white/40 shrink-0">流派：</span>
+          <button
+            onClick={() => setSchool(null)}
+            className={
+              "px-3 py-1 text-xs rounded-full border transition-colors shrink-0 " +
+              (school === null
+                ? "bg-primary/20 text-primary border-primary/30"
+                : "bg-surface text-white/60 border-white/10 hover:text-white")
+            }
+          >
+            全部
+          </button>
+          {SCHOOLS.map((s) => (
+            <button
+              key={s.value}
+              onClick={() => setSchool((prev) => (prev === s.value ? null : s.value))}
+              className={
+                "px-3 py-1 text-xs rounded-full border transition-colors shrink-0 " +
+                (school === s.value
+                  ? "bg-primary/20 text-primary border-primary/30"
+                  : "bg-surface text-white/60 border-white/10 hover:text-white")
+              }
+            >
+              {s.label}
+            </button>
+          ))}
         </div>
 
         {/* Filter Toolbar */}

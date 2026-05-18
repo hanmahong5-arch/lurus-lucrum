@@ -50,7 +50,7 @@ ssh root@100.98.57.55 "kubectl -n lucrum rollout restart deployment/lucrum-web"
   - `POST /internal/v1/subscriptions/checkout` — wallet/Alipay/WeChat checkout
   - `GET /internal/v1/checkout/:order_no/status` — payment polling
   - Entitlement tier cached in Redis 60s; invalidate on subscription change
-- **LLM gateway**: `DEEPSEEK_API_BASE=https://api.lurus.cn/v1` (routes via 2b-svc-api Hub)
+- **LLM gateway**: `DEEPSEEK_API_BASE=https://newapi.lurus.cn/v1` (routes via 2b-svc-newapi; 2b-svc-api Hub removed 2026-04-23)
 - **Billing quota**: 3-layer (plan ceiling → Redis counter → wallet fallback)
 
 ## Gotchas

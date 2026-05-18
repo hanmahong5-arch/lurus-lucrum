@@ -29,6 +29,8 @@ import { ParameterInfoDialog } from "./parameter-info-dialog";
 import { hasEnhancedInfo, getEnhancedInfo } from "@/lib/strategy/enhanced-parameter-info";
 import { TwoLayerTooltip } from "@/components/ui/two-layer-tooltip";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { recordClientEvent } from "@/lib/services/client-event";
+import { USER_EVENT_TYPES } from "@/lib/services/user-event-types";
 
 // =============================================================================
 // COMPONENT PROPS / 组件属性
@@ -172,10 +174,27 @@ export function ParameterEditor({
     const newCode = updateStrategyCode(code, parameters);
     onCodeUpdate?.(newCode);
 
+    // Record one timeline event per intentional commit, summarising which
+    // parameters changed and their new values.
+    if (modifiedParams.size > 0) {
+      const changes: Record<string, unknown> = {};
+      for (const p of parameters) {
+        if (modifiedParams.has(p.name)) changes[p.name] = p.value;
+      }
+      recordClientEvent({
+        type: USER_EVENT_TYPES.strategyParamChanged,
+        entityType: 'strategy',
+        metadata: {
+          changedCount: modifiedParams.size,
+          changes,
+        },
+      });
+    }
+
     // Clear modification tracking
     setModifiedParams(new Set());
     return true;
-  }, [code, parameters, onCodeUpdate]);
+  }, [code, parameters, modifiedParams, onCodeUpdate]);
 
   // Apply changes and trigger backtest
   const handleApplyAndBacktest = useCallback(() => {

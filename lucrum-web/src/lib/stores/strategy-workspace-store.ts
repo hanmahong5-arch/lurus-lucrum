@@ -37,6 +37,30 @@ export interface StrategyParameter {
   step?: number;
 }
 
+/**
+ * Persistable backtest summary — keeps the workspace shape small. The full
+ * BacktestResult can be ~MBs once trades are inlined; we save only the metric
+ * snapshot + the history row id so the dashboard can rehydrate the full result
+ * from /api/history/backtests/[id] on demand.
+ */
+export interface BacktestSummary {
+  historyId?: number;
+  totalReturn?: number;
+  sharpeRatio?: number;
+  maxDrawdown?: number;
+  winRate?: number;
+  symbol?: string;
+  completedAt: Date;
+}
+
+export interface InflightTask {
+  kind: 'generate' | 'backtest';
+  startedAt: Date;
+  label: string;
+}
+
+export type WorkspaceViewMode = 'edit' | 'running' | 'results';
+
 export interface StrategyWorkspace {
   // Core editing state
   strategyInput: string;
@@ -49,13 +73,31 @@ export interface StrategyWorkspace {
   autoSaveStatus: AutoSaveStatus;
   lastSavedAt?: Date;
 
+  // Name (persisted; locked once the user edits manually)
+  strategyName: string;
+  nameLockedByUser: boolean;
+
   // Generation state
   isGenerating: boolean;
   generationError: string | null;
+  /** Cache hit metadata from the most recent generate call. */
+  genCacheInfo?: { fromCache: boolean; savedTokens: number };
 
   // Backtest state
   isBacktesting: boolean;
   lastBacktestResult?: unknown;
+  /** Compact serializable snapshot of the most recent backtest. */
+  latestBacktestSummary?: BacktestSummary;
+
+  // View state — surfaces persist across navigation
+  viewMode: WorkspaceViewMode;
+  focusedLine?: number;
+  lastError?: { code: string; title: string; description: string };
+
+  // Track in-flight work so we can show a resume banner after navigation.
+  // Only the metadata is persisted; the actual promise stays in memory and
+  // is cleared on unmount.
+  inflightTask?: InflightTask;
 }
 
 export interface Draft {
@@ -96,13 +138,32 @@ interface WorkspaceActions {
   updateParameters: (params: StrategyParameter[]) => void;
   updateModifiedParams: (params: Set<string>) => void;
 
+  // Strategy name management
+  /**
+   * Set the strategy name. `source: "auto"` only sets when the user hasn't
+   * manually edited; `source: "user"` always sets and locks future auto names.
+   */
+  setStrategyName: (name: string, source?: 'auto' | 'user') => void;
+  resetNameLock: () => void;
+
   // Generation state
   setGenerating: (isGenerating: boolean) => void;
   setGenerationError: (error: string | null) => void;
+  setGenCacheInfo: (info: { fromCache: boolean; savedTokens: number } | undefined) => void;
 
   // Backtest state
   setBacktesting: (isBacktesting: boolean) => void;
   setBacktestResult: (result: unknown) => void;
+  setLatestBacktestSummary: (summary: BacktestSummary | undefined) => void;
+
+  // View state
+  setViewMode: (mode: WorkspaceViewMode) => void;
+  setFocusedLine: (line: number | undefined) => void;
+  setLastError: (err: { code: string; title: string; description: string } | undefined) => void;
+
+  // Inflight task tracking
+  beginInflightTask: (task: InflightTask) => void;
+  clearInflightTask: () => void;
 
   // Auto-save
   saveDraft: () => void;
@@ -137,9 +198,12 @@ const INITIAL_WORKSPACE: StrategyWorkspace = {
   modifiedParams: new Set(),
   lastModified: new Date(),
   autoSaveStatus: 'saved',
+  strategyName: '',
+  nameLockedByUser: false,
   isGenerating: false,
   generationError: null,
   isBacktesting: false,
+  viewMode: 'edit',
 };
 
 const INITIAL_STATE: WorkspaceState = {
@@ -256,6 +320,8 @@ export const useStrategyWorkspaceStore = create<WorkspaceStore>()(
                     ? userData.current.modifiedParams as unknown as string[]
                     : []
                 ),
+                // Drop stale inflight task on user-space init (prior session).
+                inflightTask: undefined,
               };
             }
 
@@ -358,6 +424,73 @@ export const useStrategyWorkspaceStore = create<WorkspaceStore>()(
       setGenerationError: (error) => {
         set((state) => {
           state.current.generationError = error;
+        });
+      },
+
+      setGenCacheInfo: (info) => {
+        set((state) => {
+          state.current.genCacheInfo = info;
+        });
+      },
+
+      // ----------------------------------------------------------------------
+      // Strategy Name
+      // ----------------------------------------------------------------------
+
+      setStrategyName: (name, source = 'auto') => {
+        set((state) => {
+          if (source === 'user') {
+            state.current.strategyName = name;
+            state.current.nameLockedByUser = true;
+          } else if (!state.current.nameLockedByUser) {
+            state.current.strategyName = name;
+          }
+        });
+      },
+
+      resetNameLock: () => {
+        set((state) => {
+          state.current.nameLockedByUser = false;
+        });
+      },
+
+      // ----------------------------------------------------------------------
+      // View / Misc
+      // ----------------------------------------------------------------------
+
+      setLatestBacktestSummary: (summary) => {
+        set((state) => {
+          state.current.latestBacktestSummary = summary;
+        });
+      },
+
+      setViewMode: (mode) => {
+        set((state) => {
+          state.current.viewMode = mode;
+        });
+      },
+
+      setFocusedLine: (line) => {
+        set((state) => {
+          state.current.focusedLine = line;
+        });
+      },
+
+      setLastError: (err) => {
+        set((state) => {
+          state.current.lastError = err;
+        });
+      },
+
+      beginInflightTask: (task) => {
+        set((state) => {
+          state.current.inflightTask = task;
+        });
+      },
+
+      clearInflightTask: () => {
+        set((state) => {
+          state.current.inflightTask = undefined;
         });
       },
 
@@ -533,6 +666,12 @@ export const useStrategyWorkspaceStore = create<WorkspaceStore>()(
       }),
       onRehydrateStorage: () => (state) => {
         if (state) {
+          // Backwards-compatible defaults for fields added after the initial
+          // schema — older localStorage payloads won't have them.
+          state.current.strategyName = state.current.strategyName ?? '';
+          state.current.nameLockedByUser = state.current.nameLockedByUser ?? false;
+          state.current.viewMode = state.current.viewMode ?? 'edit';
+
           // Restore Set from Array
           if (Array.isArray(state.current.modifiedParams)) {
             state.current.modifiedParams = new Set(
@@ -544,6 +683,22 @@ export const useStrategyWorkspaceStore = create<WorkspaceStore>()(
           state.current.lastModified = new Date(state.current.lastModified);
           if (state.current.lastSavedAt) {
             state.current.lastSavedAt = new Date(state.current.lastSavedAt);
+          }
+          if (state.current.latestBacktestSummary?.completedAt) {
+            state.current.latestBacktestSummary.completedAt = new Date(
+              state.current.latestBacktestSummary.completedAt
+            );
+          }
+
+          // Inflight task expiry: anything older than 10 minutes is stale —
+          // the originating fetch promise died with the previous mount.
+          if (state.current.inflightTask) {
+            const started = new Date(state.current.inflightTask.startedAt);
+            state.current.inflightTask.startedAt = started;
+            const ageMs = Date.now() - started.getTime();
+            if (ageMs > 10 * 60 * 1000) {
+              state.current.inflightTask = undefined;
+            }
           }
 
           // Restore drafts Date objects and Sets
@@ -584,6 +739,15 @@ export const selectIsBacktesting = (state: WorkspaceStore) =>
   state.current.isBacktesting;
 export const selectUserId = (state: WorkspaceStore) => state.userId;
 export const selectIsInitialized = (state: WorkspaceStore) => state.isInitialized;
+export const selectStrategyName = (state: WorkspaceStore) => state.current.strategyName;
+export const selectNameLockedByUser = (state: WorkspaceStore) => state.current.nameLockedByUser;
+export const selectViewMode = (state: WorkspaceStore) => state.current.viewMode;
+export const selectFocusedLine = (state: WorkspaceStore) => state.current.focusedLine;
+export const selectGenCacheInfo = (state: WorkspaceStore) => state.current.genCacheInfo;
+export const selectLastError = (state: WorkspaceStore) => state.current.lastError;
+export const selectInflightTask = (state: WorkspaceStore) => state.current.inflightTask;
+export const selectLatestBacktestSummary = (state: WorkspaceStore) =>
+  state.current.latestBacktestSummary;
 
 // ============================================================================
 // Multi-tab Synchronization

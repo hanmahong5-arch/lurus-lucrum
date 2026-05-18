@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const sort = searchParams.get("sort") ?? "popular";
     const priceType = searchParams.get("price_type");
+    const school = searchParams.get("school");
     const limit = Math.min(
       parseInt(searchParams.get("limit") ?? String(DEFAULT_LIMIT), 10) || DEFAULT_LIMIT,
       MAX_LIMIT,
@@ -34,6 +35,9 @@ export async function GET(request: NextRequest) {
     const conditions = [eq(marketplaceStrategies.status, "active")];
     if (priceType && ["free", "subscription", "per_run"].includes(priceType)) {
       conditions.push(eq(marketplaceStrategies.priceType, priceType));
+    }
+    if (school) {
+      conditions.push(eq(marketplaceStrategies.school, school));
     }
 
     // Build sort
@@ -57,6 +61,10 @@ export async function GET(request: NextRequest) {
         totalSubscribers: marketplaceStrategies.totalSubscribers,
         publishedAt: marketplaceStrategies.publishedAt,
         authorUserId: marketplaceStrategies.authorUserId,
+        school: marketplaceStrategies.school,
+        ratingAvg: marketplaceStrategies.ratingAvg,
+        ratingCount: marketplaceStrategies.ratingCount,
+        forkCount: marketplaceStrategies.forkCount,
       })
       .from(marketplaceStrategies)
       .where(and(...conditions))

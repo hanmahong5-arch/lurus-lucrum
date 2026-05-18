@@ -127,7 +127,7 @@ function TierCard({
         "relative flex flex-col gap-3 p-5 rounded-xl border transition-all duration-200",
         "bg-surface hover:bg-surface-hover",
         isSimple
-          ? "border-primary/30 shadow-[0_0_12px_rgba(var(--color-primary-rgb),0.1)]"
+          ? "border-primary/30 shadow-[0_0_12px_rgb(var(--lucrum-color-primary)/0.1)]"
           : "border-neutral-800 hover:border-neutral-700",
       )}
       data-testid={`tier-card-${option.id}`}

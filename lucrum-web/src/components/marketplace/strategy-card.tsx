@@ -51,6 +51,11 @@ export interface MarketplaceStrategy {
   sharpeRatio?: number | null;
   rating?: number | null;
   ratingCount?: number | null;
+  /** Aggregated rating from strategy_ratings (string-encoded numeric from PG). */
+  ratingAvg?: string | number | null;
+  forkCount?: number | null;
+  school?: string | null;
+  authorUserId?: string | null;
   /** Net asset value history for sparkline (last ~60 points) */
   navHistory?: number[];
 }

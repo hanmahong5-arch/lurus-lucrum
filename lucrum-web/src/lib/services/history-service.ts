@@ -238,6 +238,30 @@ export async function saveStrategyHistory(
 }
 
 /**
+ * List the user's strategy names created today (used by auto-name to compute
+ * the next #N sequence). Returns lowercased trim'd names so the regex
+ * matcher in `auto-name.nextSequence` works deterministically.
+ */
+export async function listSameDayStrategyNames(userId: string): Promise<string[]> {
+  try {
+    const rows = await db
+      .select({ name: strategyHistory.strategyName })
+      .from(strategyHistory)
+      .where(
+        and(
+          eq(strategyHistory.userId, userId),
+          sql`${strategyHistory.createdAt} >= CURRENT_DATE`,
+          sql`${strategyHistory.createdAt} < CURRENT_DATE + INTERVAL '1 day'`,
+        ),
+      );
+    return rows.map((r) => r.name).filter((n): n is string => !!n);
+  } catch (error) {
+    console.error('[HistoryService] listSameDayStrategyNames error:', error);
+    return [];
+  }
+}
+
+/**
  * Get strategy history with pagination
  * 获取策略历史（分页）
  */

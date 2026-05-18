@@ -33,9 +33,15 @@ import {
   saveTradingHistory,
   deleteTrade,
   checkTenantAccess,
+  listSameDayStrategyNames,
   type HistoryFilter,
   type PaginationParams,
 } from '@/lib/services/history-service';
+import { generateStrategyName } from '@/lib/strategy/auto-name';
+import {
+  recordEvent,
+  USER_EVENT_TYPES,
+} from '@/lib/services/user-event-service';
 
 // =============================================================================
 // Types
@@ -194,20 +200,54 @@ export async function POST(request: NextRequest) {
             { status: 400 }
           );
         }
+        // Resolve the name server-side as the authoritative source of truth.
+        // The client computes an optimistic name from local state, but the DB
+        // has the only consistent view of "what names this user used today" —
+        // so any auto-pattern (`…·MMDD·#N`) or empty placeholder is recomputed
+        // here to prevent #N collisions across rapid successive saves.
+        let resolvedName = (data.strategyName as string) ?? '';
+        const trimmed = resolvedName.trim();
+        const AUTO_NAME_PATTERN = /·\d{4}·#\d+$/;
+        if (
+          trimmed === ''
+          || trimmed === '未命名策略'
+          || AUTO_NAME_PATTERN.test(trimmed)
+        ) {
+          const existing = await listSameDayStrategyNames(userId);
+          resolvedName = generateStrategyName({
+            prompt: (data.description as string) ?? '',
+            code: data.strategyCode as string,
+            existingNames: existing,
+          });
+        }
+        const strategyTypeRaw = (data.strategyType as string) || 'ai_generated';
         result = await saveStrategyHistory({
           userId,
           tenantId: tenantId || null,
-          strategyName: data.strategyName as string,
+          strategyName: resolvedName,
           description: (data.description as string) || null,
           strategyCode: data.strategyCode as string,
           parameters: typeof data.parameters === 'string' ? data.parameters : JSON.stringify(data.parameters),
-          strategyType: (data.strategyType as string) || 'ai_generated',
+          strategyType: strategyTypeRaw,
           version: (data.version as number) || 1,
           parentVersionId: (data.parentVersionId as number) || null,
           tags: data.tags ? (typeof data.tags === 'string' ? data.tags : JSON.stringify(data.tags)) : null,
           isActive: (data.isActive as boolean) ?? true,
           isStarred: (data.isStarred as boolean) ?? false,
         });
+        if (result) {
+          const eventType =
+            strategyTypeRaw === 'builtin_template'
+              ? USER_EVENT_TYPES.templateLoaded
+              : USER_EVENT_TYPES.strategyCreated;
+          recordEvent({
+            userId,
+            type: eventType,
+            entityType: 'strategy',
+            entityId: result.id,
+            metadata: { name: resolvedName, strategyType: strategyTypeRaw },
+          });
+        }
         break;
 
       case 'backtest':
@@ -241,6 +281,19 @@ export async function POST(request: NextRequest) {
           executionTime: (data.executionTime as number) || null,
           notes: (data.notes as string) || null,
         });
+        if (result) {
+          recordEvent({
+            userId,
+            type: USER_EVENT_TYPES.backtestCompleted,
+            entityType: 'backtest',
+            entityId: result.id,
+            metadata: {
+              symbol: data.symbol,
+              totalReturn: data.totalReturn,
+              sharpeRatio: data.sharpeRatio,
+            },
+          });
+        }
         break;
 
       case 'trading':

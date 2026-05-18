@@ -486,6 +486,8 @@ export const strategyHistory = pgTable(
     isActive: boolean('is_active').default(true).notNull(),
     /** Is starred/favorited / 是否收藏 */
     isStarred: boolean('is_starred').default(false).notNull(),
+    /** Marketplace strategy id this row was forked from (NULL = original). */
+    parentMarketplaceId: integer('parent_marketplace_id'),
     createdAt: timestamp('created_at').defaultNow().notNull(),
   },
   (table) => ({
@@ -493,6 +495,9 @@ export const strategyHistory = pgTable(
     tenantIdx: index('idx_strategy_history_tenant').on(table.tenantId),
     nameIdx: index('idx_strategy_history_name').on(table.strategyName),
     activeIdx: index('idx_strategy_history_active').on(table.isActive),
+    parentMarketplaceIdx: index('idx_strategy_history_parent_marketplace').on(
+      table.parentMarketplaceId,
+    ),
   })
 );
 
@@ -882,6 +887,11 @@ export const userEvents = pgTable(
     sessionId: text('session_id'),
     /** Event type / 事件类型 */
     eventType: varchar('event_type', { length: 50 }).notNull(),
+    /** Entity type (strategy, backtest, marketplace, template, ...) — used by
+     *  the timeline UI to filter and group events by subject. */
+    entityType: varchar('entity_type', { length: 40 }),
+    /** Entity primary identifier (strategy_history.id, marketplace_strategies.id, ...). */
+    entityId: varchar('entity_id', { length: 100 }),
     /** Flexible metadata JSON / 灵活的元数据JSON */
     metadata: jsonb('metadata'),
     /** Token cost for AI operations / AI操作消耗的Token数 */
@@ -892,6 +902,12 @@ export const userEvents = pgTable(
     userIdx: index('idx_user_events_user').on(table.userId),
     typeIdx: index('idx_user_events_type').on(table.eventType),
     createdIdx: index('idx_user_events_created').on(table.createdAt),
+    /** Timeline-friendly composite: user's events newest-first. */
+    userTimelineIdx: index('idx_user_events_user_created').on(
+      table.userId,
+      table.createdAt,
+    ),
+    entityIdx: index('idx_user_events_entity').on(table.entityType, table.entityId),
   })
 );
 
@@ -1218,6 +1234,14 @@ export const marketplaceStrategies = pgTable(
     stakedLb: real('staked_lb').default(10),
     /** Listing status: active / suspended / pending */
     status: varchar('status', { length: 20 }).default('active'),
+    /** Investment school the strategy belongs to (filter chip) */
+    school: varchar('school', { length: 40 }),
+    /** Rolling average rating, 0–5 */
+    ratingAvg: decimal('rating_avg', { precision: 3, scale: 2 }).default('0'),
+    /** Number of ratings contributing to ratingAvg */
+    ratingCount: integer('rating_count').default(0),
+    /** Number of times the strategy has been forked */
+    forkCount: integer('fork_count').default(0),
     publishedAt: timestamp('published_at').defaultNow(),
   },
   (table) => ({
@@ -1299,6 +1323,33 @@ export const strategyComments = pgTable(
     userIdx: index('idx_strategy_comments_user').on(table.userId),
     parentIdx: index('idx_strategy_comments_parent').on(table.parentId),
   })
+);
+
+/**
+ * Strategy ratings table — 1–5 star ratings + optional review text.
+ * One rating per (strategy, user); upserts replace previous votes.
+ */
+export const strategyRatings = pgTable(
+  'strategy_ratings',
+  {
+    id: serial('id').primaryKey(),
+    marketplaceStrategyId: integer('marketplace_strategy_id')
+      .notNull()
+      .references(() => marketplaceStrategies.id, { onDelete: 'cascade' }),
+    userId: text('user_id').notNull(),
+    /** 1 to 5 stars */
+    stars: integer('stars').notNull(),
+    review: text('review'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+    updatedAt: timestamp('updated_at').defaultNow().notNull(),
+  },
+  (table) => ({
+    uniqueRating: uniqueIndex('idx_strategy_ratings_unique').on(
+      table.marketplaceStrategyId,
+      table.userId,
+    ),
+    strategyIdx: index('idx_strategy_ratings_strategy').on(table.marketplaceStrategyId),
+  }),
 );
 
 /**
@@ -1695,6 +1746,9 @@ export type NewStrategyComment = typeof strategyComments.$inferInsert;
 
 export type StrategyLike = typeof strategyLikes.$inferSelect;
 export type NewStrategyLike = typeof strategyLikes.$inferInsert;
+
+export type StrategyRating = typeof strategyRatings.$inferSelect;
+export type NewStrategyRating = typeof strategyRatings.$inferInsert;
 
 // Collaboration types
 export type TenantInvitation = typeof tenantInvitations.$inferSelect;

@@ -38,6 +38,8 @@ import { DisabledWithReason } from "@/components/ui/disabled-with-reason";
 import { SmartTooltip } from "@/components/ui/smart-tooltip";
 import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/contextual-help";
 import { BacktestDecisionBadges } from "@/components/ui/decision-badge";
+import { recordClientEvent } from "@/lib/services/client-event";
+import { USER_EVENT_TYPES } from "@/lib/services/user-event-types";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -432,6 +434,16 @@ export function BacktestPanel({
     backtestTask.registerTask({
       type: 'backtest',
       title: `回测 — ${effectiveSymbol || '未知标的'}`,
+    });
+    recordClientEvent({
+      type: USER_EVENT_TYPES.backtestStarted,
+      entityType: 'backtest',
+      metadata: {
+        symbol: effectiveSymbol,
+        timeframe: config.timeframe,
+        startDate: config.startDate,
+        endDate: config.endDate,
+      },
     });
 
     try {

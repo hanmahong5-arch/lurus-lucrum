@@ -24,20 +24,22 @@ const config: Config = {
       // ============================================
       colors: {
         // Backgrounds - Deep, rich voids (not pure black)
+        // DEFAULT routes through CSS var for runtime theme switching; numbered scale stays fixed.
         void: {
-          DEFAULT: "#09090b",
+          DEFAULT: "rgb(var(--lucrum-bg-void) / <alpha-value>)",
           50: "#18181b",
           100: "#0f0f12",
         },
         surface: {
-          DEFAULT: "#18181b",
-          hover: "#27272a",
-          active: "#3f3f46",
-          border: "#27272a",
+          DEFAULT: "rgb(var(--lucrum-bg-surface) / <alpha-value>)",
+          hover: "rgb(var(--lucrum-bg-surface-hover) / <alpha-value>)",
+          active: "rgb(var(--lucrum-bg-surface-active) / <alpha-value>)",
+          border: "rgb(var(--lucrum-bg-surface-border) / <alpha-value>)",
         },
         // Primary - Electric Trust Blue
+        // DEFAULT routes through CSS var for runtime theme switching; numbered scale stays fixed palette.
         primary: {
-          DEFAULT: "#3b82f6",
+          DEFAULT: "rgb(var(--lucrum-color-primary) / <alpha-value>)",
           50: "#eff6ff",
           100: "#dbeafe",
           200: "#bfdbfe",
@@ -51,8 +53,9 @@ const config: Config = {
           950: "#172554",
         },
         // Accent - Gold/Warning for VIP/High Priority
+        // DEFAULT routes through CSS var for runtime theme switching; numbered scale stays fixed palette.
         accent: {
-          DEFAULT: "#f59e0b",
+          DEFAULT: "rgb(var(--lucrum-color-accent) / <alpha-value>)",
           50: "#fffbeb",
           100: "#fef3c7",
           200: "#fde68a",
@@ -98,9 +101,9 @@ const config: Config = {
           orange: "#f97316",
           yellow: "#eab308",
         },
-        // Legacy compatibility
-        background: "#09090b",
-        border: "#27272a",
+        // Legacy compatibility - route through CSS vars for theme switching
+        background: "rgb(var(--lucrum-bg-void) / <alpha-value>)",
+        border: "rgb(var(--lucrum-bg-surface-border) / <alpha-value>)",
 
         // ============================================
         // LUCRUM EXTENDED DESIGN TOKENS
@@ -205,8 +208,8 @@ const config: Config = {
         glass: "0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.05)",
         "glass-sm": "0 4px 16px rgba(0, 0, 0, 0.3), inset 0 1px 0 rgba(255, 255, 255, 0.03)",
         // Glow effects for active elements
-        "glow-primary": "0 0 10px rgba(59, 130, 246, 0.5), 0 0 20px rgba(59, 130, 246, 0.3)",
-        "glow-accent": "0 0 10px rgba(245, 158, 11, 0.5), 0 0 20px rgba(245, 158, 11, 0.3)",
+        "glow-primary": "0 0 10px rgb(var(--lucrum-color-primary) / 0.5), 0 0 20px rgb(var(--lucrum-color-primary) / 0.3)",
+        "glow-accent": "0 0 10px rgb(var(--lucrum-color-accent) / 0.5), 0 0 20px rgb(var(--lucrum-color-accent) / 0.3)",
         "glow-profit": "0 0 10px rgb(var(--color-profit-neon) / 0.5), 0 0 20px rgb(var(--color-profit-neon) / 0.3)",
         "glow-loss": "0 0 10px rgb(var(--color-loss-neon) / 0.5), 0 0 20px rgb(var(--color-loss-neon) / 0.3)",
         // Inset for pressed buttons
@@ -255,7 +258,7 @@ const config: Config = {
       keyframes: {
         // Data update pulse
         "pulse-data": {
-          "0%": { backgroundColor: "rgba(59, 130, 246, 0.2)" },
+          "0%": { backgroundColor: "rgb(var(--lucrum-color-primary) / 0.2)" },
           "100%": { backgroundColor: "transparent" },
         },
         "pulse-profit": {
@@ -268,8 +271,8 @@ const config: Config = {
         },
         // Glow effects
         glow: {
-          "0%": { boxShadow: "0 0 5px rgba(59, 130, 246, 0.3), 0 0 10px rgba(59, 130, 246, 0.2)" },
-          "100%": { boxShadow: "0 0 15px rgba(59, 130, 246, 0.5), 0 0 25px rgba(59, 130, 246, 0.3)" },
+          "0%": { boxShadow: "0 0 5px rgb(var(--lucrum-color-primary) / 0.3), 0 0 10px rgb(var(--lucrum-color-primary) / 0.2)" },
+          "100%": { boxShadow: "0 0 15px rgb(var(--lucrum-color-primary) / 0.5), 0 0 25px rgb(var(--lucrum-color-primary) / 0.3)" },
         },
         "glow-pulse": {
           "0%, 100%": { opacity: "0.6" },
@@ -363,12 +366,12 @@ const config: Config = {
         "grid-large": `linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
                        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)`,
         // Data stream gradient
-        "data-stream": "linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.3), transparent)",
+        "data-stream": "linear-gradient(90deg, transparent, rgb(var(--lucrum-color-primary) / 0.3), transparent)",
         // Equity curve gradient
         "equity-profit": "linear-gradient(180deg, rgb(var(--color-profit) / 0.3), transparent)",
         "equity-loss": "linear-gradient(180deg, rgb(var(--color-loss) / 0.3), transparent)",
         // Scan effect
-        "scan-gradient": "linear-gradient(180deg, transparent, rgba(59, 130, 246, 0.1), transparent)",
+        "scan-gradient": "linear-gradient(180deg, transparent, rgb(var(--lucrum-color-primary) / 0.1), transparent)",
       },
       backgroundSize: {
         "grid-small": "20px 20px",
@@ -435,16 +438,16 @@ const config: Config = {
             left: "0",
             right: "0",
             height: "2px",
-            background: "linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.5), transparent)",
+            background: "linear-gradient(90deg, transparent, rgb(var(--lucrum-color-primary) / 0.5), transparent)",
             animation: "scan-line 2s linear infinite",
           },
         },
         // Text glow
         ".text-glow-primary": {
-          textShadow: "0 0 10px rgba(59, 130, 246, 0.5)",
+          textShadow: "0 0 10px rgb(var(--lucrum-color-primary) / 0.5)",
         },
         ".text-glow-accent": {
-          textShadow: "0 0 10px rgba(245, 158, 11, 0.5)",
+          textShadow: "0 0 10px rgb(var(--lucrum-color-accent) / 0.5)",
         },
         ".text-glow-profit": {
           textShadow: "0 0 10px rgb(var(--color-profit-neon) / 0.5)",

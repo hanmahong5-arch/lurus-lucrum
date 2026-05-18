@@ -20,6 +20,7 @@ import {
   useStrategyWorkspaceStore,
   selectAutoSaveStatus,
 } from "@/lib/stores/strategy-workspace-store";
+import { ThemeSwitcher } from "@/components/theme/theme-switcher";
 
 // =============================================================================
 // TYPES
@@ -215,6 +216,9 @@ export function WorkbenchToolbar({
           </svg>
           历史
         </button>
+
+        {/* Theme switcher - sits alongside other right-cluster toolbar buttons */}
+        <ThemeSwitcher />
 
         {/* Export button */}
         <button
