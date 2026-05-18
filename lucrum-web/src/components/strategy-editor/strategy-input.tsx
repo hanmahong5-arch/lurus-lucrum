@@ -67,6 +67,46 @@ const inputHints = [
   "时间周期：日线、周线、小时线等",
 ];
 
+/**
+ * Quick-start chips — A 股场景化叙事入口。点击 append 到 textarea(不替换),
+ * 多个 chip 可叠加为复合 prompt。
+ *
+ * 命名按"用户场景"而非技术指标:用户能马上脑补"我想做这个"。
+ */
+interface ChipSpec {
+  readonly icon: string;
+  readonly label: string;
+  readonly prompt: string;
+}
+
+const QUICK_CHIPS: readonly ChipSpec[] = [
+  {
+    icon: "📈",
+    label: "抓涨停",
+    prompt: "买入连续 3 日成交量放大且价格突破 20 日新高的标的,跌破 10 日均线止损",
+  },
+  {
+    icon: "🏛️",
+    label: "跟北向",
+    prompt: "买入北向资金近 5 日累计净买入额前 10 的标的,持有 5-10 个交易日",
+  },
+  {
+    icon: "🔄",
+    label: "周期轮动",
+    prompt: "根据 PPI/PMI 拐点轮动有色 / 煤炭 / 化工 / 钢铁板块,每月调仓",
+  },
+  {
+    icon: "💎",
+    label: "高股息",
+    prompt: "买入连续 3 年股息率 > 5% 且 ROE > 10% 的低估值蓝筹股",
+  },
+  {
+    icon: "🚀",
+    label: "业绩超预期",
+    prompt: "买入季报业绩预增 > 50% 的标的,次日开盘介入,3 个交易日内不破前低则持有",
+  },
+] as const;
+
 export function StrategyInput({
   onGenerate,
   isLoading = false,
@@ -82,6 +122,8 @@ export function StrategyInput({
 
   const [showExamples, setShowExamples] = useState(false);
   const [showHints, setShowHints] = useState(true);
+  const [isEnhancing, setIsEnhancing] = useState(false);
+  const [enhanceError, setEnhanceError] = useState<string | null>(null);
   // Sync internal state when controlled value changes
   // 当受控值变化时同步内部状态
   useEffect(() => {
@@ -119,7 +161,59 @@ export function StrategyInput({
 
   const handleClear = useCallback(() => {
     handleValueChange("");
+    setEnhanceError(null);
   }, [handleValueChange]);
+
+  /**
+   * Chip click — append the canned narrative to the textarea so chips compose
+   * instead of replacing. Adds a Chinese comma when the textarea already has
+   * content so the LLM reads the two clauses as a single coherent prompt.
+   */
+  const handleChipClick = useCallback(
+    (chip: ChipSpec) => {
+      const current = prompt.trim();
+      const next = current ? `${current}，${chip.prompt}` : chip.prompt;
+      handleValueChange(next);
+      setEnhanceError(null);
+    },
+    [prompt, handleValueChange],
+  );
+
+  /**
+   * Enhance — POST current prompt to /api/strategy/enhance and replace textarea
+   * with the AI rewrite. Unlike the previous local stub, this calls the LLM
+   * router (routine tier, maxTokens=400) and produces a 4-element-complete
+   * (universe + period + signal + risk) prompt the generator can use directly.
+   */
+  const handleEnhance = useCallback(async () => {
+    if (!prompt.trim() || isEnhancing || isLoading) return;
+    setIsEnhancing(true);
+    setEnhanceError(null);
+    try {
+      const response = await fetch("/api/strategy/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompt.trim() }),
+      });
+      const payload = (await response.json().catch(() => null)) as
+        | { data?: { enhanced?: string }; error?: { description?: string } }
+        | null;
+      if (!response.ok) {
+        setEnhanceError(payload?.error?.description ?? `HTTP ${response.status}`);
+        return;
+      }
+      const enhanced = payload?.data?.enhanced?.trim();
+      if (!enhanced) {
+        setEnhanceError("AI 没能给出改写结果");
+        return;
+      }
+      handleValueChange(enhanced);
+    } catch (err) {
+      setEnhanceError(err instanceof Error ? err.message : "网络错误");
+    } finally {
+      setIsEnhancing(false);
+    }
+  }, [prompt, isEnhancing, isLoading, handleValueChange]);
 
   // Character count and limit
   // 字符计数和限制
@@ -242,6 +336,36 @@ Describe your trading strategy in plain language...`}
           maxLength={charLimit + 100} // Allow slight overflow for user awareness
         />
 
+        {/* Quick-start chips — A 股场景化叙事,点击 append 到 textarea */}
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="text-xs text-white/40 mr-1">试试这些 ↓</span>
+          {QUICK_CHIPS.map((chip) => (
+            <button
+              key={chip.label}
+              type="button"
+              onClick={() => handleChipClick(chip)}
+              disabled={isLoading || isEnhancing}
+              title={chip.prompt}
+              className={cn(
+                "px-2.5 py-1 text-xs rounded-full border transition-all btn-tactile",
+                "bg-surface/60 border-white/10 text-neutral-300",
+                "hover:bg-surface hover:border-accent/40 hover:text-neutral-100",
+                "disabled:opacity-50 disabled:cursor-not-allowed",
+              )}
+            >
+              <span className="mr-1" aria-hidden="true">{chip.icon}</span>
+              {chip.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Enhance error surface — non-blocking, just inline */}
+        {enhanceError && (
+          <div className="mt-2 text-xs text-loss/80">
+            ✨ enhance 失败: {enhanceError}
+          </div>
+        )}
+
         {/* Character count and action buttons */}
         <div className="flex items-center justify-between mt-4">
           <div className="flex items-center gap-3">
@@ -271,21 +395,13 @@ Describe your trading strategy in plain language...`}
             <Button
               variant="secondary"
               size="sm"
-              disabled={!prompt || isLoading || isOverLimit}
+              disabled={!prompt.trim() || isLoading || isEnhancing || isOverLimit}
               className="gap-1"
-              onClick={async () => {
-                if (!prompt.trim()) return;
-                // Optimize the strategy description using AI
-                // 使用AI优化策略描述
-                const optimizedPrompt = `${prompt}\n\n请优化以上策略，添加：
-1. 明确的入场和出场条件
-2. 合理的止盈止损比例
-3. 仓位管理建议`;
-                handleValueChange(optimizedPrompt);
-              }}
+              onClick={handleEnhance}
+              title="AI 改写为含标的范围/时间周期/信号/风控的完整描述"
             >
-              <span>✨</span>
-              AI优化
+              <span aria-hidden="true">{isEnhancing ? "⏳" : "✨"}</span>
+              {isEnhancing ? "改写中..." : "把它变专业"}
             </Button>
             {isLoading && onStop ? (
               <Button
