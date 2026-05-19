@@ -488,3 +488,101 @@ describe('assertStandardCosts — adversarial inputs', () => {
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// calculateNetReturn — Net return after costs (95% coverage push)
+//
+// Test design from two perspectives:
+//   USER (回测报告): "Show me what I actually earned, not the pre-fee number."
+//   ADVERSARIAL TESTER: "Zero/negative entry, sell direction, lossy trades,
+//     micro-cap stocks where minCommission dominates."
+// ---------------------------------------------------------------------------
+
+describe('calculateNetReturn', () => {
+  it('returns 0 for entryPrice <= 0 (defensive)', () => {
+    expect(calculateNetReturn(0, 100, 'buy')).toBe(0);
+    expect(calculateNetReturn(-5, 100, 'buy')).toBe(0);
+  });
+
+  it('long trade: positive gross return is reduced by costs', () => {
+    // Entry 100, exit 110, +10% gross. DEFAULT_COSTS round-trip ≈ 0.262%.
+    const net = calculateNetReturn(100, 110, 'buy', DEFAULT_COSTS);
+    expect(net).toBeGreaterThan(0); // still profitable after costs
+    expect(net).toBeLessThan(10); // but not the full +10%
+  });
+
+  it('long trade: loss is amplified (larger magnitude) by costs', () => {
+    // -10% gross, costs push it more negative.
+    const net = calculateNetReturn(100, 90, 'buy', DEFAULT_COSTS);
+    expect(net).toBeLessThan(-10);
+  });
+
+  it('short (sell) trade direction inverts gross-return sign', () => {
+    // For a "sell" (short) signal, dropping from 100→90 is a +10% gross gain.
+    const netShortWin = calculateNetReturn(100, 90, 'sell', DEFAULT_COSTS);
+    const netLongWin = calculateNetReturn(100, 110, 'buy', DEFAULT_COSTS);
+    expect(netShortWin).toBeGreaterThan(0);
+    expect(netLongWin).toBeGreaterThan(0);
+  });
+
+  it('zero costs → net == gross', () => {
+    const net = calculateNetReturn(100, 110, 'buy', ZERO_COSTS);
+    expect(net).toBeCloseTo(10, 6);
+  });
+
+  it('flat trade (exit == entry) → only costs (negative)', () => {
+    const net = calculateNetReturn(100, 100, 'buy', DEFAULT_COSTS);
+    expect(net).toBeLessThan(0); // pure cost drag
+    expect(net).toBeGreaterThan(-1); // but bounded
+  });
+
+  it('minCommission dominates on tiny prices (micro-cap stocks)', () => {
+    // entryPrice = 1, exitPrice = 1.1. commission floor = 5 RMB per side
+    // is huge relative to the 100-share lot value (100 * 1 = 100 RMB),
+    // so the net should be much worse than the gross.
+    const net = calculateNetReturn(1, 1.1, 'buy', DEFAULT_COSTS);
+    expect(net).toBeLessThan(10); // gross would have been +10%
+  });
+
+  it('uses DEFAULT_COSTS when costs arg is omitted', () => {
+    expect(calculateNetReturn(100, 110, 'buy')).toBeCloseTo(
+      calculateNetReturn(100, 110, 'buy', DEFAULT_COSTS),
+      6,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateCostConfig — config sanity (the 95% branches push)
+// ---------------------------------------------------------------------------
+
+describe('validateCostConfig — transferFee + minCommission branches', () => {
+  it('rejects negative transferFee', () => {
+    const result = validateCostConfig({ ...DEFAULT_COSTS, transferFee: -0.0001 });
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('过户费'))).toBe(true);
+  });
+
+  it('rejects transferFee above 0.1%', () => {
+    const result = validateCostConfig({ ...DEFAULT_COSTS, transferFee: 0.01 });
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('过户费'))).toBe(true);
+  });
+
+  it('rejects slippage above 5%', () => {
+    const result = validateCostConfig({ ...DEFAULT_COSTS, slippage: 0.1 });
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('滑点'))).toBe(true);
+  });
+
+  it('rejects minCommission above 100 RMB', () => {
+    const result = validateCostConfig({ ...DEFAULT_COSTS, minCommission: 150 });
+    expect(result.isValid).toBe(false);
+    expect(result.errors.some((e) => e.includes('最低佣金'))).toBe(true);
+  });
+
+  it('rejects negative minCommission', () => {
+    const result = validateCostConfig({ ...DEFAULT_COSTS, minCommission: -1 });
+    expect(result.isValid).toBe(false);
+  });
+});

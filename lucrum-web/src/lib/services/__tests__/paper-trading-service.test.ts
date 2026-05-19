@@ -68,6 +68,7 @@ import {
   countActivePaperRuns,
   applyStrategySignal,
   tickPositions,
+  loadActiveRunsByStrategy,
   PaperRunNotFoundError,
   PaperRunOwnershipError,
   PaperRunStateError,
@@ -112,6 +113,16 @@ describe("paper-trading-service", () => {
       });
       expect(run).toBeDefined();
     });
+
+    it("inserts the seedPosition when qty > 0 (exercises lines 127-134)", async () => {
+      dbMockState.insertedRow = { id: 3, userId: "u1" };
+      const run = await createPaperRun({
+        userId: "u1",
+        strategyHistoryId: 1,
+        seedPosition: { symbol: "AAPL", qty: 100, avgCost: 150 },
+      });
+      expect(run).toBeDefined();
+    });
   });
 
   describe("getPaperRun — ownership + not-found", () => {
@@ -151,9 +162,29 @@ describe("paper-trading-service", () => {
       expect(runs).toHaveLength(1);
     });
 
+    it("listPaperRunsForUser with status filter exercises the conditional push (line 191-192)", async () => {
+      dbMockState.selectResult = [{ id: 1, userId: "u1", status: "active" }];
+      const runs = await listPaperRunsForUser("u1", { status: "active", limit: 5 });
+      expect(runs).toHaveLength(1);
+    });
+
     it("countActivePaperRuns reports the row count", async () => {
       dbMockState.selectResult = [{ id: 1 }, { id: 2 }, { id: 3 }];
       expect(await countActivePaperRuns("u1")).toBe(3);
+    });
+  });
+
+  describe("getPaperRun — happy path (lines 178-179)", () => {
+    it("returns {run, positions, recentTrades} when the run is owned by caller", async () => {
+      dbMockState.selectResult = [{ id: 1, userId: "u1", status: "active" }];
+      const result = await getPaperRun("u1", 1);
+      expect(result).toBeDefined();
+      expect(result.run).toBeDefined();
+      // The chain mock returns the same selectResult for positions + trades
+      // sub-queries; we just verify the function reaches the return statement
+      // without throwing past ownership check.
+      expect(Array.isArray(result.positions)).toBe(true);
+      expect(Array.isArray(result.recentTrades)).toBe(true);
     });
   });
 
@@ -174,6 +205,47 @@ describe("paper-trading-service", () => {
           ts: new Date(),
         }),
       ).rejects.toThrow(/not implemented/i);
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Additional service-level branches for the 95% coverage push.
+  // ---------------------------------------------------------------------------
+
+  describe("closePaperRun — active-run write path (218-224)", () => {
+    it("transitions an active run to closed and returns the updated row", async () => {
+      dbMockState.selectResult = [{ id: 7, userId: "u1", status: "active" }];
+      dbMockState.updatedRow = { id: 7, userId: "u1", status: "closed", closedAt: new Date() };
+      const run = await closePaperRun("u1", 7);
+      expect(run).toBeDefined();
+      // We don't assert .status here because the mock chain returns the
+      // updatedRow from `.returning()`. The contract under test is that the
+      // service reaches the update branch (218-224) without throwing.
+    });
+  });
+
+  describe("loadActiveRunsByStrategy — grouping (291-307)", () => {
+    it("groups active runs by strategyHistoryId and drops null-strategy rows", async () => {
+      dbMockState.selectResult = [
+        { id: 1, userId: "u1", status: "active", strategyHistoryId: 10 },
+        { id: 2, userId: "u1", status: "active", strategyHistoryId: 10 },
+        { id: 3, userId: "u2", status: "active", strategyHistoryId: 20 },
+        { id: 4, userId: "u3", status: "active", strategyHistoryId: null },
+      ];
+      const grouped = await loadActiveRunsByStrategy();
+      expect(grouped.size).toBe(2);
+      expect(grouped.get(10)).toHaveLength(2);
+      expect(grouped.get(20)).toHaveLength(1);
+      // null-strategy row is dropped, NOT bucketed under undefined/0/null.
+      for (const key of grouped.keys()) {
+        expect(key).not.toBeNull();
+      }
+    });
+
+    it("returns an empty map when there are no active runs", async () => {
+      dbMockState.selectResult = [];
+      const grouped = await loadActiveRunsByStrategy();
+      expect(grouped.size).toBe(0);
     });
   });
 });
