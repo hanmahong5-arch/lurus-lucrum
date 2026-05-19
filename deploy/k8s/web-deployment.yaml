@@ -167,6 +167,16 @@ spec:
             - name: NATS_URL
               value: "nats://nats.messaging.svc:4222"
 
+            # Paper-trading mark-to-market cron auth — the K8s CronJob in
+            # cron-paper-mtm.yaml calls POST /api/cron/paper-mtm with this
+            # bearer token. Missing/empty → route refuses all traffic, so
+            # never set this to a placeholder.
+            - name: CRON_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: lucrum-secrets
+                  key: CRON_SECRET
+
           resources:
             requests:
               cpu: 100m

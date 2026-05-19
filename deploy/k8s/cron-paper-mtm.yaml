@@ -1,0 +1,75 @@
+# Paper Trading mark-to-market sweep.
+#
+# Fires once per trading day shortly after A-share close (15:00 CST = 07:00
+# UTC). The job posts to /api/cron/paper-mtm with the shared CRON_SECRET;
+# the route fans out to every active paper_run.
+#
+# Schedule: 07:10 UTC = 15:10 CST, Mon–Fri.
+# A-share market-close at 15:00, give exchanges 10 min to publish settle
+# data. Weekend skip is intentional — exchanges closed.
+#
+# Failure handling: kubectl-managed restartPolicy. We don't gate cron on
+# success; missing days are accepted (paper_equity_curve has a unique
+# (run_id, date) index so a backfill rerun is idempotent).
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: paper-mtm
+  namespace: lucrum
+  labels:
+    app: lucrum-web
+    component: cron-paper-mtm
+spec:
+  schedule: "10 7 * * 1-5"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 1800
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 900
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: lucrum-web
+            component: cron-paper-mtm
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.10.1
+              command:
+                - sh
+                - -c
+                - >-
+                  set -eu;
+                  echo "[$(date -u +%FT%TZ)] paper-mtm sweep start";
+                  curl -fsS -X POST
+                  -H "Authorization: Bearer ${CRON_SECRET}"
+                  -H "Content-Type: application/json"
+                  --max-time 600
+                  "http://lucrum-web.lucrum.svc.cluster.local:3000/api/cron/paper-mtm"
+                  | tee /dev/stderr;
+                  echo "[$(date -u +%FT%TZ)] paper-mtm sweep done"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lucrum-secrets
+                      key: CRON_SECRET
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 65534
+                capabilities:
+                  drop: ["ALL"]

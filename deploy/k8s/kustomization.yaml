@@ -9,6 +9,7 @@ resources:
   - web-deployment.yaml
   - pdb.yaml
   - hpa.yaml
+  - cron-paper-mtm.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: lurus
