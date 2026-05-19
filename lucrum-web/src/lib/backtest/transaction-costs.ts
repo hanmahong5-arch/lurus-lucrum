@@ -140,11 +140,17 @@ export function assertStandardCosts(
   for (const field of fields) {
     const actual = costs[field];
     const expected = baseline[field];
-    if (typeof actual !== "number" || Math.abs(actual - expected) > EPS) {
+    // NaN slips past `> EPS` (any comparison with NaN is false), so guard
+    // explicitly. Same for non-finite values — Infinity matches nothing.
+    const isNumericMatch =
+      typeof actual === "number" &&
+      Number.isFinite(actual) &&
+      Math.abs(actual - expected) <= EPS;
+    if (!isNumericMatch) {
       mismatches.push({
         field,
         expected,
-        actual: typeof actual === "number" ? actual : NaN,
+        actual: typeof actual === "number" ? actual : Number.NaN,
       });
     }
   }

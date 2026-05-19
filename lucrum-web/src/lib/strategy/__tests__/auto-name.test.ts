@@ -79,4 +79,44 @@ describe("auto-name", () => {
     expect(name).not.toContain("MA+");
     expect(name).not.toContain("+MA");
   });
+
+  // ---------------------------------------------------------------------------
+  // Branch / default coverage (lines 71, 194-195, 197)
+  // ---------------------------------------------------------------------------
+
+  it("detects style from code REGEX pattern when prompt has no keyword (line 71)", () => {
+    // Empty prompt + code that ONLY matches the 趋势 codePattern (/\bMA\d*\b|sma|ema/i)
+    // → must still classify as 趋势, not fall through to AI生成.
+    const name = generateStrategyName({
+      prompt: "",
+      code: "sma_value = sma(close, 20)\nema_value = ema(close, 10)",
+      date: D,
+    });
+    expect(name.startsWith("趋势·")).toBe(true);
+  });
+
+  it("uses 'new Date()' default when date arg is omitted", () => {
+    // Just verify no crash + name contains today's MMDD.
+    const name = generateStrategyName({ prompt: "动量", code: "" });
+    const today = new Date();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    expect(name).toContain(`·${mm}${dd}·`);
+  });
+
+  it("falls back gracefully when ALL inputs are undefined", () => {
+    const name = generateStrategyName({});
+    expect(name).toMatch(/^AI生成·\d{4}·#1$/);
+  });
+
+  it("treats null-ish prompt/code as empty (no throw)", () => {
+    // Exercise the ?? "" runtime defaults by passing undefined fields.
+    expect(() =>
+      generateStrategyName({
+        prompt: undefined,
+        code: undefined,
+        date: D,
+      }),
+    ).not.toThrow();
+  });
 });

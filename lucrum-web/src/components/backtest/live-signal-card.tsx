@@ -26,7 +26,7 @@ import type { BacktestResult, BacktestTrade } from "@/lib/backtest/types";
 // COMPUTATION
 // =============================================================================
 
-interface SignalState {
+export interface SignalState {
   kind: "long" | "flat" | "no-trades";
   netSize: number;
   entryPrice?: number;
@@ -35,7 +35,11 @@ interface SignalState {
   unrealizedPnlPct?: number;
 }
 
-function computeSignalState(result: BacktestResult): SignalState {
+/**
+ * Exported for unit tests — derives "what should I be holding right now?"
+ * by walking the backtest trade log forward. Pure function, no side effects.
+ */
+export function computeSignalState(result: BacktestResult): SignalState {
   const trades = result.trades ?? [];
   if (trades.length === 0) {
     return { kind: "no-trades", netSize: 0 };
