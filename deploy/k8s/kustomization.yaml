@@ -10,6 +10,7 @@ resources:
   - pdb.yaml
   - hpa.yaml
   - cron-paper-mtm.yaml
+  - cron-klines-update.yaml
 
 commonLabels:
   app.kubernetes.io/part-of: lurus

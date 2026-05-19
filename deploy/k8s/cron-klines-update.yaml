@@ -1,0 +1,76 @@
+# Daily klines incremental update.
+#
+# Replaces the previous node-cron schedule baked into the lucrum-web pod
+# process (silently lost on pod restart). K8s-managed so missed runs
+# surface in `kubectl get jobs`.
+#
+# Schedule: 10:10 UTC = 18:10 CST, Mon–Fri.
+# A-share market closes 15:00 CST. EastMoney publishes settled EOD prints
+# ~17:00 CST. 18:10 leaves a 70-min buffer for upstream finalization.
+#
+# Active deadline 50 min: full-universe sweep over ~5K stocks at
+# batchSize=50 + 1s inter-batch delay is empirically ~5–8 min, but EastMoney
+# rate-limits push us toward the upper bound; 50 min gives headroom without
+# letting a runaway job hold a Job slot all night.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: klines-update
+  namespace: lucrum
+  labels:
+    app: lucrum-web
+    component: cron-klines-update
+spec:
+  schedule: "10 10 * * 1-5"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3000
+      ttlSecondsAfterFinished: 86400
+      template:
+        metadata:
+          labels:
+            app: lucrum-web
+            component: cron-klines-update
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: curl
+              image: curlimages/curl:8.10.1
+              command:
+                - sh
+                - -c
+                - >-
+                  set -eu;
+                  echo "[$(date -u +%FT%TZ)] klines-update start";
+                  curl -fsS -X POST
+                  -H "Authorization: Bearer ${CRON_SECRET}"
+                  -H "Content-Type: application/json"
+                  --max-time 3000
+                  "http://lucrum-web.lucrum.svc.cluster.local:3000/api/cron/klines-update"
+                  | tee /dev/stderr;
+                  echo "[$(date -u +%FT%TZ)] klines-update done"
+              env:
+                - name: CRON_SECRET
+                  valueFrom:
+                    secretKeyRef:
+                      name: lucrum-secrets
+                      key: CRON_SECRET
+              resources:
+                requests:
+                  cpu: 10m
+                  memory: 16Mi
+                limits:
+                  cpu: 100m
+                  memory: 64Mi
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                runAsUser: 65534
+                capabilities:
+                  drop: ["ALL"]
