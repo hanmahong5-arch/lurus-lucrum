@@ -1,0 +1,46 @@
+# ArgoCD Application managing the lucrum-web deployment on R6.
+#
+# Once `kubectl apply -f deploy/k8s/argocd/lucrum-web-app.yaml`'d to a
+# bootstrap ArgoCD instance, this file is the source of truth — modifying
+# it via PR + merge updates how ArgoCD treats the app.
+#
+# repoURL goes through gh-proxy.com because R6 (CN IDC, 43.226.38.244) has
+# the github.com 443 outbound path blocked. Swap to direct GitHub when
+# either the proxy fails or R6 moves to a region with clean egress.
+#
+# imagePullPolicy is Always + image tag is floating `:main`. To pick up a
+# fresh build, `kubectl -n lucrum rollout restart deployment/lucrum-web`
+# (manual today; argocd-image-updater is the eventual automation).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: lucrum-web
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://gh-proxy.com/https://github.com/hanmahong5-arch/lurus-lucrum.git
+    targetRevision: main
+    path: deploy/k8s
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: lucrum
+  syncPolicy:
+    automated:
+      prune: false       # don't auto-prune — protects against accidental git delete
+      selfHeal: true     # revert manual kubectl edits to match git
+    syncOptions:
+      - ServerSideApply=true
+      - ApplyOutOfSyncOnly=true
+      - CreateNamespace=false
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas  # owned by HPA
+    - kind: Deployment
+      jqPathExpressions:
+        - .metadata.annotations."deployment.kubernetes.io/revision"
+        - .metadata.annotations."kubectl.kubernetes.io/last-applied-configuration"
