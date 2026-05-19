@@ -237,7 +237,7 @@ describe("paper-trading-service", () => {
       expect(grouped.get(10)).toHaveLength(2);
       expect(grouped.get(20)).toHaveLength(1);
       // null-strategy row is dropped, NOT bucketed under undefined/0/null.
-      for (const key of grouped.keys()) {
+      for (const key of Array.from(grouped.keys())) {
         expect(key).not.toBeNull();
       }
     });

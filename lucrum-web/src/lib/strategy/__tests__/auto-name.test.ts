@@ -110,11 +110,10 @@ describe("auto-name", () => {
   });
 
   it("treats null-ish prompt/code as empty (no throw)", () => {
+    // Exercise the ?? "" runtime defaults by passing undefined fields.
     expect(() =>
       generateStrategyName({
-        // @ts-expect-error — exercise the ?? "" defaults at runtime
         prompt: undefined,
-        // @ts-expect-error
         code: undefined,
         date: D,
       }),
