@@ -69,3 +69,6 @@ ssh root@100.98.57.55 "kubectl -n lucrum rollout restart deployment/lucrum-web"
 | Architecture | `./_bmad-output/planning-artifacts/architecture.md` |
 | UX Design | `./_bmad-output/planning-artifacts/ux-design-specification.md` |
 | Sprint Status | `./_bmad-output/implementation-artifacts/sprint-status.yaml` |
+
+---
+_BMAD artifacts last review: 2026-05-18 — governance: `lurus/doc/audit/2026-05-18-bmad-output-stale.md`._
