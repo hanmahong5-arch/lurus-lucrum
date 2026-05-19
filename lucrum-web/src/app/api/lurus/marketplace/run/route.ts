@@ -19,6 +19,11 @@ import {
   creditWallet,
   PlatformError,
 } from '@/lib/platform/client';
+import {
+  recordEvent,
+  USER_EVENT_TYPES,
+} from '@/lib/services/user-event-service';
+import { createNotification } from '@/lib/services/notification-service';
 
 const PLATFORM_FEE_RATE = 0.30;
 
@@ -129,6 +134,36 @@ export async function POST(request: NextRequest) {
     .set({ totalRuns: (strategy.totalRuns ?? 0) + 1 })
     .where(eq(marketplaceStrategies.id, strategy.id))
     .catch((err: unknown) => console.error('[marketplace/run] counter update failed:', err));
+
+  // Runner timeline + author notification (fire-and-forget). We reuse
+  // marketplaceSubscribed for per-run too — it's a paid usage event; the
+  // metadata.kind differentiates 'per_run' from 'subscription'.
+  recordEvent({
+    userId: session.user.id,
+    type: USER_EVENT_TYPES.marketplaceSubscribed,
+    entityType: 'marketplace',
+    entityId: strategy.id,
+    metadata: {
+      title: strategy.title,
+      kind: 'per_run',
+      lbPaid: price,
+    },
+  });
+
+  if (strategy.authorUserId && strategy.authorUserId !== session.user.id) {
+    void createNotification({
+      userId: strategy.authorUserId,
+      type: 'activity',
+      title: `有用户运行了你的策略「${strategy.title}」`,
+      body: `本次收入 ${authorRevenue.toFixed(2)} LB`,
+      metadata: {
+        kind: 'marketplace_run',
+        marketplaceId: strategy.id,
+        runnerUserId: session.user.id,
+        authorRevenue,
+      },
+    });
+  }
 
   return NextResponse.json({ success: true, lb_paid: price, author_revenue: authorRevenue });
 }

@@ -19,6 +19,11 @@ import {
   creditWallet,
   PlatformError,
 } from '@/lib/platform/client';
+import {
+  recordEvent,
+  USER_EVENT_TYPES,
+} from '@/lib/services/user-event-service';
+import { createNotification } from '@/lib/services/notification-service';
 
 const PLATFORM_FEE_RATE = 0.30;
 
@@ -142,6 +147,36 @@ export async function POST(request: NextRequest) {
     .set({ totalSubscribers: (strategy.totalSubscribers ?? 0) + 1 })
     .where(eq(marketplaceStrategies.id, strategy.id))
     .catch((err: unknown) => console.error('[marketplace/subscribe] counter update failed:', err));
+
+  // Subscriber timeline + author notification (both fire-and-forget).
+  recordEvent({
+    userId: session.user.id,
+    type: USER_EVENT_TYPES.marketplaceSubscribed,
+    entityType: 'marketplace',
+    entityId: strategy.id,
+    metadata: {
+      title: strategy.title,
+      kind: 'subscription',
+      lbPaid: price,
+      periodEnd: periodEnd.toISOString(),
+    },
+  });
+
+  if (strategy.authorUserId && strategy.authorUserId !== session.user.id) {
+    void createNotification({
+      userId: strategy.authorUserId,
+      type: 'activity',
+      title: `有用户订阅了你的策略「${strategy.title}」`,
+      body: `本期收入 ${authorRevenue.toFixed(2)} LB`,
+      metadata: {
+        kind: 'marketplace_subscribed',
+        marketplaceId: strategy.id,
+        subscriberUserId: session.user.id,
+        authorRevenue,
+        periodEnd: periodEnd.toISOString(),
+      },
+    });
+  }
 
   return NextResponse.json({
     success: true,

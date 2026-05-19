@@ -22,6 +22,10 @@ import {
   type TransactionCosts,
 } from "@/lib/backtest/transaction-costs";
 import { MARKETPLACE_SUBMIT_GATE } from "@/lib/backtest/validation/gate-runner";
+import {
+  recordEvent,
+  USER_EVENT_TYPES,
+} from "@/lib/services/user-event-service";
 
 const STAKE_AMOUNT = 10;
 
@@ -264,6 +268,22 @@ export async function POST(request: NextRequest) {
       status: "active",
     })
     .returning({ id: marketplaceStrategies.id });
+
+  // Author timeline entry — fire-and-forget; failure won't block publish.
+  if (listing?.id) {
+    recordEvent({
+      userId: session.user.id,
+      type: USER_EVENT_TYPES.marketplacePublished,
+      entityType: "marketplace",
+      entityId: listing.id,
+      metadata: {
+        title: body.title.trim().slice(0, 100),
+        priceType: body.price_type,
+        stakedLb: STAKE_AMOUNT,
+        gatePending: gateSoft,
+      },
+    });
+  }
 
   return NextResponse.json({
     success: true,

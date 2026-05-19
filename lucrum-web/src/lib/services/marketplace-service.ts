@@ -23,6 +23,7 @@ import {
   recordEvent,
   USER_EVENT_TYPES,
 } from '@/lib/services/user-event-service';
+import { createNotification } from '@/lib/services/notification-service';
 
 export interface ForkResult {
   newStrategyId: number;
@@ -102,6 +103,21 @@ export async function forkStrategy(
       },
     });
 
+    // Author notification — skip when forker is the author (no self-noise).
+    if (marketplace.authorUserId && marketplace.authorUserId !== userId) {
+      void createNotification({
+        userId: marketplace.authorUserId,
+        type: 'activity',
+        title: `有人 fork 了你的策略「${marketplace.title}」`,
+        body: '点击查看作者主页和最新动态',
+        metadata: {
+          kind: 'marketplace_forked',
+          marketplaceId,
+          forkerUserId: userId,
+        },
+      });
+    }
+
     return {
       newStrategyId: newRow.id,
       marketplaceId,
@@ -132,6 +148,20 @@ export async function rateStrategy(
   if (!Number.isFinite(stars) || stars < 1 || stars > 5) return null;
 
   try {
+    // Load author + title up front so we can notify them after the rating
+    // lands. Doing this first also catches "strategy doesn't exist" before
+    // we write a dangling rating row.
+    const sourceRows = await db
+      .select({
+        authorUserId: marketplaceStrategies.authorUserId,
+        title: marketplaceStrategies.title,
+      })
+      .from(marketplaceStrategies)
+      .where(eq(marketplaceStrategies.id, marketplaceId))
+      .limit(1);
+    const source = sourceRows[0];
+    if (!source) return null;
+
     // Upsert via ON CONFLICT — replaces the user's previous rating if any.
     await db
       .insert(strategyRatings)
@@ -179,6 +209,25 @@ export async function rateStrategy(
       entityId: marketplaceId,
       metadata: { stars, review: review ? review.slice(0, 200) : undefined },
     });
+
+    // Notify the author — but only on first-time rating, not on edit. We
+    // detect first-time by comparing the previous count (cnt - 1 indicates
+    // upsert was net-new). And never notify self-rating, even if it slipped
+    // past the API guard.
+    if (source.authorUserId && source.authorUserId !== userId) {
+      void createNotification({
+        userId: source.authorUserId,
+        type: 'review',
+        title: `你的策略「${source.title}」收到了 ${stars}★ 评分`,
+        body: review ? review.slice(0, 200) : '点击查看完整评分',
+        metadata: {
+          kind: 'marketplace_rated',
+          marketplaceId,
+          stars,
+          raterUserId: userId,
+        },
+      });
+    }
 
     return { marketplaceId, ratingAvg: avg, ratingCount: cnt };
   } catch (err) {
