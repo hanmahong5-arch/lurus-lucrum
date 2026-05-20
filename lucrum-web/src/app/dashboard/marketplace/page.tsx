@@ -519,6 +519,7 @@ export default function MarketplacePage() {
         strategy={detailStrategy}
         onClose={() => setDetailStrategy(null)}
         onTryStrategy={handleTryStrategy}
+        onRate={handleRate}
       />
 
       {/* Upgrade dialog */}

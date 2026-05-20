@@ -11,10 +11,12 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { X, Code2, BarChart3, FileText, ArrowRight } from "lucide-react";
+import { X, Code2, BarChart3, FileText, ArrowRight, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Sparkline } from "./sparkline";
 import type { MarketplaceStrategy } from "./strategy-card";
+import { CostDisclosureCard } from "@/components/backtest/cost-disclosure-card";
+import { STANDARD_MARKETPLACE_COSTS } from "@/lib/backtest/transaction-costs";
 
 // =============================================================================
 // TYPES
@@ -24,6 +26,8 @@ interface StrategyDetailPanelProps {
   strategy: MarketplaceStrategy | null;
   onClose: () => void;
   onTryStrategy: (strategy: MarketplaceStrategy) => void;
+  /** Submit a 1-5 star rating. Optional — caller may wire a review form later. */
+  onRate?: (strategyId: number, stars: number, review?: string) => Promise<void> | void;
 }
 
 // =============================================================================
@@ -34,8 +38,11 @@ export function StrategyDetailPanel({
   strategy,
   onClose,
   onTryStrategy,
+  onRate,
 }: StrategyDetailPanelProps) {
   const [activeSection, setActiveSection] = useState<"desc" | "code" | "results">("desc");
+  const [submittingStars, setSubmittingStars] = useState<number | null>(null);
+  const [hoverStars, setHoverStars] = useState<number | null>(null);
 
   // Reset section when strategy changes
   useEffect(() => {
@@ -55,6 +62,19 @@ export function StrategyDetailPanel({
   const handleTry = useCallback(() => {
     if (strategy) onTryStrategy(strategy);
   }, [strategy, onTryStrategy]);
+
+  const handleRate = useCallback(
+    async (stars: number) => {
+      if (!strategy || !onRate || submittingStars != null) return;
+      setSubmittingStars(stars);
+      try {
+        await onRate(strategy.id, stars);
+      } finally {
+        setSubmittingStars(null);
+      }
+    },
+    [strategy, onRate, submittingStars],
+  );
 
   if (!strategy) return null;
 
@@ -202,6 +222,14 @@ export function StrategyDetailPanel({
 
           {activeSection === "results" && (
             <div className="space-y-4">
+              {/* Cost disclosure — marketplace listings publish against the
+                  standard cost profile, so the chips are always ✓. Surfacing
+                  it makes "why I can trust these numbers" explicit. */}
+              <CostDisclosureCard
+                costs={STANDARD_MARKETPLACE_COSTS}
+                compact
+              />
+
               {/* Large sparkline */}
               <div className="bg-void/50 rounded-lg p-4 border border-border">
                 <div className="text-xs text-white/40 mb-2">净值曲线 (模拟)</div>
@@ -240,7 +268,43 @@ export function StrategyDetailPanel({
         </div>
 
         {/* Footer CTA */}
-        <div className="px-6 py-4 border-t border-border shrink-0">
+        <div className="px-6 py-4 border-t border-border shrink-0 space-y-3">
+          {onRate && (
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-white/40 shrink-0">为这个策略打分</span>
+              <div
+                className="flex items-center gap-0.5"
+                onMouseLeave={() => setHoverStars(null)}
+              >
+                {[1, 2, 3, 4, 5].map((star) => {
+                  const filled =
+                    (hoverStars ?? submittingStars ?? 0) >= star;
+                  return (
+                    <button
+                      key={star}
+                      type="button"
+                      onMouseEnter={() => setHoverStars(star)}
+                      onClick={() => void handleRate(star)}
+                      disabled={submittingStars != null}
+                      aria-label={`评 ${star} 星`}
+                      className={cn(
+                        "p-1 rounded transition-colors",
+                        filled ? "text-yellow-300" : "text-white/20 hover:text-white/40",
+                        submittingStars != null && "cursor-wait opacity-60",
+                      )}
+                    >
+                      <Star className="w-4 h-4" fill={filled ? "currentColor" : "none"} />
+                    </button>
+                  );
+                })}
+              </div>
+              {strategy.ratingAvg != null && (
+                <span className="text-xs text-white/40 ml-1 font-mono tabular-nums">
+                  当前 {Number(strategy.ratingAvg).toFixed(1)} ({strategy.ratingCount ?? 0})
+                </span>
+              )}
+            </div>
+          )}
           <button
             onClick={handleTry}
             className="w-full flex items-center justify-center gap-2 py-2.5 bg-accent/10 text-accent hover:bg-accent/20 border border-accent/20 rounded-lg text-sm font-medium transition btn-tactile"
