@@ -44,6 +44,8 @@ import { useAchievementStore } from "@/lib/stores/achievement-store";
 import { useFeatureUsage } from "@/hooks/use-feature-usage";
 import { UpgradeDialog } from "@/components/paywall/upgrade-dialog";
 import { trackUsage } from "@/lib/paywall/usage-tracker";
+import { recordClientEvent } from "@/lib/services/client-event";
+import { USER_EVENT_TYPES } from "@/lib/services/user-event-types";
 
 // ---------------------------------------------------------------------------
 // Dynamic imports — heavy components loaded on demand to reduce initial bundle
@@ -283,6 +285,22 @@ export default function DashboardPage() {
         if (data.result) {
           setLatestBacktestResult(data.result as BacktestResult);
           setViewMode('results');
+          // Track the persisted id so the postmortem panel can reference it
+          // even when the user lands directly on a historic result.
+          const numericId = Number(numId);
+          if (Number.isFinite(numericId)) {
+            const result = data.result as BacktestResult;
+            const summarySymbol = result.backtestMeta?.targetSymbol ?? result.config?.symbol;
+            setLatestBacktestSummary({
+              historyId: numericId,
+              totalReturn: typeof result.totalReturn === 'number' ? result.totalReturn : undefined,
+              sharpeRatio: typeof result.sharpeRatio === 'number' ? result.sharpeRatio : undefined,
+              maxDrawdown: typeof result.maxDrawdown === 'number' ? result.maxDrawdown : undefined,
+              winRate: typeof result.winRate === 'number' ? result.winRate : undefined,
+              symbol: typeof summarySymbol === 'string' ? summarySymbol : undefined,
+              completedAt: new Date(),
+            });
+          }
         }
       })
       .catch((err) => {
@@ -602,6 +620,17 @@ export default function DashboardPage() {
       setStrategyName(name, 'auto');
       saveStrategyToDatabase(name, finalCode, prompt, 'ai_generated');
 
+      recordClientEvent({
+        type: USER_EVENT_TYPES.strategyCreated,
+        entityType: 'strategy',
+        metadata: {
+          name,
+          source: 'ai-generation',
+          codeLength: finalCode.length,
+          promptPreview: prompt.slice(0, 100),
+        },
+      });
+
       if (!sawDone) {
         // Stream closed without [DONE] but produced code — usually a
         // network drop right at the end. Code is saved; only log so the
@@ -776,36 +805,55 @@ export default function DashboardPage() {
         strategyPrompt: strategyInput,
         strategyName,
       };
-      void fetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          type: 'backtest',
-          data: {
-            symbol: persistSymbol,
-            stockName: result.backtestMeta?.targetName ?? null,
-            // ISO timestamps land here from the engine; the schema expects
-            // YYYY-MM-DD, so trim to the date prefix.
-            startDate: String(startDate).slice(0, 10),
-            endDate: String(endDate).slice(0, 10),
-            timeframe: '1d',
-            config: persistedConfig,
-            result,
-            dataSource: result.backtestMeta?.dataSource ?? 'unknown',
-            dataCoverage: result.backtestMeta?.dataQuality?.completeness ?? null,
-            totalReturn: isFinite(totalReturn) ? totalReturn : null,
-            sharpeRatio: typeof result.sharpeRatio === 'number' && isFinite(result.sharpeRatio)
-              ? result.sharpeRatio : null,
-            maxDrawdown: typeof result.maxDrawdown === 'number' && isFinite(result.maxDrawdown)
-              ? result.maxDrawdown : null,
-            winRate: typeof result.winRate === 'number' && isFinite(result.winRate)
-              ? result.winRate : null,
-            executionTime: typeof result.executionTime === 'number' ? result.executionTime : null,
-          },
-        }),
-      }).catch((err) => {
-        console.warn('[Dashboard] Failed to persist backtest history:', err);
-      });
+      void (async () => {
+        try {
+          const res = await fetch('/api/history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              type: 'backtest',
+              data: {
+                symbol: persistSymbol,
+                stockName: result.backtestMeta?.targetName ?? null,
+                // ISO timestamps land here from the engine; the schema expects
+                // YYYY-MM-DD, so trim to the date prefix.
+                startDate: String(startDate).slice(0, 10),
+                endDate: String(endDate).slice(0, 10),
+                timeframe: '1d',
+                config: persistedConfig,
+                result,
+                dataSource: result.backtestMeta?.dataSource ?? 'unknown',
+                dataCoverage: result.backtestMeta?.dataQuality?.completeness ?? null,
+                totalReturn: isFinite(totalReturn) ? totalReturn : null,
+                sharpeRatio: typeof result.sharpeRatio === 'number' && isFinite(result.sharpeRatio)
+                  ? result.sharpeRatio : null,
+                maxDrawdown: typeof result.maxDrawdown === 'number' && isFinite(result.maxDrawdown)
+                  ? result.maxDrawdown : null,
+                winRate: typeof result.winRate === 'number' && isFinite(result.winRate)
+                  ? result.winRate : null,
+                executionTime: typeof result.executionTime === 'number' ? result.executionTime : null,
+              },
+            }),
+          });
+          if (!res.ok) return;
+          // Capture the assigned id so the postmortem panel can reference it.
+          const payload: unknown = await res.json().catch(() => null);
+          const historyId = (payload as { data?: { id?: number } } | null)?.data?.id;
+          if (typeof historyId === 'number' && Number.isFinite(historyId)) {
+            setLatestBacktestSummary({
+              historyId,
+              totalReturn: typeof result.totalReturn === 'number' ? result.totalReturn : undefined,
+              sharpeRatio: typeof result.sharpeRatio === 'number' ? result.sharpeRatio : undefined,
+              maxDrawdown: typeof result.maxDrawdown === 'number' ? result.maxDrawdown : undefined,
+              winRate: typeof result.winRate === 'number' ? result.winRate : undefined,
+              symbol: typeof summarySymbol === 'string' ? summarySymbol : undefined,
+              completedAt: new Date(),
+            });
+          }
+        } catch (err) {
+          console.warn('[Dashboard] Failed to persist backtest history:', err);
+        }
+      })();
     }
   }, [trackAction, recordAchievementStat, recordAchievementStock, generatedCode, strategyInput, strategyName, setViewMode, setLatestBacktestSummary]);
 
@@ -955,6 +1003,7 @@ export default function DashboardPage() {
           <BacktestResultsView
             result={latestBacktestResult}
             strategyName={strategyName}
+            backtestId={latestBacktestSummary?.historyId ?? null}
             onBackToEdit={() => setViewMode("edit")}
             onRerunWithEdit={() => setViewMode("edit")}
             onExportReport={handleExport}

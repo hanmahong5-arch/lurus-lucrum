@@ -31,6 +31,7 @@ import { showToast } from "@/lib/toast";
 import { useAchievementStore } from "@/lib/stores/achievement-store";
 import { StickyMetricsBanner } from "@/components/backtest/sticky-metrics-banner";
 import { LiveSignalCard } from "@/components/backtest/live-signal-card";
+import { CostDisclosureCard } from "@/components/backtest/cost-disclosure-card";
 import { SuccessCelebration } from "@/components/ui/success-celebration";
 import { getGradeFromScore } from "@/lib/backtest/score/score-calculator";
 import Link from "next/link";
@@ -53,6 +54,10 @@ export interface BacktestResultsViewProps {
   result: BacktestResult;
   /** Strategy name for display */
   strategyName?: string;
+  /** Persisted `backtest_history` row id — required for AI postmortem.
+   *  Null until /api/history POST returns, or absent when result lives only
+   *  in memory (e.g. legacy history rows without an id round-trip). */
+  backtestId?: number | null;
   /** Callback: go back to edit mode */
   onBackToEdit: () => void;
   /** Callback: re-run with modified strategy */
@@ -91,12 +96,14 @@ function getQuickGrade(score: number) {
 export function BacktestResultsView({
   result,
   strategyName,
+  backtestId,
   onBackToEdit,
   onRerunWithEdit,
   onSaveToHistory,
   onExportReport,
   className,
 }: BacktestResultsViewProps) {
+  void backtestId; // consumed by PostmortemPanel mount (added in subsequent commit)
   // UI state
   const [tradeView, setTradeView] = useState<"card" | "table">("card");
   const [showAllTrades, setShowAllTrades] = useState(false);
@@ -394,6 +401,21 @@ export function BacktestResultsView({
         {/* Placeholder for symmetry */}
         <div className="w-20" />
       </div>
+
+      {/* ================================================================= */}
+      {/* COST DISCLOSURE — surfaces commission/stamp/slippage compliance    */}
+      {/* with marketplace baseline directly under the page header.          */}
+      {/* ================================================================= */}
+      {result?.config && (
+        <CostDisclosureCard
+          costs={{
+            commission: result.config.commission,
+            slippage: result.config.slippage,
+            stampDuty: result.config.stampDuty,
+            transferFee: result.config.transferFee,
+          }}
+        />
+      )}
 
       {/* ================================================================= */}
       {/* LIVE SIGNAL CARD + 合规风险提示                                    */}

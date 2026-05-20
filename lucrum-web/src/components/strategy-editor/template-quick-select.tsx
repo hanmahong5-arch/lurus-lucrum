@@ -31,6 +31,8 @@ import {
   useUserPreferencesStore,
   selectLastTemplateCategory,
 } from "@/lib/stores/user-preferences-store";
+import { recordClientEvent } from "@/lib/services/client-event";
+import { USER_EVENT_TYPES } from "@/lib/services/user-event-types";
 
 // =============================================================================
 // TYPES
@@ -114,6 +116,17 @@ export function TemplateQuickSelect({
         return;
       }
       onSelectTemplate(template.prompt, template.code);
+      recordClientEvent({
+        type: USER_EVENT_TYPES.templateLoaded,
+        entityType: 'template',
+        entityId: template.id,
+        metadata: {
+          templateId: template.id,
+          templateName: template.name,
+          category: template.category,
+          difficulty: template.difficulty,
+        },
+      });
     },
     [hasUnsavedChanges, onSelectTemplate]
   );
@@ -122,7 +135,18 @@ export function TemplateQuickSelect({
   const handleConfirmLoad = useCallback(() => {
     if (confirmTarget) {
       onSelectTemplate(confirmTarget.prompt, confirmTarget.code);
-  setConfirmTarget(null);
+      recordClientEvent({
+        type: USER_EVENT_TYPES.templateLoaded,
+        entityType: 'template',
+        entityId: confirmTarget.id,
+        metadata: {
+          templateId: confirmTarget.id,
+          templateName: confirmTarget.name,
+          category: confirmTarget.category,
+          difficulty: confirmTarget.difficulty,
+        },
+      });
+      setConfirmTarget(null);
     }
   }, [confirmTarget, onSelectTemplate]);
 

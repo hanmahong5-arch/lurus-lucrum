@@ -28,6 +28,7 @@ import type { BacktestResult, DetailedTrade, BacktestTarget } from "@/lib/backte
 import { TargetSelector } from "@/components/backtest/target-selector";
 import { DataSourceBadge, mapDataSourceString, type DataSourceType } from "@/components/ui/data-source-badge";
 import { SimulatedDataBanner } from "@/components/ui/simulated-data-banner";
+import { StaleDataBanner } from "@/components/ui/stale-data-banner";
 import { ScoreCard } from "@/components/backtest/score-card";
 import { PreCheckPanel, usePreCheckConditions } from "@/components/backtest/pre-check-panel";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -40,6 +41,7 @@ import { ContextualHelp, CONTEXTUAL_HELP_CONTENT } from "@/components/ui/context
 import { BacktestDecisionBadges } from "@/components/ui/decision-badge";
 import { recordClientEvent } from "@/lib/services/client-event";
 import { USER_EVENT_TYPES } from "@/lib/services/user-event-types";
+import { CostDisclosureCard } from "@/components/backtest/cost-disclosure-card";
 
 // =============================================================================
 // TYPES / 类型定义
@@ -303,6 +305,11 @@ export function BacktestPanel({
   const [result, setResult] = useState<BacktestResult | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const [dataSourceInfo, setDataSourceInfo] = useState<DataSourceInfo | null>(null);
+  const [freshnessInfo, setFreshnessInfo] = useState<{
+    dataAsOf: string | null;
+    dataStaleDays: number | null;
+    requestedEndDate: string | null;
+  } | null>(null);
   const backtestTask = useAsyncTask();
   const router = useRouter();
 
@@ -469,9 +476,32 @@ export function BacktestPanel({
             setResult(data.data);
             onResult?.(data.data);
             backtestTask.complete({ symbol: effectiveSymbol });
+            recordClientEvent({
+              type: USER_EVENT_TYPES.backtestCompleted,
+              entityType: 'backtest',
+              metadata: {
+                symbol: effectiveSymbol,
+                totalReturn: typeof data.data.totalReturn === 'number' ? data.data.totalReturn : null,
+                sharpeRatio: typeof data.data.sharpeRatio === 'number' ? data.data.sharpeRatio : null,
+                maxDrawdown: typeof data.data.maxDrawdown === 'number' ? data.data.maxDrawdown : null,
+                winRate: typeof data.data.winRate === 'number' ? data.data.winRate : null,
+                totalTrades: typeof data.data.totalTrades === 'number' ? data.data.totalTrades : null,
+              },
+            });
             // Store data source info from API response
             if (data.meta?.dataSource) {
               setDataSourceInfo(data.meta.dataSource);
+            }
+            // P0b: capture data-freshness contract for the stale banner.
+            if (data.meta) {
+              setFreshnessInfo({
+                dataAsOf: data.meta.dataAsOf ?? null,
+                dataStaleDays:
+                  typeof data.meta.dataStaleDays === "number"
+                    ? data.meta.dataStaleDays
+                    : null,
+                requestedEndDate: data.meta.requestedEndDate ?? null,
+              });
             }
 
             // Aha moment: Sharpe > 1.5 and free plan
@@ -496,6 +526,11 @@ export function BacktestPanel({
               ],
             });
             backtestTask.fail(description);
+            recordClientEvent({
+              type: USER_EVENT_TYPES.backtestFailed,
+              entityType: 'backtest',
+              metadata: { symbol: effectiveSymbol, error: description, kind: 'payload-error' },
+            });
           }
         } else if (response.status === 429) {
           // Peek the body to differentiate rate-limit (transient, just wait)
@@ -528,6 +563,16 @@ export function BacktestPanel({
           const appErr = await parseApiError(response, "BACKTEST_FAILED");
           setError(appErr);
           backtestTask.fail(appErr.description);
+          recordClientEvent({
+            type: USER_EVENT_TYPES.backtestFailed,
+            entityType: 'backtest',
+            metadata: {
+              symbol: effectiveSymbol,
+              error: appErr.description,
+              kind: 'server-error',
+              status: response.status,
+            },
+          });
         }
       }
     } catch (err) {
@@ -556,6 +601,11 @@ export function BacktestPanel({
       };
       setError(next);
       backtestTask.fail(next.description);
+      recordClientEvent({
+        type: USER_EVENT_TYPES.backtestFailed,
+        entityType: 'backtest',
+        metadata: { symbol: effectiveSymbol, error: next.description, kind: 'network-error' },
+      });
     } finally {
       setIsRunning(false);
       onBacktestEnd?.();
@@ -705,6 +755,27 @@ export function BacktestPanel({
         visible={dataSourceInfo?.type === "simulated"}
         onSwitchToReal={() => setShowConfig(true)}
       />
+
+      {/* P0b: Stale Data Banner — shows when last bar is ≥3 days old. */}
+      <StaleDataBanner
+        dataAsOf={freshnessInfo?.dataAsOf ?? null}
+        dataStaleDays={freshnessInfo?.dataStaleDays ?? null}
+        requestedEndDate={freshnessInfo?.requestedEndDate ?? null}
+      />
+
+      {/* Cost disclosure — shown only after a result lands so the chips
+          reference the costs that actually ran. */}
+      {displayResult?.config && (
+        <CostDisclosureCard
+          className="mx-4 mt-3"
+          costs={{
+            commission: displayResult.config.commission,
+            slippage: displayResult.config.slippage,
+            stampDuty: displayResult.config.stampDuty,
+            transferFee: displayResult.config.transferFee,
+          }}
+        />
+      )}
 
       {/* PreCheck Panel / 前置条件检查面板 */}
       {!displayResult && (
