@@ -32,6 +32,7 @@ import { useAchievementStore } from "@/lib/stores/achievement-store";
 import { StickyMetricsBanner } from "@/components/backtest/sticky-metrics-banner";
 import { LiveSignalCard } from "@/components/backtest/live-signal-card";
 import { CostDisclosureCard } from "@/components/backtest/cost-disclosure-card";
+import { PostmortemPanel } from "@/components/postmortem/postmortem-panel";
 import { SuccessCelebration } from "@/components/ui/success-celebration";
 import { getGradeFromScore } from "@/lib/backtest/score/score-calculator";
 import Link from "next/link";
@@ -103,7 +104,6 @@ export function BacktestResultsView({
   onExportReport,
   className,
 }: BacktestResultsViewProps) {
-  void backtestId; // consumed by PostmortemPanel mount (added in subsequent commit)
   // UI state
   const [tradeView, setTradeView] = useState<"card" | "table">("card");
   const [showAllTrades, setShowAllTrades] = useState(false);
@@ -416,6 +416,15 @@ export function BacktestResultsView({
           }}
         />
       )}
+
+      {/* ================================================================= */}
+      {/* AI POSTMORTEM — 4-persona retrospective. Sits above the K-line so   */}
+      {/* the differentiated "narrative" CTA is the next thing the user sees. */}
+      {/* ================================================================= */}
+      <PostmortemPanel
+        backtestId={backtestId ?? null}
+        strategyName={strategyName}
+      />
 
       {/* ================================================================= */}
       {/* LIVE SIGNAL CARD + 合规风险提示                                    */}

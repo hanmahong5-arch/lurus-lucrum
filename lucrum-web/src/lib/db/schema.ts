@@ -1846,6 +1846,81 @@ export const paperEquityCurve = pgTable(
   }),
 );
 
+// ============================================================================
+// AI Postmortem (Wave 5) — 4-persona retrospective on a finished backtest
+// ============================================================================
+
+/**
+ * postmortem_runs — one row per dispatch.
+ *
+ * A "dispatch" fans out to ≤4 persona analyses, each persisted as a separate
+ * `postmortem_persona_results` row. The summary fields here are aggregates
+ * so the timeline / billing audit can answer "what did this run cost?"
+ * without joining the children.
+ */
+export const postmortemRuns = pgTable(
+  'postmortem_runs',
+  {
+    id: serial('id').primaryKey(),
+    userId: varchar('user_id', { length: 255 }).notNull(),
+    backtestId: integer('backtest_id').notNull(),
+    /** pending | running | done | failed */
+    status: varchar('status', { length: 20 }).notNull(),
+    /** Sum of `cost_lb` across all persona rows. */
+    totalCostLb: decimal('total_cost_lb', { precision: 10, scale: 4 })
+      .notNull()
+      .default('0'),
+    /** Free-form note: "4/4 共识 weak_win" or "意见分歧". UI renders raw. */
+    divergenceSummary: text('divergence_summary'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => ({
+    userIdx: index('postmortem_runs_user_idx').on(t.userId, t.createdAt),
+    backtestIdx: index('postmortem_runs_backtest_idx').on(t.backtestId),
+  }),
+);
+
+/**
+ * postmortem_persona_results — one row per persona within a dispatch.
+ *
+ * `(backtest_id, persona_id)` is the cache key: re-running a postmortem on
+ * an unchanged backtest with the same persona set must return these rows
+ * without spending tokens.
+ */
+export const postmortemPersonaResults = pgTable(
+  'postmortem_persona_results',
+  {
+    id: serial('id').primaryKey(),
+    runId: integer('run_id')
+      .notNull()
+      .references(() => postmortemRuns.id, { onDelete: 'cascade' }),
+    backtestId: integer('backtest_id').notNull(),
+    /** value | trend | momentum | risk */
+    personaId: varchar('persona_id', { length: 30 }).notNull(),
+    /** strong_win | weak_win | neutral | weak_loss | strong_loss */
+    verdict: varchar('verdict', { length: 20 }).notNull(),
+    summary: text('summary').notNull(),
+    /** [{ point, data }, ...] */
+    evidence: jsonb('evidence').notNull(),
+    /** string[] */
+    improvements: jsonb('improvements').notNull(),
+    confidence: decimal('confidence', { precision: 3, scale: 2 }).notNull(),
+    costLb: decimal('cost_lb', { precision: 10, scale: 4 }).notNull(),
+    /** Optional: model name actually used (e.g. "deepseek-chat"). */
+    modelUsed: varchar('model_used', { length: 60 }),
+    promptTokens: integer('prompt_tokens'),
+    completionTokens: integer('completion_tokens'),
+    createdAt: timestamp('created_at').defaultNow().notNull(),
+  },
+  (t) => ({
+    runIdx: index('postmortem_results_run_idx').on(t.runId),
+    cacheIdx: uniqueIndex('postmortem_results_cache_idx').on(
+      t.backtestId,
+      t.personaId,
+    ),
+  }),
+);
+
 // Paper trading types
 export type PaperRun = typeof paperRuns.$inferSelect;
 export type NewPaperRun = typeof paperRuns.$inferInsert;
@@ -1866,6 +1941,12 @@ export type NewCustomAgent = typeof customAgents.$inferInsert;
 
 export type CustomAgentRun = typeof customAgentRuns.$inferSelect;
 export type NewCustomAgentRun = typeof customAgentRuns.$inferInsert;
+
+// Postmortem types
+export type PostmortemRun = typeof postmortemRuns.$inferSelect;
+export type NewPostmortemRun = typeof postmortemRuns.$inferInsert;
+export type PostmortemPersonaResult = typeof postmortemPersonaResults.$inferSelect;
+export type NewPostmortemPersonaResult = typeof postmortemPersonaResults.$inferInsert;
 
 // Marketplace types
 export type MarketplaceStrategy = typeof marketplaceStrategies.$inferSelect;
