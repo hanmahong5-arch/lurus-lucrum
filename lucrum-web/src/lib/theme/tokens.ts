@@ -25,6 +25,8 @@ export const SEMANTIC_TOKENS: readonly ThemeTokenName[] = [
   "color-primary-light",
   "color-accent",
   "color-accent-hover",
+  "color-profit",
+  "color-loss",
   "fg",
   "fg-muted",
 ] as const;

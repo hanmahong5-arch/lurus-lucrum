@@ -42,6 +42,12 @@ export type ThemeTokenName =
   | "color-primary-light"
   | "color-accent"
   | "color-accent-hover"
+  // Profit / loss semantics flip with the active theme: terminal-pro uses
+  // CN convention (red-up / green-down), cyberpunk uses standard
+  // green-up / red-down. Imperative chart code consumes these via
+  // `useThemeRgb`.
+  | "color-profit"
+  | "color-loss"
   | "fg"
   | "fg-muted";
 

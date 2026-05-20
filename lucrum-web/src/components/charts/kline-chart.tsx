@@ -56,15 +56,11 @@ import { useThemeRgb } from "@/lib/theme";
 // CONSTANTS
 // =============================================================================
 
-// Candle / volume colors follow the [data-market] dimension, not the theme —
-// CN traders read red-up/green-down, US traders read green-up/red-down, and
-// both conventions are independent of the visual theme. Kept as resolved hex
-// because lightweight-charts does not parse CSS variables.
-const CANDLE_UP_COLOR = "#10b981";
-const CANDLE_DOWN_COLOR = "#ef4444";
-const VOLUME_UP_COLOR = "rgba(16, 185, 129, 0.5)";
-const VOLUME_DOWN_COLOR = "rgba(239, 68, 68, 0.5)";
-
+// Candle / volume / marker colors are driven by the active theme's
+// color-profit / color-loss tokens via useThemeRgb (see below). Switching
+// theme reapplies them via series.applyOptions() without rebuilding the
+// chart. MA / indicator series intentionally keep distinct fixed hues —
+// changing those across themes would break user pattern recognition.
 const MA_COLORS = ["#f5a623", "#3b82f6", "#a855f7", "#ec4899"];
 
 // Indicator sub-panel colors
@@ -359,6 +355,12 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
     const chartText = useThemeRgb("fg-muted", 0.7);
     const chartGrid = useThemeRgb("bg-surface-border", 0.5);
     const chartCrosshair = useThemeRgb("color-accent");
+    // Profit/loss palette — drives candle bodies, volume bars, and trade
+    // markers. Theme switch reapplies via applyOptions (see useEffect below).
+    const profitColor = useThemeRgb("color-profit");
+    const lossColor = useThemeRgb("color-loss");
+    const profitVolumeColor = useThemeRgb("color-profit", 0.5);
+    const lossVolumeColor = useThemeRgb("color-loss", 0.5);
 
     // -----------------------------------------------------------------------
     // Refs — main chart
@@ -470,12 +472,12 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
         value: item.volume,
         color:
           item.close >= item.open
-            ? VOLUME_UP_COLOR
-            : VOLUME_DOWN_COLOR,
+            ? profitVolumeColor
+            : lossVolumeColor,
       }));
 
       return { candles, volumes };
-    }, [klineData]);
+    }, [klineData, profitVolumeColor, lossVolumeColor]);
 
     // -----------------------------------------------------------------------
     // Timeframe handler
@@ -655,17 +657,17 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
         chartRef.current = chart;
 
         const candleSeries = chart.addCandlestickSeries({
-          upColor: CANDLE_UP_COLOR,
-          downColor: CANDLE_DOWN_COLOR,
+          upColor: profitColor,
+          downColor: lossColor,
           borderVisible: false,
-          wickUpColor: CANDLE_UP_COLOR,
-          wickDownColor: CANDLE_DOWN_COLOR,
+          wickUpColor: profitColor,
+          wickDownColor: lossColor,
         });
         candleSeriesRef.current = candleSeries;
 
         if (showVolume) {
           const volumeSeries = chart.addHistogramSeries({
-            color: VOLUME_UP_COLOR,
+            color: profitVolumeColor,
             priceFormat: { type: "volume" },
             priceScaleId: "",
           });
@@ -986,6 +988,20 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
       rsiChartRef.current?.applyOptions(layoutOptions);
     }, [chartInitialized, chartBg, chartText, chartGrid, chartCrosshair]);
 
+    // Re-apply profit/loss palette on theme change for the candle series.
+    // The volume bars get re-coloured implicitly because their per-bar color
+    // lives on the data points (see chartData memo) which re-runs when the
+    // memoized rgba strings change and triggers the data-update effect below.
+    useEffect(() => {
+      if (!chartInitialized) return;
+      candleSeriesRef.current?.applyOptions({
+        upColor: profitColor,
+        downColor: lossColor,
+        wickUpColor: profitColor,
+        wickDownColor: lossColor,
+      });
+    }, [chartInitialized, profitColor, lossColor]);
+
     // -----------------------------------------------------------------------
     // Update chart data
     // -----------------------------------------------------------------------
@@ -1008,8 +1024,7 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
             shape: (m.type === "buy"
               ? "arrowUp"
               : "arrowDown") as SeriesMarkerShape,
-            color:
-              m.type === "buy" ? "#ef4444" : "#10b981",
+            color: m.type === "buy" ? lossColor : profitColor,
             text: buildMarkerText(m),
             size: 2,
           }))
@@ -1093,7 +1108,7 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
                   time: currDif.time,
                   position: "belowBar" as SeriesMarkerPosition,
                   shape: "circle" as SeriesMarkerShape,
-                  color: "#ef4444",
+                  color: lossColor,
                   text: "",
                   size: 1,
                 });
@@ -1107,7 +1122,7 @@ export const KLineChart = forwardRef<KLineChartHandle, KLineChartProps>(
                   time: currDif.time,
                   position: "aboveBar" as SeriesMarkerPosition,
                   shape: "circle" as SeriesMarkerShape,
-                  color: "#10b981",
+                  color: profitColor,
                   text: "",
                   size: 1,
                 });
@@ -1587,6 +1602,13 @@ function TradeTooltip({ marker }: { marker: TradeMarkerInfo }) {
     "zh-CN",
   );
 
+  const profitColor = useThemeRgb("color-profit");
+  const lossColor = useThemeRgb("color-loss");
+  const profitBorder = useThemeRgb("color-profit", 0.5);
+  const lossBorder = useThemeRgb("color-loss", 0.5);
+  const profitBg = useThemeRgb("color-profit", 0.15);
+  const lossBg = useThemeRgb("color-loss", 0.15);
+
   const indicatorEntries = Object.entries(marker.indicatorValues).slice(
     0,
     4,
@@ -1597,23 +1619,19 @@ function TradeTooltip({ marker }: { marker: TradeMarkerInfo }) {
       className="w-60 rounded-lg border shadow-xl text-xs"
       style={{
         background: "rgba(15,17,23,0.97)",
-        borderColor: isBuy
-          ? "rgba(239,68,68,0.5)"
-          : "rgba(16,185,129,0.5)",
+        borderColor: isBuy ? lossBorder : profitBorder,
       }}
     >
       {/* Header */}
       <div
         className="px-3 py-2 rounded-t-lg flex items-center justify-between"
         style={{
-          background: isBuy
-            ? "rgba(239,68,68,0.15)"
-            : "rgba(16,185,129,0.15)",
+          background: isBuy ? lossBg : profitBg,
         }}
       >
         <span
           className="font-bold text-sm"
-          style={{ color: isBuy ? "#ef4444" : "#10b981" }}
+          style={{ color: isBuy ? lossColor : profitColor }}
         >
           {isBuy
             ? "\u25b2 \u4e70\u5165"
@@ -1697,10 +1715,7 @@ function TradeTooltip({ marker }: { marker: TradeMarkerInfo }) {
             <span
               className="font-mono tabular-nums font-medium"
               style={{
-                color:
-                  (marker.pnl ?? 0) >= 0
-                    ? "#10b981"
-                    : "#ef4444",
+                color: (marker.pnl ?? 0) >= 0 ? profitColor : lossColor,
               }}
             >
               {(marker.pnl ?? 0) >= 0 ? "+" : ""}

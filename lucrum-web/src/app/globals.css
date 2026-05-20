@@ -132,6 +132,11 @@
   --lucrum-color-primary-light: 96 165 250;
   --lucrum-color-accent: 245 158 11;
   --lucrum-color-accent-hover: 217 119 6;
+  /* CN convention: red = up = profit. Mirrors `--color-profit / --color-loss`
+     for SEMANTIC_TOKENS walkers; production reads the legacy var via
+     Tailwind classes (text-profit / bg-loss / …). */
+  --lucrum-color-profit: 239 68 68;
+  --lucrum-color-loss: 34 197 94;
   --lucrum-fg: 250 250 250;
   --lucrum-fg-muted: 161 161 170;
 }
@@ -149,6 +154,9 @@
   /* Magenta accent — distances from loss-green and from primary-violet. */
   --lucrum-color-accent: 236 72 153;
   --lucrum-color-accent-hover: 219 39 119;
+  /* Standard finance convention in cyberpunk: green = up = profit. */
+  --lucrum-color-profit: 34 197 94;
+  --lucrum-color-loss: 239 68 68;
   --lucrum-fg: 237 233 254;
   --lucrum-fg-muted: 196 181 253;
 }

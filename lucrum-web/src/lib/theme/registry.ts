@@ -29,6 +29,10 @@ const TERMINAL_PRO_TOKENS: ThemeTokens = {
   "color-primary-light": [96, 165, 250],
   "color-accent": [245, 158, 11],
   "color-accent-hover": [217, 119, 6],
+  // CN convention: red = up = profit, green = down = loss. Mirrors the
+  // `--color-profit / --color-loss` CSS vars in `globals.css`.
+  "color-profit": [239, 68, 68],
+  "color-loss": [34, 197, 94],
   fg: [250, 250, 250],
   "fg-muted": [161, 161, 170],
 };
@@ -47,6 +51,11 @@ const CYBERPUNK_TOKENS: ThemeTokens = {
   "color-primary-light": [196, 181, 253],
   "color-accent": [236, 72, 153],
   "color-accent-hover": [219, 39, 119],
+  // Standard finance convention in cyberpunk: green = up = profit,
+  // red = down = loss. Read alongside the CSS vars in the cyberpunk block
+  // of `globals.css`.
+  "color-profit": [34, 197, 94],
+  "color-loss": [239, 68, 68],
   fg: [237, 233, 254],
   "fg-muted": [196, 181, 253],
 };

@@ -79,6 +79,8 @@ describe("theme registry", () => {
       "color-primary-light": [96, 165, 250],
       "color-accent": [245, 158, 11],
       "color-accent-hover": [217, 119, 6],
+      "color-profit": [239, 68, 68],
+      "color-loss": [34, 197, 94],
       fg: [250, 250, 250],
       "fg-muted": [161, 161, 170],
     };
@@ -99,6 +101,8 @@ describe("theme registry", () => {
       "color-primary-light": [196, 181, 253],
       "color-accent": [236, 72, 153],
       "color-accent-hover": [219, 39, 119],
+      "color-profit": [34, 197, 94],
+      "color-loss": [239, 68, 68],
       fg: [237, 233, 254],
       "fg-muted": [196, 181, 253],
     };
